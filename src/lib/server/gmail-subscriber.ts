@@ -229,7 +229,10 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 			try {
 				notification = parseGmailNotification(message.data);
 			} catch (error) {
-				console.error('Acknowledging invalid Gmail Pub/Sub message.', error);
+				console.error('Acknowledging invalid Gmail Pub/Sub message.', {
+					message: message.data.toString('utf8'),
+					error
+				});
 				message.ack();
 				return;
 			}
