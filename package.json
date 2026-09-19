@@ -11,6 +11,7 @@
 		"accounts:discover": "bun scripts/accounts-discover.ts",
 		"account:configure": "bun scripts/account-configure.ts",
 		"watch:start": "bun scripts/watch-start.ts",
+		"watch:renew": "bun scripts/watch-renew.ts",
 		"sync": "bun scripts/sync.ts",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

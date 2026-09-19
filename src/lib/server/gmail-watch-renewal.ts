@@ -49,19 +49,25 @@ async function renewAccountWatch(
 export async function renewGmailWatches(
 	database: DatabaseSync,
 	runJson: typeof runGogJson = runGogJson
-): Promise<void> {
+): Promise<{ renewed: number; failed: number }> {
 	const accounts = listAccounts(database).filter((account) => account.enabled && account.topic);
-	await Promise.all(
+	const results = await Promise.all(
 		accounts.map(async (account) => {
 			try {
 				const historyId = await renewAccountWatch(account, runJson);
 				if (!account.historyId) setAccountHistoryId(database, account.email, historyId);
 				console.log(`Renewed Gmail watch for ${account.email}.`);
+				return true;
 			} catch (error) {
 				console.error(`Gmail watch renewal failed for ${account.email}.`, error);
+				return false;
 			}
 		})
 	);
+	return {
+		renewed: results.filter(Boolean).length,
+		failed: results.filter((result) => !result).length
+	};
 }
 
 export type GmailWatchRenewal = {

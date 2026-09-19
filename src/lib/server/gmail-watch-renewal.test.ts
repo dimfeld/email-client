@@ -30,7 +30,7 @@ describe('Gmail watch renewal', () => {
 			return { watch: { historyId: command.includes('one@example.com') ? '200' : '300' } };
 		};
 
-		await renewGmailWatches(database, runJson);
+		await expect(renewGmailWatches(database, runJson)).resolves.toEqual({ renewed: 2, failed: 0 });
 
 		expect(commands).toHaveLength(2);
 		expect(commands[0]).toEqual([
@@ -53,10 +53,12 @@ describe('Gmail watch renewal', () => {
 		upsertAccount(database, { email: 'failed@example.com', topic: 'projects/p/topics/mail' });
 		upsertAccount(database, { email: 'working@example.com', topic: 'projects/p/topics/mail' });
 
-		await renewGmailWatches(database, async (command) => {
+		await expect(
+			renewGmailWatches(database, async (command) => {
 			if (command.includes('failed@example.com')) throw new Error('temporary gog failure');
 			return { historyId: '400' };
-		});
+		})
+		).resolves.toEqual({ renewed: 1, failed: 1 });
 
 		expect(listAccounts(database).find((account) => account.email === 'working@example.com')?.historyId).toBe(
 			'400'

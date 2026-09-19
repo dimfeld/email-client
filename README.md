@@ -43,6 +43,12 @@ Email content is sent to the TypeSafe API for classification.
    bun run watch:start -- --account you@example.com
    ```
 
+   To renew all configured watches manually:
+
+   ```sh
+   bun run watch:renew
+   ```
+
 6. Import existing email. You select the import scope with a Gmail query. The command downloads all matches for that query.
 
    ```sh
