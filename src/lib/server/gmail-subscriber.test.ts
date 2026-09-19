@@ -59,6 +59,11 @@ describe('Gmail Pub/Sub routing', () => {
 			emailAddress: 'One@Example.com',
 			historyId: '123456'
 		});
+		expect(
+			parseGmailNotification(
+				Buffer.from(JSON.stringify({ emailAddress: 'daniel@danielimfeld.com', historyId: 28086859 }))
+			)
+		).toEqual({ emailAddress: 'daniel@danielimfeld.com', historyId: '28086859' });
 		expect(() => parseGmailNotification(Buffer.from('{}'))).toThrow('emailAddress');
 	});
 });

@@ -49,10 +49,16 @@ export function parseGmailNotification(data: Uint8Array): GmailNotification {
 	if (typeof value.emailAddress !== 'string' || value.emailAddress.length === 0) {
 		throw new Error('The Gmail notification does not include an emailAddress.');
 	}
-	if (typeof value.historyId !== 'string' || !/^\d+$/.test(value.historyId)) {
+	const historyId =
+		typeof value.historyId === 'string'
+			? value.historyId
+			: typeof value.historyId === 'number' && Number.isSafeInteger(value.historyId)
+				? String(value.historyId)
+				: null;
+	if (historyId === null || !/^\d+$/.test(historyId)) {
 		throw new Error('The Gmail notification does not include a valid historyId.');
 	}
-	return { emailAddress: value.emailAddress, historyId: value.historyId };
+	return { emailAddress: value.emailAddress, historyId };
 }
 
 function isNewerHistoryId(candidate: string, current: string): boolean {
