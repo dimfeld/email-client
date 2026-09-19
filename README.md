@@ -57,6 +57,14 @@ Email content is sent to the TypeSafe API for classification.
 
 Open `http://127.0.0.1:3000`.
 
+## Install as an app
+
+Open `http://127.0.0.1:3000` in a browser that supports PWA installation. Use the browser's install action to add Email Check to the desktop or home screen.
+
+The service worker caches the application files and each inbox page after you visit it. It does not cache `/api/` requests. A cached inbox page remains available when the server or network is temporarily unavailable. New email and classification still require the local server, `gog`, and network access.
+
+PWA installation requires HTTPS, `localhost`, or `127.0.0.1`. A phone that connects through a plain HTTP LAN address will not meet the browser installation requirement.
+
 ## Development
 
 Run the web server and watcher in separate terminals:
