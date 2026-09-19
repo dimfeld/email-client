@@ -21,3 +21,8 @@ Expose safe read operations through an MCP server. Initial tools could list rais
 ## Native mobile app
 
 Build a native mobile client after the local API and authentication model are stable. The first mobile version could show raised messages, categories, search results, and classification status. A later version could add notifications and safe Gmail actions.
+
+## Agent email search
+
+Given an LLM tools to search through email and ask it questions. The search can find various candidates and then use a
+Jev classifier to further select which are relevant to the question.
