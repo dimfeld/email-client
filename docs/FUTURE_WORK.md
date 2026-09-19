@@ -2,6 +2,10 @@
 
 These ideas are not part of the first MVP. They are possible next steps after normal use shows which workflows need more support.
 
+## Backfill
+
+Periodically check for messages that pubsub may have missed and backfill them.
+
 ## Full API support
 
 Add a versioned application API for accounts, messages, categories, classifications, watch health, imports, and future message actions. Keep the API separate from `gog` command details so other clients do not depend on the local process design.
