@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "vite dev",
+		"dev": "bun --bun --env-file .env vite dev",
 		"build": "vite build",
 		"start": "bun build/index.js",
 		"app": "bun run build && bun build/index.js",

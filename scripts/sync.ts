@@ -1,10 +1,11 @@
 import { createJevClassifier } from '../src/lib/server/classifier';
 import { getDatabase } from '../src/lib/server/db';
 import { ingestGmailPayload } from '../src/lib/server/ingest';
-import { normalizeSearchMessage, requireFlag, runJson } from './shared';
+import { normalizeSearchMessage, readFlag, requireFlag, runJson } from './shared';
 
 const account = requireFlag('--account');
 const query = requireFlag('--query');
+const limit = readFlag('--limit');
 const result = (await runJson([
 	'gog',
 	'gmail',
@@ -13,6 +14,7 @@ const result = (await runJson([
 	query,
 	'--account',
 	account,
+	...(limit ? ['--max', limit] : []),
 	'--json',
 	'--all',
 	'--include-body'
