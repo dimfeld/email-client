@@ -49,7 +49,7 @@ Email content is sent to the TypeSafe API for classification.
    bun run sync -- --account you@example.com --query "newer_than:30d"
    ```
 
-7. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription.
+7. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription and renews each configured Gmail watch once every 24 hours while it runs.
 
    ```sh
    bun run app

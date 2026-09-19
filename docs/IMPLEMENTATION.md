@@ -23,7 +23,7 @@ The application does not create Google Pub/Sub topics or subscriptions. The owne
 
 The SvelteKit server consumes each configured Google Pub/Sub subscription directly. Gmail notifications contain an account email address and a history ID. The server uses the email address to select the correct configured account. If accounts share a subscription, the server still starts only one listener for it.
 
-Each account has its own stored Gmail history cursor. After a notification, the server uses `gog gmail history` to find new message IDs and `gog gmail get` to download each message. The cursor advances only after storage and classification succeed. This keeps retries idempotent. The initial import uses `gog gmail messages search --json --include-body --all` with a Gmail query supplied by the owner.
+Each account has its own stored Gmail history cursor. After a notification, the server uses `gog gmail history` to find new message IDs and `gog gmail get` to download each message. The cursor advances only after storage and classification succeed. This keeps retries idempotent. The initial import uses `gog gmail messages search --json --include-body --all` with a Gmail query supplied by the owner. The server also runs `gog gmail watch renew` once every 24 hours for each enabled account with a configured topic. Renewal keeps an existing history cursor unchanged so it cannot skip unprocessed messages.
 
 Sources:
 
@@ -109,6 +109,7 @@ No account editor, message actions, search, pagination, or authentication is par
 - [x] Add Jev classification with a replaceable client boundary.
 - [x] Add direct Pub/Sub subscribers and idempotent ingestion.
 - [x] Add account discovery, account configuration, initial import, and watch setup commands.
+- [x] Renew configured Gmail watches once per day while the server runs.
 - [x] Add the category UI with useful messages raised first and account filtering.
 - [x] Add setup documentation and environment examples.
 - [x] Add automated tests and run type checks, tests, and the production build.
