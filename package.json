@@ -7,8 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"start": "bun build/index.js",
-		"app": "bun run build && bun scripts/run-app.ts",
-		"watch": "bun scripts/watch.ts",
+		"app": "bun run build && bun build/index.js",
 		"accounts:discover": "bun scripts/accounts-discover.ts",
 		"account:configure": "bun scripts/account-configure.ts",
 		"watch:start": "bun scripts/watch-start.ts",
@@ -28,6 +27,7 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@google-cloud/pubsub": "^6.1.0",
 		"@sveltejs/adapter-node": "^5.5.7",
 		"@typesafe-ai/sdk": "^0.6.0"
 	}

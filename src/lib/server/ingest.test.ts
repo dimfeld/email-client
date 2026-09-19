@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import type { EmailClassifier } from './classifier';
 import { createDatabase, listAccounts, listEmails, upsertAccount } from './db';
-import { ingestGmailPayload, parseGmailPayload } from './ingest';
+import { ingestGmailPayload } from './ingest';
 
 let database: DatabaseSync | undefined;
 
@@ -129,24 +129,8 @@ describe('Gmail ingestion', () => {
 	});
 });
 
-describe('Gmail payload validation', () => {
-	it('accepts gog field variants and rejects a missing account', () => {
-		expect(
-			parseGmailPayload({
-				source: 'gmail',
-				account: 'one@example.com',
-				deleted_message_ids: ['gone'],
-				messages: [{ id: 'one', thread_id: 'thread', labelIds: ['INBOX'] }]
-			})
-		).toMatchObject({
-			account: 'one@example.com',
-			deletedMessageIds: ['gone'],
-			messages: [{ id: 'one', threadId: 'thread', labels: ['INBOX'] }]
-		});
-		expect(() => parseGmailPayload({ source: 'gmail', messages: [] })).toThrow('account');
-	});
-
-	it('preserves an existing subscription when a webhook refreshes the account', async () => {
+describe('Gmail account ingestion', () => {
+	it('preserves an existing subscription when ingestion refreshes the account', async () => {
 		database = createDatabase(':memory:');
 		upsertAccount(database, {
 			email: 'one@example.com',

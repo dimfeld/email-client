@@ -7,12 +7,13 @@ The application must:
 - run locally with Bun and SvelteKit;
 - keep Gmail messages in a local SQLite database;
 - support more than one authenticated `gog` account;
-- accept new-message payloads from one `gog gmail watch pull` process for each configured account;
+- consume Gmail notifications with one in-app Pub/Sub listener for each unique subscription;
+- route a shared subscription notification to its configured Gmail account;
 - classify each stored message with Jev;
 - mark each message as useful or not useful from the Jev result;
 - show useful messages first and group all messages by category;
 - include setup commands for accounts, an initial Gmail import, watch registration, and watch consumption;
-- have automated tests for the database, webhook ingestion, and classification boundary.
+- have automated tests for the database, Pub/Sub routing, ingestion, and classification boundary.
 
 The application does not create Google Pub/Sub topics or subscriptions. The owner will create them. The application also does not send, delete, archive, or relabel Gmail messages.
 
@@ -20,11 +21,9 @@ The application does not create Google Pub/Sub topics or subscriptions. The owne
 
 ### Gmail and `gog`
 
-`gog gmail watch pull` is the correct local mode. It consumes a Google Pub/Sub pull subscription and sends a webhook to a local URL. Each process selects a Gmail account with `--account` and a Pub/Sub subscription with `--subscription`.
+The SvelteKit server consumes each configured Google Pub/Sub subscription directly. Gmail notifications contain an account email address and a history ID. The server uses the email address to select the correct configured account. If accounts share a subscription, the server still starts only one listener for it.
 
-The webhook payload contains the account, Gmail history ID, deleted message IDs, and messages. Each message can contain the Gmail message and thread IDs, address headers, subject, date, snippet, body, truncation state, and labels. The receiver must be idempotent because Pub/Sub can deliver the same notification again. `gog` does not advance its history cursor when the webhook fails, so the endpoint must return a non-success response when storage or classification fails.
-
-The watcher will use `--include-body`. `gog` applies its documented body-size protection before it sends the webhook. The initial import will use `gog gmail messages search --json --include-body --all` with a Gmail query supplied by the owner.
+Each account has its own stored Gmail history cursor. After a notification, the server uses `gog gmail history` to find new message IDs and `gog gmail get` to download each message. The cursor advances only after storage and classification succeed. This keeps retries idempotent. The initial import uses `gog gmail messages search --json --include-body --all` with a Gmail query supplied by the owner.
 
 Sources:
 
@@ -53,14 +52,9 @@ Sources:
 
 ## Design
 
-### Processes
+### Process
 
-The MVP has two long-running local processes:
-
-- the SvelteKit server serves the UI and receives `/api/hooks/gmail` webhook requests;
-- the watch manager reads enabled accounts from SQLite and starts one `gog gmail watch pull` child process for each account that has a subscription.
-
-The `bun run app` command starts both processes after a production build. Development can use `bun run dev` and `bun run watch` in separate terminals.
+The SvelteKit server serves the UI and owns the Pub/Sub listeners. It reads enabled accounts from SQLite and groups them by subscription. The `bun run app` command builds and starts this single process. The `bun run dev` command uses the same subscriber path during development.
 
 ### Data model
 
@@ -69,6 +63,7 @@ The `bun run app` command starts both processes after a production build. Develo
 - email address, used as the stable account key;
 - `gog` client name;
 - Pub/Sub topic and subscription names;
+- the last successfully processed Gmail history ID;
 - enabled state;
 - creation and update timestamps.
 
@@ -84,9 +79,9 @@ Indexes will match the UI query: useful state, category, and message date. Forei
 
 ### Ingestion and failure behavior
 
-The webhook validates its optional bearer token, validates the JSON shape, upserts accounts and messages in a transaction, and records deletions. It classifies each new or changed message after storage.
+The subscriber validates each Pub/Sub payload and matches its email address to an account configured for that subscription. Invalid payloads and notifications for unconfigured accounts are acknowledged as terminal messages. Account work is serialized so two notifications cannot race the same history cursor.
 
-If classification fails, the downloaded message remains in SQLite with an error and no final classification. The endpoint returns a failure so `gog` and Pub/Sub can retry. A retry updates the same row because the account and Gmail message ID are unique.
+If download, storage, or classification fails, the subscriber does not advance the account history cursor and it rejects the Pub/Sub message for retry. A retry updates the same row because the account and Gmail message ID are unique. If classification fails, the downloaded message remains in SQLite with an error and no final classification.
 
 ### UI
 
@@ -102,9 +97,9 @@ No account editor, message actions, search, pagination, or authentication is par
 
 ### Security
 
-- API keys and webhook tokens stay in `.env` and never reach browser code.
+- API keys stay in `.env` and never reach browser code.
 - SQLite files stay under `data/` and are ignored by source control.
-- The webhook binds to the local application and can require a bearer token.
+- Pub/Sub access uses Google Application Default Credentials or `GOOGLE_APPLICATION_CREDENTIALS`.
 - Email content is sent to TypeSafe for classification. This is an explicit product requirement and is documented in setup notes.
 
 ## Implementation tasks
@@ -112,8 +107,8 @@ No account editor, message actions, search, pagination, or authentication is par
 - [x] Scaffold Bun and SvelteKit with the Node adapter and TypeScript.
 - [x] Add SQLite schema initialization and repository functions.
 - [x] Add Jev classification with a replaceable client boundary.
-- [x] Add the Gmail webhook and idempotent ingestion.
-- [x] Add account discovery, account configuration, initial import, watch setup, and watch manager commands.
+- [x] Add direct Pub/Sub subscribers and idempotent ingestion.
+- [x] Add account discovery, account configuration, initial import, and watch setup commands.
 - [x] Add the category UI with useful messages raised first and account filtering.
 - [x] Add setup documentation and environment examples.
 - [x] Add automated tests and run type checks, tests, and the production build.
@@ -123,6 +118,6 @@ No account editor, message actions, search, pagination, or authentication is par
 The task is complete when:
 
 - the type checker and production build succeed;
-- automated tests prove account-scoped idempotent storage, webhook validation and ingestion, and Jev result mapping;
+- automated tests prove account-scoped idempotent storage, shared-subscription routing, ingestion, and Jev result mapping;
 - a local HTTP request renders the application without an error;
 - the setup document gives exact commands that the owner can finish after creating the Pub/Sub resources.

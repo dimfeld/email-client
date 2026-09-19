@@ -7,7 +7,7 @@ Email Check is a local SvelteKit application that downloads Gmail messages throu
 - Bun
 - `gog` with each Gmail account authenticated
 - a TypeSafe API key
-- one Google Pub/Sub topic and pull subscription for each Gmail account
+- a Google Pub/Sub topic and pull subscription; accounts can share them
 - Google Application Default Credentials, or `GOOGLE_APPLICATION_CREDENTIALS`, with Pub/Sub subscriber access
 
 Email content is sent to the TypeSafe API for classification.
@@ -20,7 +20,7 @@ Email content is sent to the TypeSafe API for classification.
    bun install
    ```
 
-2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`, or keep the existing `JEV_API_KEY`. Set `GMAIL_HOOK_TOKEN` to a local secret if you want webhook protection.
+2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`, or keep the existing `JEV_API_KEY`.
 
 3. Discover all accounts that are already authenticated in `gog`.
 
@@ -49,7 +49,7 @@ Email content is sent to the TypeSafe API for classification.
    bun run sync -- --account you@example.com --query "newer_than:30d"
    ```
 
-7. Build and run the web server with all configured watchers.
+7. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription.
 
    ```sh
    bun run app
@@ -67,14 +67,10 @@ PWA installation requires HTTPS, `localhost`, or `127.0.0.1`. A phone that conne
 
 ## Development
 
-Run the web server and watcher in separate terminals:
+Run the development server. It also runs the Pub/Sub subscribers.
 
 ```sh
 bun run dev
-```
-
-```sh
-APP_URL=http://127.0.0.1:5173 bun run watch
 ```
 
 ## Verification

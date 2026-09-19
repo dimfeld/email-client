@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   gog_client TEXT NOT NULL DEFAULT 'default',
   topic TEXT,
   subscription TEXT,
+  history_id TEXT,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -60,6 +61,12 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
 	const database = new DatabaseSync(path);
 	database.exec(schema);
+	const accountColumns = database.prepare('PRAGMA table_info(accounts)').all() as Array<{
+		name: string;
+	}>;
+	if (!accountColumns.some((column) => column.name === 'history_id')) {
+		database.exec('ALTER TABLE accounts ADD COLUMN history_id TEXT');
+	}
 	database.exec('PRAGMA optimize');
 	return database;
 }
@@ -104,18 +111,32 @@ export function listAccounts(database: DatabaseSync): Array<{
 	client: string;
 	topic: string | null;
 	subscription: string | null;
+	historyId: string | null;
 	enabled: boolean;
 }> {
 	const rows = database
-		.prepare('SELECT email, gog_client, topic, subscription, enabled FROM accounts ORDER BY email')
+		.prepare(
+			'SELECT email, gog_client, topic, subscription, history_id, enabled FROM accounts ORDER BY email'
+		)
 		.all() as Array<Record<string, unknown>>;
 	return rows.map((row) => ({
 		email: String(row.email),
 		client: String(row.gog_client),
 		topic: row.topic === null ? null : String(row.topic),
 		subscription: row.subscription === null ? null : String(row.subscription),
+		historyId: row.history_id === null ? null : String(row.history_id),
 		enabled: Boolean(row.enabled)
 	}));
+}
+
+export function setAccountHistoryId(
+	database: DatabaseSync,
+	accountEmail: string,
+	historyId: string
+): void {
+	database
+		.prepare('UPDATE accounts SET history_id = ?, updated_at = ? WHERE email = ?')
+		.run(historyId, new Date().toISOString(), accountEmail);
 }
 
 function hashEmail(email: IncomingEmail): string {

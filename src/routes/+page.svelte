@@ -99,7 +99,7 @@
 			<span class="empty-mark">0</span>
 			<div>
 				<h2>No downloaded email</h2>
-				<p>Run an initial sync or start the configured Gmail watchers.</p>
+				<p>Run an initial sync or start the app with a configured Pub/Sub subscription.</p>
 			</div>
 		</section>
 	{:else}
