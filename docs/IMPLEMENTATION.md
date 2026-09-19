@@ -109,14 +109,14 @@ No account editor, message actions, search, pagination, or authentication is par
 
 ## Implementation tasks
 
-- [ ] Scaffold Bun and SvelteKit with the Node adapter and TypeScript.
-- [ ] Add SQLite schema initialization and repository functions.
-- [ ] Add Jev classification with a replaceable client boundary.
-- [ ] Add the Gmail webhook and idempotent ingestion.
-- [ ] Add account discovery, account configuration, initial import, watch setup, and watch manager commands.
-- [ ] Add the category UI with useful messages raised first and account filtering.
-- [ ] Add setup documentation and environment examples.
-- [ ] Add automated tests and run type checks, tests, and the production build.
+- [x] Scaffold Bun and SvelteKit with the Node adapter and TypeScript.
+- [x] Add SQLite schema initialization and repository functions.
+- [x] Add Jev classification with a replaceable client boundary.
+- [x] Add the Gmail webhook and idempotent ingestion.
+- [x] Add account discovery, account configuration, initial import, watch setup, and watch manager commands.
+- [x] Add the category UI with useful messages raised first and account filtering.
+- [x] Add setup documentation and environment examples.
+- [x] Add automated tests and run type checks, tests, and the production build.
 
 ## Proof
 
@@ -126,4 +126,3 @@ The task is complete when:
 - automated tests prove account-scoped idempotent storage, webhook validation and ingestion, and Jev result mapping;
 - a local HTTP request renders the application without an error;
 - the setup document gives exact commands that the owner can finish after creating the Pub/Sub resources.
-
