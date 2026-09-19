@@ -3,6 +3,12 @@ import type { Classification, IncomingEmail } from './types';
 
 export type EmailClassifier = (email: IncomingEmail) => Promise<Classification>;
 
+export const JEV_BODY_MAX_LENGTH = 16_000;
+
+export function truncateBodyForJev(body: string | undefined): string {
+	return (body ?? '').slice(0, JEV_BODY_MAX_LENGTH);
+}
+
 const categoryCriteria = {
 	action: 'The owner must reply, decide, review, schedule, approve, or complete a task.',
 	personal: 'A personal message from a person or group, not mainly about work.',
@@ -38,7 +44,7 @@ export function createJevClassifier(
 				subject: email.subject ?? '',
 				date: email.date ?? '',
 				snippet: email.snippet ?? '',
-				body: email.body ?? '',
+				body: truncateBodyForJev(email.body),
 				labels: email.labels ?? []
 			},
 			questions: {
