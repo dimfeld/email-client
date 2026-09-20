@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
+	import { tick } from 'svelte';
 	import { effectiveImportance } from '$lib/categories';
 	import type { ActionData, PageData } from './$types';
 	import type { StoredEmail } from '$lib/server/types';
@@ -19,6 +20,7 @@
 	let showShortcuts = $state(false);
 	let archiveForm = $state<HTMLFormElement | null>(null);
 	let deleteForm = $state<HTMLFormElement | null>(null);
+	let readingContent = $state<HTMLElement | null>(null);
 	let useful = $derived(data.emails.filter((email) => (importance(email) === 'important' || importance(email) === 'useful')));
 	let filters = $derived([
 		{ category: 'all' as const, label: 'All mail', count: data.emails.length },
@@ -88,7 +90,7 @@
 		return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName));
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
+	async function handleKeydown(event: KeyboardEvent) {
 		if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
 		if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
 		const key = event.key.toLowerCase();
@@ -108,6 +110,8 @@
 			if (selectedEmail) {
 				event.preventDefault();
 				mobileDetail = true;
+				await tick();
+				readingContent?.focus({ preventScroll: true });
 			}
 		} else if (key === 'u' || event.key === 'Escape') {
 			event.preventDefault();
@@ -190,7 +194,7 @@
 			</header>
 			{#if selectedEmail}
 				{#key selectedEmail.id}
-					<article class="reading-content">
+					<article bind:this={readingContent} class="reading-content" tabindex="-1">
 						<h2>{selectedEmail.subject || '(No subject)'}</h2>
 						<dl class="message-metadata">
 							<div><dt>From</dt><dd>{selectedEmail.fromAddress || 'Unknown sender'}</dd></div>
