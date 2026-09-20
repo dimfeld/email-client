@@ -16,6 +16,9 @@
 	let activeFilter = $state<Filter>('all');
 	let selectedId = $state<number | null>(null);
 	let mobileDetail = $state(false);
+	let showShortcuts = $state(false);
+	let archiveForm = $state<HTMLFormElement | null>(null);
+	let deleteForm = $state<HTMLFormElement | null>(null);
 	let useful = $derived(data.emails.filter((email) => (importance(email) === 'important' || importance(email) === 'useful')));
 	let filters = $derived([
 		{ category: 'all' as const, label: 'All mail', count: data.emails.length },
@@ -71,6 +74,51 @@
 		return `${Math.round(email.categoryConfidence * 100)}%`;
 	}
 
+	function moveSelection(offset: number) {
+		if (visibleEmails.length === 0) return;
+		const currentIndex = selectedEmail ? visibleEmails.findIndex((email) => email.id === selectedEmail.id) : -1;
+		const nextIndex = currentIndex < 0
+			? offset > 0 ? 0 : visibleEmails.length - 1
+			: Math.max(0, Math.min(visibleEmails.length - 1, currentIndex + offset));
+		selectedId = visibleEmails[nextIndex].id;
+		mobileDetail = true;
+	}
+
+	function isTypingTarget(target: EventTarget | null): boolean {
+		return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName));
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+		if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
+		const key = event.key.toLowerCase();
+		if (key === 'j') {
+			event.preventDefault();
+			moveSelection(1);
+		} else if (key === 'k') {
+			event.preventDefault();
+			moveSelection(-1);
+		} else if (key === 'e' && selectedEmail && archiveForm) {
+			event.preventDefault();
+			archiveForm.requestSubmit();
+		} else if ((event.key === '#' || (event.shiftKey && event.code === 'Digit3')) && selectedEmail && deleteForm) {
+			event.preventDefault();
+			deleteForm.requestSubmit();
+		} else if (key === 'o' || event.key === 'Enter') {
+			if (selectedEmail) {
+				event.preventDefault();
+				mobileDetail = true;
+			}
+		} else if (key === 'u' || event.key === 'Escape') {
+			event.preventDefault();
+			if (showShortcuts) showShortcuts = false;
+			else mobileDetail = false;
+		} else if (event.key === '?') {
+			event.preventDefault();
+			showShortcuts = !showShortcuts;
+		}
+	}
+
 	const submitMessageAction: SubmitFunction = () => async ({ result, update }) => {
 		await update();
 		if (result.type === 'success') {
@@ -78,6 +126,11 @@
 			mobileDetail = false;
 		}
 	};
+
+	$effect(() => {
+		window.addEventListener('keydown', handleKeydown);
+		return () => window.removeEventListener('keydown', handleKeydown);
+	});
 </script>
 
 <svelte:head>
@@ -88,6 +141,7 @@
 	<header class="masthead">
 		<div class="brand"><span class="brand-mark" aria-hidden="true">@</span><h1>Email Check</h1></div>
 		<a class="settings-link" href="/settings">Settings</a>
+		<button class="shortcuts-button" type="button" onclick={() => { showShortcuts = true; }}>Shortcuts <kbd>?</kbd></button>
 		<form method="GET" class="account-picker">
 			<label for="account">Account</label>
 			<select id="account" name="account" onchange={(event) => event.currentTarget.form?.submit()}>
@@ -148,11 +202,11 @@
 						{#if selectedEmail.classificationError}<p class="notice">Classification failed. This message needs another attempt.</p>{/if}
 						{#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
 						<div class="message-actions">
-							<form method="POST" action="?/archive" use:enhance={submitMessageAction}>
+							<form bind:this={archiveForm} method="POST" action="?/archive" use:enhance={submitMessageAction}>
 								<input type="hidden" name="id" value={selectedEmail.id} />
 								<button type="submit">Archive</button>
 							</form>
-							<form method="POST" action="?/delete" use:enhance={submitMessageAction} onsubmit={(event) => { if (!window.confirm('Move this message to Gmail Trash?')) event.preventDefault(); }}>
+							<form bind:this={deleteForm} method="POST" action="?/delete" use:enhance={submitMessageAction} onsubmit={(event) => { if (!window.confirm('Move this message to Gmail Trash?')) event.preventDefault(); }}>
 								<input type="hidden" name="id" value={selectedEmail.id} />
 								<button type="submit" class="delete-button">Delete</button>
 							</form>
@@ -170,6 +224,22 @@
 			{/if}
 		</section>
 	</div>
+	{#if showShortcuts}
+		<div class="shortcut-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) showShortcuts = false; }}>
+			<dialog open class="shortcut-dialog" aria-labelledby="shortcut-heading">
+				<div class="shortcut-heading"><h2 id="shortcut-heading">Keyboard shortcuts</h2><button type="button" aria-label="Close keyboard shortcuts" onclick={() => { showShortcuts = false; }}>×</button></div>
+				<dl>
+					<div><dt><kbd>J</kbd></dt><dd>Next message</dd></div>
+					<div><dt><kbd>K</kbd></dt><dd>Previous message</dd></div>
+					<div><dt><kbd>E</kbd></dt><dd>Archive selected message</dd></div>
+					<div><dt><kbd>#</kbd></dt><dd>Move selected message to Trash</dd></div>
+					<div><dt><kbd>O</kbd> <kbd>Enter</kbd></dt><dd>Open selected message</dd></div>
+					<div><dt><kbd>U</kbd> <kbd>Esc</kbd></dt><dd>Return to the message list</dd></div>
+					<div><dt><kbd>?</kbd></dt><dd>Show or hide this list</dd></div>
+				</dl>
+			</dialog>
+		</div>
+	{/if}
 </main>
 
 <style>
@@ -188,6 +258,8 @@
 	.settings-link { margin-left: auto; color: #6edff3; font-size: .85rem; text-decoration: none; }
 	.account-picker { display: flex; align-items: center; gap: 12px; min-width: 0; }
 	.account-picker label { color: #8eabb8; font-size: .8rem; }
+	.shortcuts-button { border: 0; background: transparent; color: #6edff3; font-size: .8rem; cursor: pointer; }
+	kbd { display: inline-block; min-width: 1.5em; padding: 2px 5px; border: 1px solid #365869; border-radius: 3px; background: #102631; color: #d5e3e9; font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 	select { min-width: 0; max-width: 100%; border: 1px solid #365869; border-radius: 6px; padding: 8px 12px; background: #0d202b; color: #edf7fb; }
 	.mailbox { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(280px, 360px) minmax(0, 1fr); }
 	.sidebar { padding: 24px 12px; overflow-y: auto; border-right: 1px solid #23404e; }
@@ -231,6 +303,15 @@
 	.message-actions { display: flex; gap: 10px; margin-top: 20px; }
 	.message-actions button { border: 1px solid #6edff3; border-radius: 4px; padding: 8px 14px; background: #6edff3; color: #07131c; font-size: .8rem; font-weight: 650; }
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
+	.shortcut-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: #0009; }
+	.shortcut-dialog { width: min(420px, 100%); padding: 24px; border: 1px solid #365869; border-radius: 8px; background: #0d202b; box-shadow: 0 20px 60px #0008; }
+	.shortcut-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.shortcut-heading h2 { font-size: 1.1rem; }
+	.shortcut-heading button { border: 0; background: transparent; color: #8eabb8; font-size: 1.5rem; cursor: pointer; }
+	.shortcut-dialog dl { margin: 20px 0 0; }
+	.shortcut-dialog dl > div { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid #23404e; }
+	.shortcut-dialog dt { display: flex; gap: 4px; }
+	.shortcut-dialog dd { margin: 0; color: #d5e3e9; font-size: .85rem; }
 	.empty-state { padding: 32px 20px; } .empty-state h3 { font-size: 1rem; }
 	.empty-state p, .detail-empty p { margin-top: 10px; color: #8eabb8; font-size: .85rem; line-height: 1.6; }
 	.detail-empty { margin: auto; padding: 32px; text-align: center; }
