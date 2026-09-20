@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import type { EmailClassifier } from './classifier';
 import { createDatabase, listAccounts, upsertAccount } from './db';
@@ -35,18 +35,25 @@ describe('Gmail backfill', () => {
 		upsertAccount(database, { email: 'two@example.com', client: 'two' });
 		const now = new Date('2026-09-20T12:00:00.000Z');
 		const commands: string[][] = [];
+		const logs = spyOn(console, 'log').mockImplementation(() => undefined);
 
-		await expect(
-			backfillGmail({
-				database,
-				classify,
-				now: () => now,
-				runJson: async (command) => {
-					commands.push(command);
-					return { messages: [] };
-				}
-			})
-		).resolves.toMatchObject({ accounts: 2, succeeded: 2, failed: 0 });
+		try {
+			await expect(
+				backfillGmail({
+					database,
+					classify,
+					now: () => now,
+					runJson: async (command) => {
+						commands.push(command);
+						return { messages: [] };
+					}
+				})
+			).resolves.toMatchObject({ accounts: 2, succeeded: 2, failed: 0 });
+			expect(logs).toHaveBeenCalledWith('Completed Gmail backfill for one@example.com: 0 new messages pulled in.');
+			expect(logs).toHaveBeenCalledWith('Completed Gmail backfill for two@example.com: 0 new messages pulled in.');
+		} finally {
+			logs.mockRestore();
+		}
 
 		expect(commands).toHaveLength(2);
 		for (const command of commands) {

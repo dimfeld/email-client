@@ -94,7 +94,9 @@ export async function backfillGmail(
 		accounts.map(async (account) => {
 			try {
 				const result = await backfillAccount(account, dependencies, now);
-				console.log(`Completed Gmail backfill for ${account.email}.`);
+				console.log(
+					`Completed Gmail backfill for ${account.email}: ${result.stored} new message${result.stored === 1 ? '' : 's'} pulled in.`
+				);
 				return { ok: true, ...result };
 			} catch (error) {
 				if (isGmailRateLimitError(error)) {
