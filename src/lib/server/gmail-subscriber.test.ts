@@ -35,13 +35,13 @@ describe('Gmail Pub/Sub routing', () => {
 		const accounts: GmailSubscriberAccount[] = [
 			{
 				email: 'one@example.com',
-				client: 'default',
+				refreshToken: 'one',
 				subscription: 'projects/p/subscriptions/mail',
 				historyId: '10'
 			},
 			{
 				email: 'two@example.com',
-				client: 'work',
+				refreshToken: 'two',
 				subscription: 'projects/p/subscriptions/mail',
 				historyId: '20'
 			}
@@ -50,8 +50,8 @@ describe('Gmail Pub/Sub routing', () => {
 		const groups = groupAccountsBySubscription(accounts);
 
 		expect(groups.size).toBe(1);
-		expect(groups.get('projects/p/subscriptions/mail')?.get('two@example.com')?.client).toBe(
-			'work'
+		expect(groups.get('projects/p/subscriptions/mail')?.get('two@example.com')?.refreshToken).toBe(
+			'two'
 		);
 	});
 
@@ -73,52 +73,38 @@ describe('Gmail Pub/Sub routing', () => {
 });
 
 describe('Gmail notification processing', () => {
-	it('fetches inbox messages with gog and advances only the matching account cursor', async () => {
+	it('fetches inbox messages with Google APIs and advances only the matching account cursor', async () => {
 		database = createDatabase(':memory:');
 		upsertAccount(database, {
 			email: 'one@example.com',
-			client: 'work',
+			refreshToken: 'one',
 			subscription: 'projects/p/subscriptions/mail'
 		});
 		upsertAccount(database, {
 			email: 'two@example.com',
-			client: 'default',
+			refreshToken: 'two',
 			subscription: 'projects/p/subscriptions/mail'
 		});
 		const account: GmailSubscriberAccount = {
 			email: 'one@example.com',
-			client: 'work',
+			refreshToken: 'one',
 			subscription: 'projects/p/subscriptions/mail',
 			historyId: '100'
 		};
-		const commands: string[][] = [];
-		const runJson = async (command: string[]): Promise<unknown> => {
-			commands.push(command);
-			if (command.includes('history')) {
-				return { historyId: '105', messages: ['inbox-message', 'sent-message'] };
-			}
-			const messageId = command[3];
-			return {
-				body: `${messageId} body`,
-				headers: {
-					from: 'Sender <sender@example.com>',
-					to: 'one@example.com',
-					subject: messageId,
-					date: 'Fri, 18 Sep 2026 12:00:00 +0000'
-				},
-				message: {
-					id: messageId,
-					threadId: `thread-${messageId}`,
-					snippet: `${messageId} snippet`,
-					labelIds: messageId === 'inbox-message' ? ['INBOX'] : ['SENT']
-				}
-			};
+		const urls: string[] = [];
+		const request = async <T>(_account: unknown, url: string): Promise<T> => {
+			urls.push(url);
+			return { historyId: '105', history: [{ messages: [{ id: 'inbox-message' }, { id: 'sent-message' }] }] } as T;
 		};
+		const getMessage = async (_account: unknown, messageId: string) => ({
+			id: messageId, subject: messageId, bodyText: `${messageId} body`,
+			labels: messageId === 'inbox-message' ? ['INBOX'] : ['SENT']
+		});
 
 		const result = await processGmailNotification(
 			account,
 			{ emailAddress: 'one@example.com', historyId: '105' },
-			{ database, classify, runJson }
+			{ database, classify, request, getMessage }
 		);
 
 		expect(result.stored).toBe(1);
@@ -127,20 +113,19 @@ describe('Gmail notification processing', () => {
 			'105'
 		);
 		expect(listAccounts(database).find((item) => item.email === 'two@example.com')?.historyId).toBeNull();
-		expect(commands[0]).toContain('history');
-		expect(commands[0]).toContain('work');
+		expect(urls[0]).toEndWith('/history');
 	});
 
 	it('bootstraps an existing watch cursor and ignores its immediate notification', async () => {
 		database = createDatabase(':memory:');
 		upsertAccount(database, {
 			email: 'one@example.com',
-			client: 'default',
+			refreshToken: 'one',
 			subscription: 'projects/p/subscriptions/mail'
 		});
 		const account: GmailSubscriberAccount = {
 			email: 'one@example.com',
-			client: 'default',
+			refreshToken: 'one',
 			subscription: 'projects/p/subscriptions/mail',
 			historyId: null
 		};
@@ -152,9 +137,9 @@ describe('Gmail notification processing', () => {
 			{
 				database,
 				classify,
-				runJson: async () => {
+				request: async <T>() => {
 					calls += 1;
-					return { watch: { historyId: '100' } };
+					return { historyId: '100' } as T;
 				}
 			}
 		);

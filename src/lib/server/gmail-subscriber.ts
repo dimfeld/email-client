@@ -3,14 +3,14 @@ import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
-import { GogCommandError, normalizeGetMessage, runGogJson } from './gog';
+import { getGmailMessage, googleApiRequest, GoogleApiError } from './google-api';
 import { ingestGmailPayload } from './ingest';
 import { gmailMessageArrivalStats } from './message-arrival-stats';
 import type { IncomingEmail } from './types';
 
 export type GmailSubscriberAccount = {
 	email: string;
-	client: string;
+	refreshToken: string | null;
 	subscription: string;
 	historyId: string | null;
 };
@@ -29,7 +29,8 @@ type SubscriberDependencies = {
 	database: DatabaseSync;
 	classify: EmailClassifier;
 	extract?: EmailExtractor | null;
-	runJson?: typeof runGogJson;
+	request?: typeof googleApiRequest;
+	getMessage?: typeof getGmailMessage;
 };
 
 export function groupAccountsBySubscription(
@@ -69,49 +70,33 @@ function isNewerHistoryId(candidate: string, current: string): boolean {
 }
 
 function parseHistoryResult(value: unknown): HistoryResult {
-	if (!value || typeof value !== 'object') throw new Error('gog returned invalid Gmail history.');
+	if (!value || typeof value !== 'object') throw new Error('Google returned invalid Gmail history.');
 	const result = value as Record<string, unknown>;
 	if (typeof result.historyId !== 'string' || !/^\d+$/.test(result.historyId)) {
-		throw new Error('gog Gmail history did not include a valid historyId.');
+		throw new Error('Google Gmail history did not include a valid historyId.');
 	}
+	const history = Array.isArray(result.history) ? result.history as Array<Record<string, unknown>> : [];
+	const messageIds = history.flatMap((entry) => ['messages', 'messagesAdded', 'messagesDeleted', 'labelsAdded', 'labelsRemoved']
+		.flatMap((key) => (Array.isArray(entry[key]) ? entry[key] as Array<Record<string, unknown>> : []))
+		.flatMap((item) => {
+			const message = item.message && typeof item.message === 'object' ? item.message as Record<string, unknown> : item;
+			return typeof message.id === 'string' ? [message.id] : [];
+		}));
 	return {
 		historyId: result.historyId,
-		messages: Array.isArray(result.messages)
-			? result.messages.filter((id): id is string => typeof id === 'string' && id.length > 0)
-			: []
+		messages: [...new Set(messageIds)]
 	};
-}
-
-function parseWatchHistoryId(value: unknown): string {
-	if (!value || typeof value !== 'object') throw new Error('gog returned invalid watch status.');
-	const watch = (value as Record<string, unknown>).watch;
-	if (!watch || typeof watch !== 'object') throw new Error('gog watch status is not configured.');
-	const historyId = (watch as Record<string, unknown>).historyId;
-	if (typeof historyId !== 'string' || !/^\d+$/.test(historyId)) {
-		throw new Error('gog watch status did not include a valid historyId.');
-	}
-	return historyId;
 }
 
 async function loadInitialHistoryId(
 	account: GmailSubscriberAccount,
 	database: DatabaseSync,
-	runJson: typeof runGogJson
+	request: typeof googleApiRequest
 ): Promise<string> {
 	if (account.historyId) return account.historyId;
-	const result = await runJson([
-		'gog',
-		'gmail',
-		'watch',
-		'status',
-		'--account',
-		account.email,
-		'--client',
-		account.client,
-		'--json',
-		'--no-input'
-	]);
-	const historyId = parseWatchHistoryId(result);
+	const result = await request<{ historyId?: string }>(account, 'https://gmail.googleapis.com/gmail/v1/users/me/profile');
+	const historyId = result.historyId;
+	if (typeof historyId !== 'string' || !/^\d+$/.test(historyId)) throw new Error('The Gmail profile did not include a valid historyId.');
 	setAccountHistoryId(database, account.email, historyId);
 	account.historyId = historyId;
 	return historyId;
@@ -120,26 +105,12 @@ async function loadInitialHistoryId(
 async function fetchMessage(
 	account: GmailSubscriberAccount,
 	messageId: string,
-	runJson: typeof runGogJson
+	getMessage: typeof getGmailMessage
 ): Promise<IncomingEmail | null> {
 	try {
-		return normalizeGetMessage(
-			await runJson([
-				'gog',
-				'gmail',
-				'get',
-				messageId,
-				'--account',
-				account.email,
-				'--client',
-				account.client,
-				'--json',
-				'--no-input',
-				'--readonly'
-			])
-		);
+		return await getMessage(account, messageId);
 	} catch (error) {
-		if (error instanceof GogCommandError && error.exitCode === 5) return null;
+		if (error instanceof GoogleApiError && error.status === 404) return null;
 		throw error;
 	}
 }
@@ -149,34 +120,30 @@ export async function processGmailNotification(
 	notification: GmailNotification,
 	dependencies: SubscriberDependencies
 ): Promise<{ stored: number; classified: number; extracted: number; deleted: number }> {
-	const runJson = dependencies.runJson ?? runGogJson;
-	const currentHistoryId = await loadInitialHistoryId(account, dependencies.database, runJson);
+	const request = dependencies.request ?? googleApiRequest;
+	const getMessage = dependencies.getMessage ?? getGmailMessage;
+	const currentHistoryId = await loadInitialHistoryId(account, dependencies.database, request);
 	if (!isNewerHistoryId(notification.historyId, currentHistoryId)) {
 		return { stored: 0, classified: 0, extracted: 0, deleted: 0 };
 	}
 
-	const history = parseHistoryResult(
-		await runJson([
-			'gog',
-			'gmail',
-			'history',
-			'--since',
-			currentHistoryId,
-			'--account',
-			account.email,
-			'--client',
-			account.client,
-			'--json',
-			'--all',
-			'--no-input',
-			'--readonly'
-		])
-	);
+	const combined: Record<string, unknown>[] = [];
+	let pageToken: string | undefined;
+	let latestHistoryId = notification.historyId;
+	do {
+		const page = await request<{ history?: Record<string, unknown>[]; historyId?: string; nextPageToken?: string }>(account,
+			'https://gmail.googleapis.com/gmail/v1/users/me/history',
+			{ params: { startHistoryId: currentHistoryId, pageToken } });
+		combined.push(...(page.history ?? []));
+		if (page.historyId) latestHistoryId = page.historyId;
+		pageToken = page.nextPageToken;
+	} while (pageToken);
+	const history = parseHistoryResult({ history: combined, historyId: latestHistoryId });
 
 	const messages: IncomingEmail[] = [];
 	const deletedMessageIds: string[] = [];
 	for (const messageId of [...new Set(history.messages)]) {
-		const message = await fetchMessage(account, messageId, runJson);
+		const message = await fetchMessage(account, messageId, getMessage);
 		if (!message) {
 			deletedMessageIds.push(messageId);
 		} else if (message.labels?.includes('INBOX')) {
@@ -211,12 +178,12 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 	const extract = createOpenAIEmailExtractor();
 	const accounts = listAccounts(database)
 		.filter(
-			(account): account is typeof account & { subscription: string } =>
-				account.enabled && Boolean(account.subscription)
+			(account): account is typeof account & { subscription: string; refreshToken: string } =>
+				account.enabled && Boolean(account.subscription) && Boolean(account.refreshToken)
 		)
 		.map((account) => ({
 			email: account.email,
-			client: account.client,
+			refreshToken: account.refreshToken,
 			subscription: account.subscription,
 			historyId: account.historyId
 		}));

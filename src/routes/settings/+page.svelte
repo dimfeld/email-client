@@ -35,15 +35,16 @@
 	</header>
 	<section aria-labelledby="google-sync-heading">
 		<h2 id="google-sync-heading">Google data sync</h2>
-		<p class="help">Download each account's Google Contacts, calendar list, and events through <code>gog</code>. A failed download keeps the last complete local copy.</p>
+		<p class="help">Connect a Google account with OAuth. Email Check uses the Gmail, Google Contacts, and Google Calendar APIs. Restart the server after you connect or reconnect an account so the background Gmail listener reloads it. A failed download keeps the last complete local copy.</p>
+		<p class="connect"><a href="/auth/google/start">Connect Google account</a></p>
 		<div class="sync-list">
 			{#each data.accounts as account}
 				<form method="POST" action="?/syncGoogle" use:enhance class="sync-card">
 					<input type="hidden" name="account" value={account.email} />
-					<div><strong>{account.email}</strong><p>Contacts: {account.contactsSyncedAt ? new Date(account.contactsSyncedAt).toLocaleString() : 'Not synced'}<br />Calendar: {account.calendarSyncedAt ? new Date(account.calendarSyncedAt).toLocaleString() : 'Not synced'}</p></div>
-					<button type="submit">Sync now</button>
+					<div><strong>{account.email}</strong><p>{account.connected ? 'OAuth connected' : 'OAuth connection required'}<br />Contacts: {account.contactsSyncedAt ? new Date(account.contactsSyncedAt).toLocaleString() : 'Not synced'}<br />Calendar: {account.calendarSyncedAt ? new Date(account.calendarSyncedAt).toLocaleString() : 'Not synced'}</p></div>
+					{#if account.connected}<button type="submit">Sync now</button>{:else}<a href="/auth/google/start">Reconnect</a>{/if}
 				</form>
-			{:else}<p class="help">Discover a <code>gog</code> account before you sync Google data.</p>{/each}
+			{:else}<p class="help">Connect a Google account before you sync Google data.</p>{/each}
 		</div>
 	</section>
 	<section aria-labelledby="categories-heading">
@@ -93,6 +94,8 @@
 	.help { margin-bottom: 12px; font-size: .9rem; }
 	section + section { margin-top: 36px; }
 	.sync-list { display: grid; gap: 10px; margin-top: 18px; }
+	.connect { margin-top: 18px; }
+	.connect a, .sync-card a { display: inline-block; color: #07131c; background: #6edff3; padding: 10px 16px; border-radius: 4px; text-decoration: none; font-size: .85rem; font-weight: 600; }
 	.sync-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px; border: 1px solid #23404e; border-radius: 6px; background: #0b1c26; }
 	.sync-card p { margin-top: 6px; color: #8eabb8; font-size: .75rem; line-height: 1.6; }
 	.category-card { padding: 24px; margin-top: 20px; background: #0d202b; border: 1px solid #23404e; border-radius: 8px; }

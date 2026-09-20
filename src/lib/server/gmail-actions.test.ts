@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, listEmails, upsertAccount, upsertEmails } from './db';
 import { applyGmailMessageAction, runGmailMessageAction } from './gmail-actions';
+import type { GoogleAccount } from './google-api';
 
 let database: DatabaseSync | undefined;
 
@@ -11,44 +12,35 @@ afterEach(() => {
 });
 
 describe('Gmail message actions', () => {
-	it('archives a message with its account and client', async () => {
-		let command: string[] = [];
+	it('archives a message with the Gmail modify endpoint', async () => {
+		let request: { url: string; options: unknown } | undefined;
 		await runGmailMessageAction(
-			{ email: 'one@example.com', client: 'work' },
+			{ email: 'one@example.com', refreshToken: 'token' },
 			'gmail-message',
 			'archive',
-			async (value) => {
-				command = value;
-				return {};
+			async <T>(_account: GoogleAccount, url: string, options?: { method?: string; params?: Record<string, string | number | boolean | undefined>; data?: unknown }) => {
+				request = { url, options };
+				return {} as T;
 			}
 		);
-		expect(command).toEqual([
-			'gog',
-			'gmail',
-			'archive',
-			'gmail-message',
-			'--account',
-			'one@example.com',
-			'--client',
-			'work',
-			'--json',
-			'--no-input',
-			'--force'
-		]);
+		expect(request).toEqual({
+			url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/gmail-message/modify',
+			options: { method: 'POST', data: { removeLabelIds: ['INBOX'] } }
+		});
 	});
 
 	it('moves a message to Gmail Trash for delete', async () => {
-		let command: string[] = [];
+		let url = '';
 		await runGmailMessageAction(
-			{ email: 'one@example.com', client: 'default' },
+			{ email: 'one@example.com', refreshToken: 'token' },
 			'gmail-message',
 			'delete',
-			async (value) => {
-				command = value;
-				return {};
+			async <T>(_account: GoogleAccount, value: string) => {
+				url = value;
+				return {} as T;
 			}
 		);
-		expect(command.slice(0, 4)).toEqual(['gog', 'gmail', 'trash', 'gmail-message']);
+		expect(url).toEndWith('/messages/gmail-message/trash');
 	});
 
 	it('updates local state only after Gmail succeeds and keeps archived mail recoverable', async () => {
@@ -59,10 +51,10 @@ describe('Gmail message actions', () => {
 
 		await applyGmailMessageAction(
 			database,
-			{ email: 'one@example.com', client: 'default' },
+			{ email: 'one@example.com', refreshToken: 'token' },
 			message.id,
 			'archive',
-			async () => ({})
+			async <T>() => ({} as T)
 		);
 		expect(listEmails(database)).toHaveLength(0);
 		expect(
@@ -81,7 +73,7 @@ describe('Gmail message actions', () => {
 		await expect(
 			applyGmailMessageAction(
 				database,
-				{ email: 'one@example.com', client: 'default' },
+				{ email: 'one@example.com', refreshToken: 'token' },
 				'gmail-message',
 				'delete',
 				async () => {

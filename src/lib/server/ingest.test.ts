@@ -243,7 +243,7 @@ describe('Gmail account ingestion', () => {
 		database = createDatabase(':memory:');
 		upsertAccount(database, {
 			email: 'one@example.com',
-			client: 'work',
+			refreshToken: 'token',
 			subscription: 'projects/p/subscriptions/mail'
 		});
 		await ingestGmailPayload(
@@ -252,6 +252,6 @@ describe('Gmail account ingestion', () => {
 			classify
 		);
 		expect(listAccounts(database)[0].subscription).toBe('projects/p/subscriptions/mail');
-		expect(listAccounts(database)[0].client).toBe('work');
+		expect(listAccounts(database)[0].refreshToken).toBe('token');
 	});
 });

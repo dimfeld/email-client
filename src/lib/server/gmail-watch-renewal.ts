@@ -1,60 +1,47 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { getDatabase, listAccounts, setAccountHistoryId } from './db';
-import { runGogJson } from './gog';
+import { googleApiRequest } from './google-api';
 
 export const GMAIL_WATCH_RENEWAL_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 type GmailWatchRenewalDependencies = {
 	database: DatabaseSync;
-	runJson?: typeof runGogJson;
+	request?: typeof googleApiRequest;
 	intervalMs?: number;
 };
 
 function parseWatchRenewalHistoryId(value: unknown): string {
 	if (!value || typeof value !== 'object') {
-		throw new Error('gog watch renew returned an invalid result.');
+		throw new Error('Google watch renewal returned an invalid result.');
 	}
 	const result = value as Record<string, unknown>;
-	const watch = result.watch;
-	const historyId =
-		watch && typeof watch === 'object'
-			? (watch as Record<string, unknown>).historyId
-			: result.historyId;
+	const historyId = result.historyId;
 	if (typeof historyId !== 'string' || !/^\d+$/.test(historyId)) {
-		throw new Error('gog watch renew did not return a valid historyId.');
+		throw new Error('Google watch renewal did not return a valid historyId.');
 	}
 	return historyId;
 }
 
 async function renewAccountWatch(
 	account: ReturnType<typeof listAccounts>[number],
-	runJson: typeof runGogJson
+	request: typeof googleApiRequest
 ): Promise<string> {
 	if (!account.topic) throw new Error(`No Pub/Sub topic is configured for ${account.email}.`);
-	const result = await runJson([
-		'gog',
-		'gmail',
-		'watch',
-		'renew',
-		'--account',
-		account.email,
-		'--client',
-		account.client,
-		'--json',
-		'--no-input'
-	]);
+	const result = await request(account, 'https://gmail.googleapis.com/gmail/v1/users/me/watch', {
+		method: 'POST', data: { topicName: account.topic, labelIds: ['INBOX'], labelFilterBehavior: 'include' }
+	});
 	return parseWatchRenewalHistoryId(result);
 }
 
 export async function renewGmailWatches(
 	database: DatabaseSync,
-	runJson: typeof runGogJson = runGogJson
+	request: typeof googleApiRequest = googleApiRequest
 ): Promise<{ renewed: number; failed: number }> {
-	const accounts = listAccounts(database).filter((account) => account.enabled && account.topic);
+	const accounts = listAccounts(database).filter((account) => account.enabled && account.topic && account.refreshToken);
 	const results = await Promise.all(
 		accounts.map(async (account) => {
 			try {
-				const historyId = await renewAccountWatch(account, runJson);
+				const historyId = await renewAccountWatch(account, request);
 				if (!account.historyId) setAccountHistoryId(database, account.email, historyId);
 				console.log(`Renewed Gmail watch for ${account.email}.`);
 				return true;
@@ -77,12 +64,12 @@ export type GmailWatchRenewal = {
 export function startGmailWatchRenewal(
 	{
 		database = getDatabase(),
-		runJson = runGogJson,
+		request = googleApiRequest,
 		intervalMs = GMAIL_WATCH_RENEWAL_INTERVAL_MS
 	}: Partial<GmailWatchRenewalDependencies> = {}
 ): GmailWatchRenewal {
 	const renew = () => {
-		void renewGmailWatches(database, runJson);
+		void renewGmailWatches(database, request);
 	};
 
 	const timer = setInterval(renew, intervalMs);

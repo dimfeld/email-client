@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDatabase, listEmails, upsertEmails } from './db';
+import { createDatabase, listAccounts, listEmails, upsertAccount, upsertEmails } from './db';
 
 let database: DatabaseSync | undefined;
 let directory: string | undefined;
@@ -78,5 +78,22 @@ describe('email classification storage', () => {
 			'extraction_error',
 			'extracted_at'
 		]));
+	});
+});
+
+describe('Google OAuth account migration', () => {
+	it('adds refresh-token storage to a database created by the gog integration', () => {
+		directory = mkdtempSync(join(tmpdir(), 'email-check-oauth-migration-'));
+		const path = join(directory, 'test.sqlite');
+		database = createDatabase(path);
+		database.exec(`ALTER TABLE accounts DROP COLUMN google_refresh_token;
+			ALTER TABLE accounts ADD COLUMN gog_client TEXT NOT NULL DEFAULT 'default';`);
+		database.close();
+
+		database = createDatabase(path);
+		upsertAccount(database, { email: 'owner@example.com', refreshToken: 'refresh-token' });
+		expect(listAccounts(database)[0]).toMatchObject({
+			email: 'owner@example.com', refreshToken: 'refresh-token'
+		});
 	});
 });

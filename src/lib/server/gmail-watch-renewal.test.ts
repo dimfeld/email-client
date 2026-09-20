@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, listAccounts, upsertAccount } from './db';
+import type { GoogleAccount } from './google-api';
 import { renewGmailWatches } from './gmail-watch-renewal';
 
 let database: DatabaseSync | undefined;
@@ -15,48 +16,37 @@ describe('Gmail watch renewal', () => {
 		database = createDatabase(':memory:');
 		upsertAccount(database, {
 			email: 'one@example.com',
-			client: 'work',
+			refreshToken: 'one',
 			topic: 'projects/p/topics/mail',
 			subscription: 'projects/p/subscriptions/mail'
 		});
 		upsertAccount(database, {
 			email: 'two@example.com',
-			client: 'default',
+			refreshToken: 'two',
 			topic: 'projects/p/topics/mail'
 		});
-		const commands: string[][] = [];
-		const runJson = async (command: string[]): Promise<unknown> => {
-			commands.push(command);
-			return { watch: { historyId: command.includes('one@example.com') ? '200' : '300' } };
+		const requests: Array<{ email: string; url: string; data: unknown }> = [];
+		const request = async <T>(account: { email: string }, url: string, options?: { data?: unknown }): Promise<T> => {
+			requests.push({ email: account.email, url, data: options?.data });
+			return { historyId: account.email === 'one@example.com' ? '200' : '300' } as T;
 		};
 
-		await expect(renewGmailWatches(database, runJson)).resolves.toEqual({ renewed: 2, failed: 0 });
+		await expect(renewGmailWatches(database, request)).resolves.toEqual({ renewed: 2, failed: 0 });
 
-		expect(commands).toHaveLength(2);
-		expect(commands[0]).toEqual([
-			'gog',
-			'gmail',
-			'watch',
-			'renew',
-			'--account',
-			'one@example.com',
-			'--client',
-			'work',
-			'--json',
-			'--no-input'
-		]);
+		expect(requests).toHaveLength(2);
+		expect(requests[0]).toMatchObject({ email: 'one@example.com', url: 'https://gmail.googleapis.com/gmail/v1/users/me/watch', data: { topicName: 'projects/p/topics/mail', labelIds: ['INBOX'], labelFilterBehavior: 'include' } });
 		expect(listAccounts(database).map((account) => account.historyId)).toEqual(['200', '300']);
 	});
 
 	it('does not let one failed account prevent other watches from renewing', async () => {
 		database = createDatabase(':memory:');
-		upsertAccount(database, { email: 'failed@example.com', topic: 'projects/p/topics/mail' });
-		upsertAccount(database, { email: 'working@example.com', topic: 'projects/p/topics/mail' });
+		upsertAccount(database, { email: 'failed@example.com', refreshToken: 'failed', topic: 'projects/p/topics/mail' });
+		upsertAccount(database, { email: 'working@example.com', refreshToken: 'working', topic: 'projects/p/topics/mail' });
 
 		await expect(
-			renewGmailWatches(database, async (command) => {
-			if (command.includes('failed@example.com')) throw new Error('temporary gog failure');
-			return { historyId: '400' };
+			renewGmailWatches(database, async <T>(account: GoogleAccount) => {
+			if (account.email === 'failed@example.com') throw new Error('temporary Google failure');
+			return { historyId: '400' } as T;
 		})
 		).resolves.toEqual({ renewed: 1, failed: 1 });
 

@@ -6,4 +6,4 @@ const results = await syncConfiguredGoogleAccounts(getDatabase(), readFlag('--ac
 for (const { account, result } of results) {
 	console.log(`Synced ${result.contacts} contact(s), ${result.calendars} calendar(s), and ${result.events} event(s) for ${account}.`);
 }
-if (results.length === 0) console.log('No enabled gog accounts are configured.');
+if (results.length === 0) console.log('No enabled Google OAuth accounts are configured.');

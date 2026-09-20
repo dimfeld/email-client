@@ -9,7 +9,7 @@ export const load: PageServerLoad = ({ url, depends, setHeaders }) => {
 	const requestedAccount = url.searchParams.get('account');
 	const selectedAccount = accounts.some((account) => account.email === requestedAccount) ? requestedAccount : null;
 	return {
-		accounts,
+		accounts: accounts.map(({ refreshToken, ...account }) => account),
 		selectedAccount,
 		calendars: listCalendars(database, selectedAccount ?? undefined),
 		events: listCalendarEvents(database, selectedAccount ?? undefined)

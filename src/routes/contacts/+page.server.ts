@@ -8,5 +8,5 @@ export const load: PageServerLoad = ({ url, depends, setHeaders }) => {
 	const accounts = listAccounts(database);
 	const requestedAccount = url.searchParams.get('account');
 	const selectedAccount = accounts.some((account) => account.email === requestedAccount) ? requestedAccount : null;
-	return { accounts, selectedAccount, contacts: listContacts(database, selectedAccount ?? undefined) };
+	return { accounts: accounts.map(({ refreshToken, ...account }) => account), selectedAccount, contacts: listContacts(database, selectedAccount ?? undefined) };
 };

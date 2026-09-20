@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountLastBackfillAt } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
-import { normalizeSearchMessage, runGogJson } from './gog';
+import { listGmailMessages } from './google-api';
 import { ingestGmailPayload } from './ingest';
 import { gmailMessageArrivalStats } from './message-arrival-stats';
 
@@ -14,7 +14,7 @@ type GmailBackfillDependencies = {
 	database: DatabaseSync;
 	classify: EmailClassifier;
 	extract?: EmailExtractor | null;
-	runJson?: typeof runGogJson;
+	listMessages?: typeof listGmailMessages;
 	now?: () => Date;
 	intervalMs?: number;
 };
@@ -42,51 +42,14 @@ export function buildGmailBackfillQuery(lastBackfillAt: string | null, now: Date
 	return `in:inbox after:${Math.max(0, Math.floor(startAt / 1000))}`;
 }
 
-function parseSearchResult(value: unknown): unknown[] {
-	if (!value || typeof value !== 'object') throw new Error('gog returned invalid Gmail search results.');
-	const messages = (value as Record<string, unknown>).messages;
-	if (messages === undefined) return [];
-	if (!Array.isArray(messages)) throw new Error('gog Gmail search results did not include a message list.');
-	return messages;
-}
-
 async function backfillAccount(
 	account: ReturnType<typeof listAccounts>[number],
 	dependencies: GmailBackfillDependencies,
 	now: Date
 ): Promise<{ stored: number; classified: number }> {
-	const runJson = dependencies.runJson ?? runGogJson;
+	const listMessages = dependencies.listMessages ?? listGmailMessages;
 	const query = buildGmailBackfillQuery(account.lastBackfillAt, now);
-	const command = [
-		'gog',
-		'gmail',
-		'messages',
-		'search',
-		query,
-		'--account',
-		account.email,
-		'--client',
-		account.client,
-		'--json',
-		'--all',
-		'--include-body',
-		'--full',
-		'--no-input',
-		'--readonly'
-	];
-	const [textResult, htmlResult] = await Promise.all([
-		runJson([...command, '--body-format', 'text']),
-		runJson([...command, '--body-format', 'html'])
-	]);
-	const htmlById = new Map(
-		parseSearchResult(htmlResult)
-			.map((value) => normalizeSearchMessage(value, 'html'))
-			.map((message) => [message.id, message.bodyHtml] as const)
-	);
-	const messages = parseSearchResult(textResult).map((value) => {
-		const message = normalizeSearchMessage(value, 'text');
-		return { ...message, bodyHtml: htmlById.get(message.id) };
-	});
+	const messages = await listMessages(account, query);
 	const ingested = await ingestGmailPayload(
 		dependencies.database,
 		{
@@ -107,7 +70,7 @@ export async function backfillGmail(
 	dependencies: GmailBackfillDependencies
 ): Promise<GmailBackfillResult> {
 	const now = (dependencies.now ?? (() => new Date()))();
-	const accounts = listAccounts(dependencies.database).filter((account) => account.enabled);
+	const accounts = listAccounts(dependencies.database).filter((account) => account.enabled && account.refreshToken);
 	const results = await Promise.all(
 		accounts.map(async (account) => {
 			try {
@@ -139,14 +102,14 @@ export type GmailBackfill = {
 export function startGmailBackfill(
 	{
 		database,
-		runJson = runGogJson,
+		listMessages = listGmailMessages,
 		classify,
 		extract,
 		intervalMs = GMAIL_BACKFILL_INTERVAL_MS
 	}: Partial<GmailBackfillDependencies> & { database?: DatabaseSync } = {}
 ): GmailBackfill {
 	const activeDatabase = database ?? getDatabase();
-	if (!listAccounts(activeDatabase).some((account) => account.enabled)) {
+	if (!listAccounts(activeDatabase).some((account) => account.enabled && account.refreshToken)) {
 		return { close() {} };
 	}
 	let running = false;
@@ -156,7 +119,7 @@ export function startGmailBackfill(
 		try {
 			await backfillGmail({
 				database: activeDatabase,
-				runJson,
+				listMessages,
 				classify: classify ?? createJevClassifier(),
 				extract: extract === undefined ? createOpenAIEmailExtractor() : extract
 			});

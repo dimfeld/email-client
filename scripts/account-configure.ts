@@ -4,7 +4,5 @@ import { readFlag, requireFlag } from './shared';
 const email = requireFlag('--account');
 const subscription = requireFlag('--subscription');
 const topic = readFlag('--topic');
-const client = readFlag('--client');
-
-upsertAccount(getDatabase(), { email, subscription, topic, client });
+upsertAccount(getDatabase(), { email, subscription, topic });
 console.log(`Configured ${email}.`);

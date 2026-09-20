@@ -1,11 +1,11 @@
 # Email Check
 
-Email Check is a local SvelteKit application that downloads Gmail messages, Google Contacts, and Google Calendar data through `gog`. It stores the data in SQLite and uses Jev to classify and raise useful messages.
+Email Check is a local SvelteKit application that downloads Gmail messages, Google Contacts, and Google Calendar data through the Google APIs. It stores the data in SQLite and uses Jev to classify and raise useful messages.
 
 ## Requirements
 
 - Bun
-- `gog` with each Google account authenticated for Gmail, Calendar, and Contacts
+- a Google Cloud OAuth client for Gmail, Google Calendar, and Google Contacts
 - a TypeSafe API key
 - an OpenAI API key if you want action item and reminder extraction
 - a Google Pub/Sub topic and pull subscription; accounts can share them
@@ -21,21 +21,17 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun install
    ```
 
-2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`. Set `OPENAI_API_KEY` to enable action item and reminder extraction.
+2. In Google Cloud, enable the Gmail API, Google Calendar API, and People API. Configure the OAuth consent screen. Create a Web application OAuth client with this authorized redirect URI:
 
-3. Discover all accounts that are already authenticated in `gog`.
-
-   ```sh
-   bun run accounts:discover
+   ```text
+   http://127.0.0.1:3000/auth/google/callback
    ```
 
-   If an account was authorized only for Gmail, authorize it again with the added read-only services. The sync commands also enforce read-only access at runtime.
+3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and the API keys that you use. Keep `GOOGLE_OAUTH_REDIRECT_URI` equal to the registered URI.
 
-   ```sh
-   gog auth add you@example.com --services gmail,calendar,contacts --readonly
-   ```
+4. Start the app, open **Settings**, and select **Connect Google account** for each account. Restart the server after you connect or reconnect an account so the background Gmail listener reloads its credentials.
 
-4. After you create a topic and pull subscription, configure each account.
+5. After you create a Pub/Sub topic and pull subscription, configure each connected account.
 
    ```sh
    bun run account:configure -- \
@@ -44,7 +40,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
      --subscription projects/PROJECT/subscriptions/SUBSCRIPTION
    ```
 
-5. Register the Gmail watch for each account.
+6. Register the Gmail watch for each account.
 
    ```sh
    bun run watch:start -- --account you@example.com
@@ -56,20 +52,20 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run watch:renew
    ```
 
-6. Import existing email. You select the import scope with a Gmail query. The command downloads all matches for that query.
+7. Import existing email. You select the import scope with a Gmail query. The command downloads all matches for that query.
 
    ```sh
    bun run sync -- --account you@example.com --query "newer_than:30d"
    ```
 
-7. Sync the Google address book, calendar list, and calendar events for all enabled accounts. Add `--account` to sync only one account.
+8. Sync the Google address book, calendar list, and calendar events for all enabled accounts. Add `--account` to sync only one account.
 
    ```sh
    bun run sync:google
    bun run sync:google -- --account you@example.com
    ```
 
-8. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs a Gmail backfill every five minutes while it runs. The first backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
+9. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs a Gmail backfill every five minutes while it runs. The first backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
@@ -77,7 +73,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 Open `http://127.0.0.1:3000`.
 
-Use **Settings → Google data sync** to refresh one account without the command line. **Contacts** shows the local address book and **Calendar** shows the downloaded events. A sync downloads all Contacts pages, all calendars, and all event pages that `gog calendar events` returns. The app replaces an account's local snapshot only after all remote downloads succeed, so a failed download keeps the prior data.
+Use **Settings → Google data sync** to connect or refresh one account. **Contacts** shows the local address book and **Calendar** shows the downloaded events. A sync downloads all Contacts pages, calendars, and event pages from the Google APIs. The app replaces an account's local snapshot only after all remote downloads succeed, so a failed download keeps the prior data.
 
 ## Live updates
 
@@ -103,7 +99,7 @@ Removing a category moves its messages to **Needs classification**. They can be 
 
 Open `http://127.0.0.1:3000` in a browser that supports PWA installation. Use the browser's install action to add Email Check to the desktop or home screen.
 
-The service worker caches the application files and each inbox page after you visit it. It does not cache `/api/` requests. A cached inbox page remains available when the server or network is temporarily unavailable. New email and classification still require the local server, `gog`, and network access.
+The service worker caches the application files and each inbox page after you visit it. It does not cache `/api/` requests. A cached inbox page remains available when the server or network is temporarily unavailable. New email and classification still require the local server and network access.
 
 PWA installation requires HTTPS, `localhost`, or `127.0.0.1`. A phone that connects through a plain HTTP LAN address will not meet the browser installation requirement.
 
