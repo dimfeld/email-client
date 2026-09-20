@@ -67,6 +67,7 @@ The root layout invalidates the `app:state` dependency used by mailbox and setti
 - `gog` client name;
 - Pub/Sub topic and subscription names;
 - the last successfully processed Gmail history ID;
+- the last successful Gmail backfill time for this account;
 - enabled state;
 - creation and update timestamps.
 
@@ -91,6 +92,8 @@ Indexes will match the UI query: category and message date. Foreign keys will pr
 The subscriber validates each Pub/Sub payload and matches its email address to an account configured for that subscription. Invalid payloads and notifications for unconfigured accounts are acknowledged as terminal messages. Account work is serialized so two notifications cannot race the same history cursor.
 
 If download, storage, or classification fails, the subscriber does not advance the account history cursor and it rejects the Pub/Sub message for retry. A retry updates the same row because the account and Gmail message ID are unique. If classification fails, the downloaded message remains in SQLite with an error and no final classification.
+
+The server also runs a periodic Gmail search backfill for each enabled account. The first run searches the previous hour. Later runs search from five minutes before that account's last successful backfill time. The backfill stores messages through the same idempotent ingestion path and advances only the account's backfill time after the search and ingestion complete. Rate-limit failures are logged, do not stop other accounts, and leave that account's cursor unchanged for the next run.
 
 ### UI
 
@@ -120,6 +123,7 @@ No account editor, message actions, search, pagination, or authentication is par
 - [x] Add direct Pub/Sub subscribers and idempotent ingestion.
 - [x] Add account discovery, account configuration, initial import, and watch setup commands.
 - [x] Renew configured Gmail watches once per day while the server runs.
+- [x] Periodically backfill Gmail messages for each enabled account.
 - [x] Add the category UI with useful messages raised first and account filtering.
 - [x] Add setup documentation and environment examples.
 - [x] Add automated tests and run type checks, tests, and the production build.

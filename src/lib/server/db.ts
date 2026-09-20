@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   topic TEXT,
   subscription TEXT,
   history_id TEXT,
+  last_backfill_at TEXT,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -69,6 +70,9 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	}>;
 	if (!accountColumns.some((column) => column.name === 'history_id')) {
 		database.exec('ALTER TABLE accounts ADD COLUMN history_id TEXT');
+	}
+	if (!accountColumns.some((column) => column.name === 'last_backfill_at')) {
+		database.exec('ALTER TABLE accounts ADD COLUMN last_backfill_at TEXT');
 	}
 	withTransaction(database, () => {
 		const exists = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'categories'").get();
@@ -151,11 +155,12 @@ export function listAccounts(database: DatabaseSync): Array<{
 	topic: string | null;
 	subscription: string | null;
 	historyId: string | null;
+	lastBackfillAt: string | null;
 	enabled: boolean;
 }> {
 	const rows = database
 		.prepare(
-			'SELECT email, gog_client, topic, subscription, history_id, enabled FROM accounts ORDER BY email'
+			'SELECT email, gog_client, topic, subscription, history_id, last_backfill_at, enabled FROM accounts ORDER BY email'
 		)
 		.all() as Array<Record<string, unknown>>;
 	return rows.map((row) => ({
@@ -164,6 +169,7 @@ export function listAccounts(database: DatabaseSync): Array<{
 		topic: row.topic === null ? null : String(row.topic),
 		subscription: row.subscription === null ? null : String(row.subscription),
 		historyId: row.history_id === null ? null : String(row.history_id),
+		lastBackfillAt: row.last_backfill_at === null ? null : String(row.last_backfill_at),
 		enabled: Boolean(row.enabled)
 	}));
 }
@@ -176,6 +182,17 @@ export function setAccountHistoryId(
 	database
 		.prepare('UPDATE accounts SET history_id = ?, updated_at = ? WHERE email = ?')
 		.run(historyId, new Date().toISOString(), accountEmail);
+	publishStateChange();
+}
+
+export function setAccountLastBackfillAt(
+	database: DatabaseSync,
+	accountEmail: string,
+	lastBackfillAt: string
+): void {
+	database
+		.prepare('UPDATE accounts SET last_backfill_at = ?, updated_at = ? WHERE email = ?')
+		.run(lastBackfillAt, new Date().toISOString(), accountEmail);
 	publishStateChange();
 }
 
