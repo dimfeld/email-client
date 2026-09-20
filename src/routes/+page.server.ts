@@ -13,7 +13,7 @@ export const load: PageServerLoad = ({ url, depends }) => {
 		? requestedAccount
 		: null;
 	return {
-		accounts,
+		accounts: accounts.map(({ refreshToken, ...account }) => ({ ...account, connected: Boolean(refreshToken) })),
 		categories: listCategories(database),
 		selectedAccount,
 		emails: listEmails(database, selectedAccount ?? undefined)

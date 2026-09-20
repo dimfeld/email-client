@@ -1,5 +1,3 @@
-export { normalizeSearchMessage, runGogJson as runJson } from '../src/lib/server/gog';
-
 export function readFlag(name: string): string | undefined {
 	const index = Bun.argv.indexOf(name);
 	return index >= 0 ? Bun.argv[index + 1] : undefined;

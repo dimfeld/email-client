@@ -8,7 +8,10 @@ export const load: PageServerLoad = ({ setHeaders, depends }) => {
 	depends('app:state');
 	setHeaders({ 'cache-control': 'no-store' });
 	const database = getDatabase();
-	return { categories: listCategories(database), accounts: listAccounts(database) };
+	return {
+		categories: listCategories(database),
+		accounts: listAccounts(database).map(({ refreshToken, ...account }) => ({ ...account, connected: Boolean(refreshToken) }))
+	};
 };
 
 export const actions: Actions = {

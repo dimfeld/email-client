@@ -24,7 +24,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS accounts (
   email TEXT PRIMARY KEY,
-  gog_client TEXT NOT NULL DEFAULT 'default',
+  google_refresh_token TEXT,
   topic TEXT,
   subscription TEXT,
   history_id TEXT,
@@ -149,6 +149,9 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	if (!accountColumns.some((column) => column.name === 'calendar_synced_at')) {
 		database.exec('ALTER TABLE accounts ADD COLUMN calendar_synced_at TEXT');
 	}
+	if (!accountColumns.some((column) => column.name === 'google_refresh_token')) {
+		database.exec('ALTER TABLE accounts ADD COLUMN google_refresh_token TEXT');
+	}
 	withTransaction(database, () => {
 		const exists = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'categories'").get();
 		if (!exists) {
@@ -235,23 +238,22 @@ export function closeSharedDatabase(): void {
 
 export function upsertAccount(
 	database: DatabaseSync,
-	account: { email: string; client?: string; topic?: string | null; subscription?: string | null }
+	account: { email: string; refreshToken?: string; topic?: string | null; subscription?: string | null }
 ): void {
 	const now = new Date().toISOString();
 	database
 		.prepare(
-			`INSERT INTO accounts (email, gog_client, topic, subscription, created_at, updated_at)
-       VALUES ($email, $client, $topic, $subscription, $now, $now)
-       ON CONFLICT(email) DO UPDATE SET
-         gog_client = CASE WHEN $hasClient = 1 THEN excluded.gog_client ELSE accounts.gog_client END,
+			`INSERT INTO accounts (email, google_refresh_token, topic, subscription, created_at, updated_at)
+			 VALUES ($email, $refreshToken, $topic, $subscription, $now, $now)
+			 ON CONFLICT(email) DO UPDATE SET
+			   google_refresh_token = COALESCE(excluded.google_refresh_token, accounts.google_refresh_token),
          topic = COALESCE(excluded.topic, accounts.topic),
          subscription = COALESCE(excluded.subscription, accounts.subscription),
          updated_at = excluded.updated_at`
 		)
 		.run({
 			$email: account.email,
-			$client: account.client ?? 'default',
-			$hasClient: account.client ? 1 : 0,
+			$refreshToken: account.refreshToken ?? null,
 			$topic: account.topic ?? null,
 			$subscription: account.subscription ?? null,
 			$now: now
@@ -261,7 +263,7 @@ export function upsertAccount(
 
 export function listAccounts(database: DatabaseSync): Array<{
 	email: string;
-	client: string;
+	refreshToken: string | null;
 	topic: string | null;
 	subscription: string | null;
 	historyId: string | null;
@@ -272,12 +274,12 @@ export function listAccounts(database: DatabaseSync): Array<{
 }> {
 	const rows = database
 		.prepare(
-			'SELECT email, gog_client, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
+			'SELECT email, google_refresh_token, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
 		)
 		.all() as Array<Record<string, unknown>>;
 	return rows.map((row) => ({
 		email: String(row.email),
-		client: String(row.gog_client),
+		refreshToken: row.google_refresh_token === null ? null : String(row.google_refresh_token),
 		topic: row.topic === null ? null : String(row.topic),
 		subscription: row.subscription === null ? null : String(row.subscription),
 		historyId: row.history_id === null ? null : String(row.history_id),
