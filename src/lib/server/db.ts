@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS emails (
   classification_error TEXT,
   classified_at TEXT,
   deleted_at TEXT,
+  archived_at TEXT,
   first_seen_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE(account_email, gmail_id)
@@ -107,6 +108,9 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 				ALTER TABLE emails ADD COLUMN importance_confidence REAL;
 				ALTER TABLE emails ADD COLUMN importance_probabilities_json TEXT;
 				UPDATE emails SET importance = CASE useful WHEN 1 THEN 'useful' WHEN 0 THEN 'other' ELSE NULL END;`);
+		}
+		if (!emailColumns.some((column) => column.name === 'archived_at')) {
+			database.exec('ALTER TABLE emails ADD COLUMN archived_at TEXT');
 		}
 	});
 	database.exec('PRAGMA optimize');
@@ -196,6 +200,18 @@ export function setAccountLastBackfillAt(
 	publishStateChange();
 }
 
+export function getEmailActionTarget(
+	database: DatabaseSync,
+	emailId: number
+): { accountEmail: string; gmailId: string } | null {
+	const row = database
+		.prepare('SELECT account_email, gmail_id FROM emails WHERE id = ? AND deleted_at IS NULL')
+		.get(emailId) as { account_email: string; gmail_id: string } | null;
+	return row
+		? { accountEmail: row.account_email, gmailId: row.gmail_id }
+		: null;
+}
+
 function hashEmail(email: IncomingEmail): string {
 	return createHash('sha256')
 		.update(
@@ -248,6 +264,11 @@ export function upsertEmails(
       importance = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.importance ELSE NULL END,
       classified_at = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classified_at ELSE NULL END,
       classification_error = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classification_error ELSE NULL END,
+      archived_at = CASE
+        WHEN instr(excluded.labels_json, '"INBOX"') > 0 THEN NULL
+        WHEN emails.content_hash = excluded.content_hash THEN emails.archived_at
+        ELSE NULL
+      END,
       updated_at = excluded.updated_at,
       deleted_at = NULL
   `);
@@ -349,6 +370,17 @@ export function markDeleted(database: DatabaseSync, accountEmail: string, gmailI
 	});
 }
 
+export function markArchived(database: DatabaseSync, accountEmail: string, gmailIds: string[]): void {
+	if (gmailIds.length === 0) return;
+	const statement = database.prepare(
+		'UPDATE emails SET archived_at = ?, updated_at = ? WHERE account_email = ? AND gmail_id = ?'
+	);
+	const now = new Date().toISOString();
+	withTransaction(database, () => {
+		for (const gmailId of gmailIds) statement.run(now, now, accountEmail, gmailId);
+	});
+}
+
 export function listEmails(database: DatabaseSync, account?: string): StoredEmail[] {
 	const where = account
 		? 'WHERE deleted_at IS NULL AND account_email = $account'
@@ -357,7 +389,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		`SELECT emails.id, account_email, gmail_id, thread_id, from_address, to_addresses,
       subject, message_date, snippet, body, body_truncated, labels_json, category,
       importance, category_confidence, importance_confidence, classification_error, deleted_at
-     FROM emails LEFT JOIN categories ON categories.id = emails.category ${where}
+     FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
      ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
        WHEN 'important' THEN 0 WHEN 'useful' THEN 1 ELSE 2 END, message_date DESC, first_seen_at DESC`
 	);

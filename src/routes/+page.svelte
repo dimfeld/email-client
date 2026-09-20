@@ -1,9 +1,11 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import { effectiveImportance } from '$lib/categories';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 	import type { StoredEmail } from '$lib/server/types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 
 	type Filter = string;
 	let labels = $derived(Object.fromEntries(data.categories.map((category) => [category.id, category.name])));
@@ -68,6 +70,14 @@
 		if (email.categoryConfidence === null) return null;
 		return `${Math.round(email.categoryConfidence * 100)}%`;
 	}
+
+	const submitMessageAction: SubmitFunction = () => async ({ result, update }) => {
+		await update();
+		if (result.type === 'success') {
+			selectedId = null;
+			mobileDetail = false;
+		}
+	};
 </script>
 
 <svelte:head>
@@ -136,6 +146,17 @@
 						</dl>
 						{#if confidence(selectedEmail)}<p class="classification">Category confidence: {confidence(selectedEmail)}</p>{/if}
 						{#if selectedEmail.classificationError}<p class="notice">Classification failed. This message needs another attempt.</p>{/if}
+						{#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
+						<div class="message-actions">
+							<form method="POST" action="?/archive" use:enhance={submitMessageAction}>
+								<input type="hidden" name="id" value={selectedEmail.id} />
+								<button type="submit">Archive</button>
+							</form>
+							<form method="POST" action="?/delete" use:enhance={submitMessageAction} onsubmit={(event) => { if (!window.confirm('Move this message to Gmail Trash?')) event.preventDefault(); }}>
+								<input type="hidden" name="id" value={selectedEmail.id} />
+								<button type="submit" class="delete-button">Delete</button>
+							</form>
+						</div>
 						{#if isHtml(selectedEmail.body)}
 							<iframe class="html-message" title="Email message content" sandbox="" referrerpolicy="no-referrer" srcdoc={emailDocument(selectedEmail.body)}></iframe>
 						{:else}
@@ -206,6 +227,10 @@
 	.message-body { margin-top: 28px; padding-top: 28px; border-top: 1px solid #23404e; white-space: pre-wrap; line-height: 1.75; font-size: .92rem; color: #d5e3e9; }
 	.html-message { display: block; width: 100%; height: 60dvh; margin-top: 28px; border: 0; background: white; color-scheme: light; }
 	.notice { margin-top: 20px; color: #ffde59; font-size: .8rem; }
+	.action-error { color: #ff9fb2; }
+	.message-actions { display: flex; gap: 10px; margin-top: 20px; }
+	.message-actions button { border: 1px solid #6edff3; border-radius: 4px; padding: 8px 14px; background: #6edff3; color: #07131c; font-size: .8rem; font-weight: 650; }
+	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
 	.empty-state { padding: 32px 20px; } .empty-state h3 { font-size: 1rem; }
 	.empty-state p, .detail-empty p { margin-top: 10px; color: #8eabb8; font-size: .85rem; line-height: 1.6; }
 	.detail-empty { margin: auto; padding: 32px; text-align: center; }

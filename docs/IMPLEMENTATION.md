@@ -15,7 +15,7 @@ The application must:
 - include setup commands for accounts, an initial Gmail import, watch registration, and watch consumption;
 - have automated tests for the database, Pub/Sub routing, ingestion, and classification boundary.
 
-The application does not create Google Pub/Sub topics or subscriptions. The owner will create them. The application also does not send, delete, archive, or relabel Gmail messages.
+The application does not create Google Pub/Sub topics or subscriptions. The owner will create them. The message detail view can archive a message or move it to Gmail Trash.
 
 ## Research findings
 
@@ -83,7 +83,7 @@ The root layout invalidates the `app:state` dependency used by mailbox and setti
 - thread ID, headers, date, snippet, text body, body truncation state, and labels;
 - category, importance result, model, confidence, probabilities, and classification error;
 - first-seen and update timestamps;
-- deleted timestamp for Gmail deletion notifications.
+- archived and deleted timestamps for Gmail state and local message actions.
 
 Indexes will match the UI query: category and message date. Foreign keys will preserve account ownership.
 
@@ -104,9 +104,10 @@ The first view is a compact inbox workspace. It contains:
 - All important and Useful now filters;
 - a settings page for category names, descriptions, and levels;
 - sender, subject, account, date, snippet, importance, and classification confidence for each message;
+- archive and delete actions that update Gmail before hiding the local message;
 - clear empty and setup states.
 
-No account editor, message actions, search, pagination, or authentication is part of this MVP.
+No account editor, search, pagination, or authentication is part of this MVP.
 
 ### Security
 
@@ -124,6 +125,7 @@ No account editor, message actions, search, pagination, or authentication is par
 - [x] Add account discovery, account configuration, initial import, and watch setup commands.
 - [x] Renew configured Gmail watches once per day while the server runs.
 - [x] Periodically backfill Gmail messages for each enabled account.
+- [x] Add archive and delete actions for stored messages.
 - [x] Add the category UI with useful messages raised first and account filtering.
 - [x] Add setup documentation and environment examples.
 - [x] Add automated tests and run type checks, tests, and the production build.
