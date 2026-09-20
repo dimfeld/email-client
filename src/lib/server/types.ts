@@ -11,7 +11,8 @@ export type IncomingEmail = {
 	subject?: string;
 	date?: string;
 	snippet?: string;
-	body?: string;
+	bodyText?: string;
+	bodyHtml?: string;
 	bodyTruncated?: boolean;
 	labels?: string[];
 };
@@ -44,7 +45,8 @@ export type StoredEmail = {
 	subject: string;
 	messageDate: string | null;
 	snippet: string;
-	body: string;
+	bodyText: string;
+	bodyHtml: string | null;
 	bodyTruncated: boolean;
 	labels: string[];
 	category: EmailCategory | null;

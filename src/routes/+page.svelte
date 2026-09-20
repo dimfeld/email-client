@@ -5,6 +5,7 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { tick } from 'svelte';
 	import { effectiveImportance } from '$lib/categories';
+	import { buildEmailDocument, hasRemoteImages } from '$lib/email-html';
 	import type { ActionData, PageData } from './$types';
 	import type { StoredEmail } from '$lib/server/types';
 
@@ -31,6 +32,7 @@
 	let archiveForm = $state<HTMLFormElement | null>(null);
 	let deleteForm = $state<HTMLFormElement | null>(null);
 	let readingContent = $state<HTMLElement | null>(null);
+	let remoteImagesFor = $state<number | null>(null);
 	let useful = $derived(data.emails.filter((email) => (importance(email) === 'important' || importance(email) === 'useful')));
 	let filters = $derived([
 		{ category: 'all' as const, label: 'All mail', count: data.emails.length },
@@ -71,12 +73,15 @@
 		updateMailboxUrl({ category: filter, message: null });
 	}
 
-	function isHtml(body: string): boolean {
-		return /<(?:html|body|div|p|table|br|a|span)\b[^>]*>/i.test(body);
-	}
-
-	function emailDocument(body: string): string {
-		return `<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src 'none'; form-action 'none'; base-uri 'none'"><style>body{font:15px/1.6 system-ui,sans-serif;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}</style></head><body>${body}</body></html>`;
+	function resizeHtmlMessage(event: Event) {
+		const frame = event.currentTarget as HTMLIFrameElement;
+		try {
+			frame.style.height = '0px';
+			const document = frame.contentDocument;
+			if (document) frame.style.height = `${document.documentElement.scrollHeight}px`;
+		} catch {
+			frame.style.removeProperty('height');
+		}
 	}
 
 	function senderName(from: string): string {
@@ -195,7 +200,7 @@
 					<button class="message" class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => updateMailboxUrl({ message: email.id })}>
 						<span class="message-top"><strong>{senderName(email.fromAddress)}</strong><time>{formatDate(email.messageDate)}</time></span>
 						<span class="subject">{email.subject || '(No subject)'}</span>
-						<span class="preview">{email.snippet || email.body || 'No preview text.'}</span>
+						<span class="preview">{email.snippet || (email.bodyHtml ? 'HTML message' : email.bodyText) || 'No preview text.'}</span>
 						<span class="message-bottom"><span class="account">{email.accountEmail}</span>{#if (importance(email) === 'important' || importance(email) === 'useful')}<span class="useful-tag">{importance(email) === 'important' ? 'Important' : 'Useful'}</span>{/if}{#if email.classificationError}<span class="error-tag">Retry needed</span>{/if}</span>
 					</button>
 				{:else}
@@ -235,11 +240,14 @@
 								<input type="hidden" name="id" value={selectedEmail.id} />
 								<button type="submit" class="delete-button">Delete</button>
 							</form>
+							{#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && remoteImagesFor !== selectedEmail.id}
+								<button type="button" class="remote-images-button" onclick={() => { remoteImagesFor = selectedEmail.id; }}>Load remote images</button>
+							{/if}
 						</div>
-						{#if isHtml(selectedEmail.body)}
-							<iframe class="html-message" title="Email message content" sandbox="" referrerpolicy="no-referrer" srcdoc={emailDocument(selectedEmail.body)}></iframe>
+						{#if selectedEmail.bodyHtml}
+							<iframe class="html-message" title="Email message content" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesFor === selectedEmail.id)} onload={resizeHtmlMessage}></iframe>
 						{:else}
-							<div class="message-body">{selectedEmail.body || selectedEmail.snippet || 'No message text available.'}</div>
+							<div class="message-body">{selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}</div>
 						{/if}
 						{#if selectedEmail.bodyTruncated}<p class="notice">Only part of this message was downloaded.</p>{/if}
 					</article>
@@ -328,6 +336,7 @@
 	.message-actions { display: flex; gap: 10px; margin-top: 20px; }
 	.message-actions button { border: 1px solid #6edff3; border-radius: 4px; padding: 8px 14px; background: #6edff3; color: #07131c; font-size: .8rem; font-weight: 650; }
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
+	.message-actions .remote-images-button { border-color: #365869; background: transparent; color: #a3effb; }
 	.shortcut-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: #0009; }
 	.shortcut-dialog { width: min(420px, 100%); padding: 24px; border: 1px solid #365869; border-radius: 8px; background: #0d202b; box-shadow: 0 20px 60px #0008; }
 	.shortcut-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

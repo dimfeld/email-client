@@ -80,7 +80,7 @@ The root layout invalidates the `app:state` dependency used by mailbox and setti
 `emails`
 
 - account and Gmail message ID, with a unique constraint for idempotency;
-- thread ID, headers, date, snippet, text body, body truncation state, and labels;
+- thread ID, headers, date, snippet, separate plain-text and HTML bodies, body truncation state, and labels;
 - category, importance result, model, confidence, probabilities, and classification error;
 - first-seen and update timestamps;
 - archived and deleted timestamps for Gmail state and local message actions.
@@ -105,6 +105,7 @@ The first view is a compact inbox workspace. It contains:
 - a settings page for category names, descriptions, and levels;
 - sender, subject, account, date, snippet, importance, and classification confidence for each message;
 - archive and delete actions that update Gmail before hiding the local message;
+- sandboxed HTML rendering that preserves inline email styles and blocks remote images until the owner loads them;
 - clear empty and setup states.
 
 No account editor, search, pagination, or authentication is part of this MVP.

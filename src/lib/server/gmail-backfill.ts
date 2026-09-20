@@ -54,7 +54,7 @@ async function backfillAccount(
 ): Promise<{ stored: number; classified: number }> {
 	const runJson = dependencies.runJson ?? runGogJson;
 	const query = buildGmailBackfillQuery(account.lastBackfillAt, now);
-	const result = await runJson([
+	const command = [
 		'gog',
 		'gmail',
 		'messages',
@@ -67,10 +67,23 @@ async function backfillAccount(
 		'--json',
 		'--all',
 		'--include-body',
+		'--full',
 		'--no-input',
 		'--readonly'
+	];
+	const [textResult, htmlResult] = await Promise.all([
+		runJson([...command, '--body-format', 'text']),
+		runJson([...command, '--body-format', 'html'])
 	]);
-	const messages = parseSearchResult(result).map(normalizeSearchMessage);
+	const htmlById = new Map(
+		parseSearchResult(htmlResult)
+			.map((value) => normalizeSearchMessage(value, 'html'))
+			.map((message) => [message.id, message.bodyHtml] as const)
+	);
+	const messages = parseSearchResult(textResult).map((value) => {
+		const message = normalizeSearchMessage(value, 'text');
+		return { ...message, bodyHtml: htmlById.get(message.id) };
+	});
 	const ingested = await ingestGmailPayload(
 		dependencies.database,
 		{

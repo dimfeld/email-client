@@ -35,7 +35,7 @@ export function createJevClassifier(
 			subject: email.subject ?? '',
 			date: email.date ?? '',
 			snippet: email.snippet ?? '',
-			body: truncateBodyForJev(email.body),
+			body: truncateBodyForJev(email.bodyText),
 			labels: email.labels ?? []
 		};
 		const response = await client.systemOne({

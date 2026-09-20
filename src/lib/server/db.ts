@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS emails (
   subject TEXT NOT NULL DEFAULT '',
   message_date TEXT,
   snippet TEXT NOT NULL DEFAULT '',
-  body TEXT NOT NULL DEFAULT '',
+  body_text TEXT NOT NULL DEFAULT '',
+  body_html TEXT,
   body_truncated INTEGER NOT NULL DEFAULT 0 CHECK (body_truncated IN (0, 1)),
   labels_json TEXT NOT NULL DEFAULT '[]',
   content_hash TEXT NOT NULL,
@@ -103,6 +104,25 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 			}
 		}
 		const emailColumns = database.prepare('PRAGMA table_info(emails)').all() as Array<{ name: string }>;
+		if (!emailColumns.some((column) => column.name === 'body_text')) {
+			database.exec(`ALTER TABLE emails ADD COLUMN body_text TEXT NOT NULL DEFAULT '';
+				ALTER TABLE emails ADD COLUMN body_html TEXT;
+				UPDATE emails SET
+					body_text = body,
+					body_html = CASE
+						WHEN lower(body) LIKE '%<html%'
+							OR lower(body) LIKE '%<body%'
+							OR lower(body) LIKE '%<div%'
+							OR lower(body) LIKE '%<p%'
+							OR lower(body) LIKE '%<table%'
+							OR lower(body) LIKE '%<br%'
+							OR lower(body) LIKE '%<a %'
+							OR lower(body) LIKE '%<span%'
+						THEN body
+						ELSE NULL
+					END;`);
+		}
+		database.exec("UPDATE emails SET body_text = '' WHERE body_html IS NOT NULL AND body_text = body_html");
 		if (!emailColumns.some((column) => column.name === 'importance')) {
 			database.exec(`ALTER TABLE emails ADD COLUMN importance TEXT CHECK (importance IN ('important', 'useful', 'other'));
 				ALTER TABLE emails ADD COLUMN importance_confidence REAL;
@@ -221,7 +241,7 @@ function hashEmail(email: IncomingEmail): string {
 				subject: email.subject ?? '',
 				date: email.date ?? '',
 				snippet: email.snippet ?? '',
-				body: email.body ?? '',
+				bodyText: email.bodyText ?? '',
 				labels: email.labels ?? []
 			})
 		)
@@ -242,11 +262,11 @@ export function upsertEmails(
 	const insert = database.prepare(`
     INSERT INTO emails (
       account_email, gmail_id, thread_id, from_address, to_addresses, subject,
-      message_date, snippet, body, body_truncated, labels_json, content_hash,
+      message_date, snippet, body_text, body_html, body_truncated, labels_json, content_hash,
       first_seen_at, updated_at, deleted_at
     ) VALUES (
       $account, $gmailId, $threadId, $from, $to, $subject,
-      $messageDate, $snippet, $body, $bodyTruncated, $labels, $contentHash,
+      $messageDate, $snippet, $bodyText, $bodyHtml, $bodyTruncated, $labels, $contentHash,
       $now, $now, NULL
     )
     ON CONFLICT(account_email, gmail_id) DO UPDATE SET
@@ -256,7 +276,8 @@ export function upsertEmails(
       subject = excluded.subject,
       message_date = excluded.message_date,
       snippet = excluded.snippet,
-      body = excluded.body,
+      body_text = excluded.body_text,
+      body_html = excluded.body_html,
       body_truncated = excluded.body_truncated,
       labels_json = excluded.labels_json,
       content_hash = excluded.content_hash,
@@ -288,7 +309,8 @@ export function upsertEmails(
 				$subject: email.subject ?? '(no subject)',
 				$messageDate: email.date ?? null,
 				$snippet: email.snippet ?? '',
-				$body: email.body ?? '',
+				$bodyText: email.bodyText ?? '',
+				$bodyHtml: email.bodyHtml ?? null,
 				$bodyTruncated: email.bodyTruncated ? 1 : 0,
 				$labels: JSON.stringify(email.labels ?? []),
 				$contentHash: contentHash,
@@ -387,7 +409,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		: 'WHERE deleted_at IS NULL';
 	const statement = database.prepare(
 		`SELECT emails.id, account_email, gmail_id, thread_id, from_address, to_addresses,
-      subject, message_date, snippet, body, body_truncated, labels_json, category,
+      subject, message_date, snippet, body_text, body_html, body_truncated, labels_json, category,
       importance, category_confidence, importance_confidence, classification_error, deleted_at
      FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
      ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
@@ -407,7 +429,8 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		subject: String(row.subject),
 		messageDate: row.message_date === null ? null : String(row.message_date),
 		snippet: String(row.snippet),
-		body: String(row.body),
+		bodyText: String(row.body_text),
+		bodyHtml: row.body_html === null ? null : String(row.body_html),
 		bodyTruncated: Boolean(row.body_truncated),
 		labels: JSON.parse(String(row.labels_json)) as string[],
 		category: row.category as StoredEmail['category'],

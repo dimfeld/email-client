@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import type { EmailClassifier } from './classifier';
-import { createDatabase, listAccounts, upsertAccount } from './db';
+import { createDatabase, listAccounts, listEmails, upsertAccount } from './db';
 import { GogCommandError } from './gog';
 import {
 	backfillGmail,
@@ -55,7 +55,7 @@ describe('Gmail backfill', () => {
 			logs.mockRestore();
 		}
 
-		expect(commands).toHaveLength(2);
+		expect(commands).toHaveLength(4);
 		for (const command of commands) {
 			expect(command[4]).toBe(
 				`in:inbox after:${Math.floor(
@@ -63,6 +63,9 @@ describe('Gmail backfill', () => {
 				)}`
 			);
 		}
+		expect(commands.filter((command) => command.includes('text'))).toHaveLength(2);
+		expect(commands.filter((command) => command.includes('html'))).toHaveLength(2);
+		expect(commands.every((command) => command.includes('--full'))).toBe(true);
 		expect(listAccounts(database).map((account) => account.lastBackfillAt)).toEqual([
 			now.toISOString(),
 			now.toISOString()
@@ -84,17 +87,18 @@ describe('Gmail backfill', () => {
 			database,
 			classify,
 			now: () => now,
-			runJson: async (command) => {
-				commands.push(command);
-				if (command.includes('limited@example.com')) {
-					throw new GogCommandError('429 Too Many Requests', 429);
-				}
-				return {
-					messages: [
-						{
-							id: 'message-1',
-							subject: 'Working',
-							labels: ['INBOX']
+				runJson: async (command) => {
+					commands.push(command);
+					if (command.includes('limited@example.com')) {
+						throw new GogCommandError('429 Too Many Requests', 429);
+					}
+					return {
+						messages: [
+							{
+								id: 'message-1',
+								subject: 'Working',
+								body: command.includes('html') ? '<p>Working</p>' : 'Working',
+								labels: ['INBOX']
 						}
 					]
 				};
@@ -112,6 +116,10 @@ describe('Gmail backfill', () => {
 		expect(accounts.find((account) => account.email === 'working@example.com')?.lastBackfillAt).toBe(
 			now.toISOString()
 		);
+		expect(listEmails(database)[0]).toMatchObject({
+			bodyText: 'Working',
+			bodyHtml: '<p>Working</p>'
+		});
 	});
 
 	it('recognizes common Gmail rate-limit errors', () => {
