@@ -1,11 +1,11 @@
 # Email Check
 
-Email Check is a local SvelteKit application that downloads Gmail messages through `gog`, stores them in SQLite, and uses Jev to classify and raise useful messages.
+Email Check is a local SvelteKit application that downloads Gmail messages, Google Contacts, and Google Calendar data through `gog`. It stores the data in SQLite and uses Jev to classify and raise useful messages.
 
 ## Requirements
 
 - Bun
-- `gog` with each Gmail account authenticated
+- `gog` with each Google account authenticated for Gmail, Calendar, and Contacts
 - a TypeSafe API key
 - an OpenAI API key if you want action item and reminder extraction
 - a Google Pub/Sub topic and pull subscription; accounts can share them
@@ -27,6 +27,12 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
    ```sh
    bun run accounts:discover
+   ```
+
+   If an account was authorized only for Gmail, authorize it again with the added read-only services. The sync commands also enforce read-only access at runtime.
+
+   ```sh
+   gog auth add you@example.com --services gmail,calendar,contacts --readonly
    ```
 
 4. After you create a topic and pull subscription, configure each account.
@@ -56,7 +62,14 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run sync -- --account you@example.com --query "newer_than:30d"
    ```
 
-7. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs a Gmail backfill every five minutes while it runs. The first backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
+7. Sync the Google address book, calendar list, and calendar events for all enabled accounts. Add `--account` to sync only one account.
+
+   ```sh
+   bun run sync:google
+   bun run sync:google -- --account you@example.com
+   ```
+
+8. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs a Gmail backfill every five minutes while it runs. The first backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
@@ -64,11 +77,13 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 Open `http://127.0.0.1:3000`.
 
+Use **Settings → Google data sync** to refresh one account without the command line. **Contacts** shows the local address book and **Calendar** shows the downloaded events. A sync downloads all Contacts pages, all calendars, and all event pages that `gog calendar events` returns. The app replaces an account's local snapshot only after all remote downloads succeed, so a failed download keeps the prior data.
+
 ## Live updates
 
 The browser connects to `/api/events` for server-sent events. Mail, classification, account, and category writes in the web server notify connected browsers to fetch current data. The browser also refreshes after reconnecting, returning online, or regaining focus. Background refreshes preserve the selected message and unsaved category fields.
 
-Commands run in separate processes do not send these notifications. Refresh the page after running an external sync or configuration command.
+Commands run in separate processes do not send these notifications. Refresh the page after running an external sync or configuration command. Syncs started from Settings refresh open pages automatically.
 
 ## Category settings
 

@@ -86,3 +86,37 @@ export type StoredEmail = {
 	classificationError: string | null;
 	deletedAt: string | null;
 };
+
+export type SyncedContact = {
+	accountEmail: string;
+	resourceName: string;
+	displayName: string;
+	emails: string[];
+	phones: string[];
+	organization: string | null;
+};
+
+export type SyncedCalendar = {
+	accountEmail: string;
+	calendarId: string;
+	summary: string;
+	timeZone: string | null;
+	backgroundColor: string | null;
+	selected: boolean;
+};
+
+export type SyncedCalendarEvent = {
+	accountEmail: string;
+	calendarId: string;
+	eventId: string;
+	summary: string;
+	description: string | null;
+	location: string | null;
+	startAt: string;
+	endAt: string;
+	allDay: boolean;
+	status: string;
+	htmlLink: string | null;
+	organizer: string | null;
+	attendees: string[];
+};

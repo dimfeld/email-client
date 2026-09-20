@@ -29,10 +29,23 @@
 
 <main>
 	<header>
-		<a class="back" href="/">← Back to mail</a>
+		<nav><a href="/">Mail</a><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a></nav>
 		<h1>Settings</h1>
 		<p>Set the categories that Jev uses to sort mail across all accounts.</p>
 	</header>
+	<section aria-labelledby="google-sync-heading">
+		<h2 id="google-sync-heading">Google data sync</h2>
+		<p class="help">Download each account's Google Contacts, calendar list, and events through <code>gog</code>. A failed download keeps the last complete local copy.</p>
+		<div class="sync-list">
+			{#each data.accounts as account}
+				<form method="POST" action="?/syncGoogle" use:enhance class="sync-card">
+					<input type="hidden" name="account" value={account.email} />
+					<div><strong>{account.email}</strong><p>Contacts: {account.contactsSyncedAt ? new Date(account.contactsSyncedAt).toLocaleString() : 'Not synced'}<br />Calendar: {account.calendarSyncedAt ? new Date(account.calendarSyncedAt).toLocaleString() : 'Not synced'}</p></div>
+					<button type="submit">Sync now</button>
+				</form>
+			{:else}<p class="help">Discover a <code>gog</code> account before you sync Google data.</p>{/each}
+		</div>
+	</section>
 	<section aria-labelledby="categories-heading">
 		<h2 id="categories-heading">Categories</h2>
 		<p class="help">Jev uses each category name and description when it classifies a message. Changes apply to future classifications. Existing messages keep their category.</p>
@@ -71,12 +84,17 @@
 	:global(body) { margin: 0; min-width: 320px; color: #edf7fb; }
 	main { max-width: 860px; margin: auto; padding: 32px 24px 64px; }
 	header { padding-bottom: 28px; border-bottom: 1px solid #23404e; margin-bottom: 28px; }
-	.back { color: #6edff3; text-decoration: none; font-size: .9rem; }
+	nav { display: flex; gap: 18px; }
+	nav a { color: #6edff3; text-decoration: none; font-size: .9rem; }
 	h1 { margin: 24px 0 10px; font-size: 2rem; }
 	h2 { margin: 0 0 12px; font-size: 1.3rem; }
 	h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
 	p { color: #9bb4bf; line-height: 1.6; margin: 0; }
 	.help { margin-bottom: 12px; font-size: .9rem; }
+	section + section { margin-top: 36px; }
+	.sync-list { display: grid; gap: 10px; margin-top: 18px; }
+	.sync-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px; border: 1px solid #23404e; border-radius: 6px; background: #0b1c26; }
+	.sync-card p { margin-top: 6px; color: #8eabb8; font-size: .75rem; line-height: 1.6; }
 	.category-card { padding: 24px; margin-top: 20px; background: #0d202b; border: 1px solid #23404e; border-radius: 8px; }
 	.card-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
 	.badge { background: #ffde5920; color: #ffde59; padding: 4px 8px; border-radius: 4px; font-size: .7rem; }
@@ -91,5 +109,5 @@
 	.feedback { padding: 14px 16px; border: 1px solid #365869; color: #a3effb; margin-top: 20px; border-radius: 4px; }
 	.error { color: #ffa3b5; }
 	:focus-visible { outline: 2px solid #6edff3; outline-offset: 3px; }
-	@media (max-width: 760px) { main { padding: 24px 16px; } .category-card { padding: 18px; } }
+	@media (max-width: 760px) { main { padding: 24px 16px; } .category-card { padding: 18px; } .sync-card { align-items: flex-start; flex-direction: column; } }
 </style>

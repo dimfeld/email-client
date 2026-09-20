@@ -26,3 +26,4 @@ vite.config.ts.timestamp-*
 data/
 coverage/
 *.log
+proofshot-artifacts/

@@ -170,7 +170,7 @@
 <main>
 	<header class="masthead">
 		<div class="brand"><span class="brand-mark" aria-hidden="true">@</span><h1>Email Check</h1></div>
-		<a class="settings-link" href="/settings">Settings</a>
+		<nav class="app-links" aria-label="Application"><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a><a href="/settings">Settings</a></nav>
 		<button class="shortcuts-button" type="button" onclick={() => { showShortcuts = true; }}>Shortcuts <kbd>?</kbd></button>
 		<form method="GET" class="account-picker">
 			<label for="account">Account</label>
@@ -288,7 +288,8 @@
 	.brand { display: flex; align-items: center; gap: 12px; }
 	.brand-mark { color: #6edff3; font-size: 1.7rem; }
 	h1 { font-size: 1.25rem; letter-spacing: -.035em; white-space: nowrap; }
-	.settings-link { margin-left: auto; color: #6edff3; font-size: .85rem; text-decoration: none; }
+	.app-links { margin-left: auto; display: flex; gap: 16px; }
+	.app-links a { color: #6edff3; font-size: .85rem; text-decoration: none; }
 	.account-picker { display: flex; align-items: center; gap: 12px; min-width: 0; }
 	.account-picker label { color: #8eabb8; font-size: .8rem; }
 	.shortcuts-button { border: 0; background: transparent; color: #6edff3; font-size: .8rem; cursor: pointer; }

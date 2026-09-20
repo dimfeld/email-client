@@ -13,6 +13,7 @@
 		"watch:start": "bun scripts/watch-start.ts",
 		"watch:renew": "bun scripts/watch-renew.ts",
 		"sync": "bun scripts/sync.ts",
+		"sync:google": "bun scripts/google-sync.ts",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",

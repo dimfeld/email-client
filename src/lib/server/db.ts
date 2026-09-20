@@ -2,7 +2,16 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { Category, Classification, EmailExtraction, IncomingEmail, StoredEmail } from './types';
+import type {
+	Category,
+	Classification,
+	EmailExtraction,
+	IncomingEmail,
+	StoredEmail,
+	SyncedCalendar,
+	SyncedCalendarEvent,
+	SyncedContact
+} from './types';
 
 import { publishStateChange } from './state-events';
 import { defaultCategories } from './default-categories';
@@ -20,6 +29,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   subscription TEXT,
   history_id TEXT,
   last_backfill_at TEXT,
+  contacts_synced_at TEXT,
+  calendar_synced_at TEXT,
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -70,6 +81,53 @@ ON emails(useful, message_date DESC);
 
 CREATE INDEX IF NOT EXISTS idx_emails_category_date
 ON emails(category, message_date DESC);
+
+CREATE TABLE IF NOT EXISTS contacts (
+  account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+  resource_name TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT '',
+  emails_json TEXT NOT NULL DEFAULT '[]',
+  phones_json TEXT NOT NULL DEFAULT '[]',
+  organization TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_email, resource_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contacts_name
+ON contacts(display_name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS calendars (
+  account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+  calendar_id TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  time_zone TEXT,
+  background_color TEXT,
+  selected INTEGER NOT NULL DEFAULT 0 CHECK (selected IN (0, 1)),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_email, calendar_id)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  account_email TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  description TEXT,
+  location TEXT,
+  start_at TEXT NOT NULL,
+  end_at TEXT NOT NULL,
+  all_day INTEGER NOT NULL DEFAULT 0 CHECK (all_day IN (0, 1)),
+  status TEXT NOT NULL DEFAULT '',
+  html_link TEXT,
+  organizer TEXT,
+  attendees_json TEXT NOT NULL DEFAULT '[]',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_email, calendar_id, event_id),
+  FOREIGN KEY (account_email, calendar_id) REFERENCES calendars(account_email, calendar_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start
+ON calendar_events(start_at, end_at);
 `;
 
 export function createDatabase(path = defaultPath): DatabaseSync {
@@ -84,6 +142,12 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	}
 	if (!accountColumns.some((column) => column.name === 'last_backfill_at')) {
 		database.exec('ALTER TABLE accounts ADD COLUMN last_backfill_at TEXT');
+	}
+	if (!accountColumns.some((column) => column.name === 'contacts_synced_at')) {
+		database.exec('ALTER TABLE accounts ADD COLUMN contacts_synced_at TEXT');
+	}
+	if (!accountColumns.some((column) => column.name === 'calendar_synced_at')) {
+		database.exec('ALTER TABLE accounts ADD COLUMN calendar_synced_at TEXT');
 	}
 	withTransaction(database, () => {
 		const exists = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'categories'").get();
@@ -202,11 +266,13 @@ export function listAccounts(database: DatabaseSync): Array<{
 	subscription: string | null;
 	historyId: string | null;
 	lastBackfillAt: string | null;
+	contactsSyncedAt: string | null;
+	calendarSyncedAt: string | null;
 	enabled: boolean;
 }> {
 	const rows = database
 		.prepare(
-			'SELECT email, gog_client, topic, subscription, history_id, last_backfill_at, enabled FROM accounts ORDER BY email'
+			'SELECT email, gog_client, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
 		)
 		.all() as Array<Record<string, unknown>>;
 	return rows.map((row) => ({
@@ -216,7 +282,102 @@ export function listAccounts(database: DatabaseSync): Array<{
 		subscription: row.subscription === null ? null : String(row.subscription),
 		historyId: row.history_id === null ? null : String(row.history_id),
 		lastBackfillAt: row.last_backfill_at === null ? null : String(row.last_backfill_at),
+		contactsSyncedAt: row.contacts_synced_at === null ? null : String(row.contacts_synced_at),
+		calendarSyncedAt: row.calendar_synced_at === null ? null : String(row.calendar_synced_at),
 		enabled: Boolean(row.enabled)
+	}));
+}
+
+export function replaceContacts(
+	database: DatabaseSync,
+	accountEmail: string,
+	contacts: Omit<SyncedContact, 'accountEmail'>[],
+	syncedAt = new Date().toISOString()
+): void {
+	const insert = database.prepare(`INSERT INTO contacts
+		(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`);
+	withTransaction(database, () => {
+		database.prepare('DELETE FROM contacts WHERE account_email = ?').run(accountEmail);
+		for (const contact of contacts) {
+			insert.run(accountEmail, contact.resourceName, contact.displayName, JSON.stringify(contact.emails),
+				JSON.stringify(contact.phones), contact.organization, syncedAt);
+		}
+		database.prepare('UPDATE accounts SET contacts_synced_at = ?, updated_at = ? WHERE email = ?')
+			.run(syncedAt, syncedAt, accountEmail);
+	});
+}
+
+export function listContacts(database: DatabaseSync, account?: string): SyncedContact[] {
+	const rows = (account
+		? database.prepare('SELECT * FROM contacts WHERE account_email = ? ORDER BY display_name COLLATE NOCASE').all(account)
+		: database.prepare('SELECT * FROM contacts ORDER BY display_name COLLATE NOCASE, account_email').all()
+	) as Array<Record<string, unknown>>;
+	return rows.map((row) => ({
+		accountEmail: String(row.account_email),
+		resourceName: String(row.resource_name),
+		displayName: String(row.display_name),
+		emails: JSON.parse(String(row.emails_json)) as string[],
+		phones: JSON.parse(String(row.phones_json)) as string[],
+		organization: row.organization === null ? null : String(row.organization)
+	}));
+}
+
+export function replaceCalendars(
+	database: DatabaseSync,
+	accountEmail: string,
+	calendars: Omit<SyncedCalendar, 'accountEmail'>[],
+	events: Omit<SyncedCalendarEvent, 'accountEmail'>[],
+	syncedAt = new Date().toISOString()
+): void {
+	const insertCalendar = database.prepare(`INSERT INTO calendars
+		(account_email, calendar_id, summary, time_zone, background_color, selected, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`);
+	const insertEvent = database.prepare(`INSERT INTO calendar_events
+		(account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
+		 all_day, status, html_link, organizer, attendees_json, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+	withTransaction(database, () => {
+		database.prepare('DELETE FROM calendars WHERE account_email = ?').run(accountEmail);
+		for (const calendar of calendars) {
+			insertCalendar.run(accountEmail, calendar.calendarId, calendar.summary, calendar.timeZone,
+				calendar.backgroundColor, calendar.selected ? 1 : 0, syncedAt);
+		}
+		for (const event of events) {
+			insertEvent.run(accountEmail, event.calendarId, event.eventId, event.summary, event.description,
+				event.location, event.startAt, event.endAt, event.allDay ? 1 : 0, event.status,
+				event.htmlLink, event.organizer, JSON.stringify(event.attendees), syncedAt);
+		}
+		database.prepare('UPDATE accounts SET calendar_synced_at = ?, updated_at = ? WHERE email = ?')
+			.run(syncedAt, syncedAt, accountEmail);
+	});
+}
+
+export function listCalendars(database: DatabaseSync, account?: string): SyncedCalendar[] {
+	const rows = (account
+		? database.prepare('SELECT * FROM calendars WHERE account_email = ? ORDER BY summary COLLATE NOCASE').all(account)
+		: database.prepare('SELECT * FROM calendars ORDER BY summary COLLATE NOCASE, account_email').all()
+	) as Array<Record<string, unknown>>;
+	return rows.map((row) => ({
+		accountEmail: String(row.account_email), calendarId: String(row.calendar_id), summary: String(row.summary),
+		timeZone: row.time_zone === null ? null : String(row.time_zone),
+		backgroundColor: row.background_color === null ? null : String(row.background_color), selected: Boolean(row.selected)
+	}));
+}
+
+export function listCalendarEvents(database: DatabaseSync, account?: string): SyncedCalendarEvent[] {
+	const rows = (account
+		? database.prepare('SELECT * FROM calendar_events WHERE account_email = ? ORDER BY start_at, summary COLLATE NOCASE').all(account)
+		: database.prepare('SELECT * FROM calendar_events ORDER BY start_at, summary COLLATE NOCASE').all()
+	) as Array<Record<string, unknown>>;
+	return rows.map((row) => ({
+		accountEmail: String(row.account_email), calendarId: String(row.calendar_id), eventId: String(row.event_id),
+		summary: String(row.summary), description: row.description === null ? null : String(row.description),
+		location: row.location === null ? null : String(row.location), startAt: String(row.start_at), endAt: String(row.end_at),
+		allDay: Boolean(row.all_day), status: String(row.status),
+		htmlLink: row.html_link === null ? null : String(row.html_link),
+		organizer: row.organizer === null ? null : String(row.organizer),
+		attendees: JSON.parse(String(row.attendees_json)) as string[]
 	}));
 }
 

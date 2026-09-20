@@ -1,12 +1,14 @@
 import { fail } from '@sveltejs/kit';
-import { CategoryValidationError, deleteCategory, getDatabase, listCategories, saveCategory } from '$lib/server/db';
+import { CategoryValidationError, deleteCategory, getDatabase, listAccounts, listCategories, saveCategory } from '$lib/server/db';
+import { syncConfiguredGoogleAccounts } from '$lib/server/google-sync';
 import type { CategoryLevel } from '$lib/server/types';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ setHeaders, depends }) => {
 	depends('app:state');
 	setHeaders({ 'cache-control': 'no-store' });
-	return { categories: listCategories(getDatabase()) };
+	const database = getDatabase();
+	return { categories: listCategories(database), accounts: listAccounts(database) };
 };
 
 export const actions: Actions = {
@@ -30,5 +32,16 @@ export const actions: Actions = {
 		const fields = await request.formData();
 		deleteCategory(getDatabase(), String(fields.get('id') ?? ''));
 		return { message: 'Category removed. Its messages now need classification.' };
+	},
+	syncGoogle: async ({ request }) => {
+		const fields = await request.formData();
+		const account = String(fields.get('account') ?? '');
+		if (!account) return fail(400, { error: 'Choose an account to sync.' });
+		try {
+			const [{ result }] = await syncConfiguredGoogleAccounts(getDatabase(), account);
+			return { message: `Synced ${result.contacts} contacts, ${result.calendars} calendars, and ${result.events} events for ${account}.` };
+		} catch (error) {
+			return fail(502, { error: error instanceof Error ? error.message : String(error) });
+		}
 	}
 };

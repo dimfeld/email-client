@@ -6,6 +6,7 @@ The application must:
 
 - run locally with Bun and SvelteKit;
 - keep Gmail messages in a local SQLite database;
+- keep Google Contacts, calendars, and events in the local SQLite database;
 - support more than one authenticated `gog` account;
 - consume Gmail notifications with one in-app Pub/Sub listener for each unique subscription;
 - route a shared subscription notification to its configured Gmail account;
@@ -13,6 +14,7 @@ The application must:
 - use a fixed category level or ask Jev to classify message importance for Auto categories;
 - show useful messages first and group all messages by category;
 - include setup commands for accounts, an initial Gmail import, watch registration, and watch consumption;
+- provide account-scoped Google data sync through `gog` and read-only Contacts and Calendar views;
 - have automated tests for the database, Pub/Sub routing, ingestion, and classification boundary.
 
 The application does not create Google Pub/Sub topics or subscriptions. The owner will create them. The message detail view can archive a message or move it to Gmail Trash.
@@ -90,6 +92,13 @@ The root layout invalidates the `app:state` dependency used by mailbox and setti
 - first-seen and update timestamps;
 - archived and deleted timestamps for Gmail state and local message actions.
 
+`contacts`, `calendars`, and `calendar_events`
+
+- use the account and Google resource ID as stable keys;
+- store the contact fields and event fields used by the read-only views;
+- replace one account's snapshot only after every remote page and contact detail downloads successfully;
+- record separate Contacts and Calendar sync times on the account.
+
 Indexes will match the UI query: category and message date. Foreign keys will preserve account ownership.
 
 ### Ingestion and failure behavior
@@ -132,6 +141,8 @@ No account editor, search, pagination, or authentication is part of this MVP.
 - [x] Renew configured Gmail watches once per day while the server runs.
 - [x] Periodically backfill Gmail messages for each enabled account.
 - [x] Add archive and delete actions for stored messages.
+- [x] Add account-scoped Google Contacts and Calendar sync through `gog`.
+- [x] Add read-only Contacts and Calendar views.
 - [x] Add the category UI with useful messages raised first and account filtering.
 - [x] Add setup documentation and environment examples.
 - [x] Add automated tests and run type checks, tests, and the production build.
