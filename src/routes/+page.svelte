@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { tick } from 'svelte';
 	import { effectiveImportance } from '$lib/categories';
@@ -11,12 +13,20 @@
 	type Filter = string;
 	let labels = $derived(Object.fromEntries(data.categories.map((category) => [category.id, category.name])));
 	let categoryLevels = $derived(new Map(data.categories.map((category) => [category.id, category.level])));
+	let currentUrl = $derived(page.url.href);
 	function importance(email: StoredEmail) {
 		return effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance);
 	}
-	let activeFilter = $state<Filter>('all');
-	let selectedId = $state<number | null>(null);
-	let mobileDetail = $state(false);
+	let activeFilter = $derived.by(() => {
+		const requested = new URL(currentUrl).searchParams.get('category') ?? 'all';
+		return filters.some((filter) => filter.category === requested) ? requested : 'all';
+	});
+	let selectedId = $derived.by(() => {
+		const requested = new URL(currentUrl).searchParams.get('message');
+		const id = requested ? Number(requested) : NaN;
+		return Number.isInteger(id) && id > 0 ? id : null;
+	});
+	let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
 	let showShortcuts = $state(false);
 	let archiveForm = $state<HTMLFormElement | null>(null);
 	let deleteForm = $state<HTMLFormElement | null>(null);
@@ -39,13 +49,26 @@
 		if (activeFilter === 'important') return importance(email) === 'important';
 		return (email.category ?? 'pending') === activeFilter;
 	}));
-	let selectedEmail = $derived(visibleEmails.find((email) => email.id === selectedId) ?? visibleEmails[0] ?? null);
+	let selectedEmail = $derived(selectedId === null
+		? visibleEmails[0] ?? null
+		: visibleEmails.find((email) => email.id === selectedId) ?? null);
 	let filterLabel = $derived(filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail');
 
+	function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
+		const url = new URL(currentUrl);
+		if (changes.category !== undefined) {
+			if (changes.category === 'all') url.searchParams.delete('category');
+			else url.searchParams.set('category', changes.category);
+		}
+		if (changes.message !== undefined) {
+			if (changes.message === null) url.searchParams.delete('message');
+			else url.searchParams.set('message', String(changes.message));
+		}
+		if (url.href !== currentUrl) void goto(`${url.pathname}${url.search}${url.hash}`, { keepFocus: true, noScroll: true });
+	}
+
 	function selectFilter(filter: Filter) {
-		activeFilter = filter;
-		selectedId = null;
-		mobileDetail = false;
+		updateMailboxUrl({ category: filter, message: null });
 	}
 
 	function isHtml(body: string): boolean {
@@ -82,8 +105,7 @@
 		const nextIndex = currentIndex < 0
 			? offset > 0 ? 0 : visibleEmails.length - 1
 			: Math.max(0, Math.min(visibleEmails.length - 1, currentIndex + offset));
-		selectedId = visibleEmails[nextIndex].id;
-		mobileDetail = true;
+		updateMailboxUrl({ message: visibleEmails[nextIndex].id });
 	}
 
 	function isTypingTarget(target: EventTarget | null): boolean {
@@ -109,14 +131,14 @@
 		} else if (key === 'o' || event.key === 'Enter') {
 			if (selectedEmail) {
 				event.preventDefault();
-				mobileDetail = true;
+				updateMailboxUrl({ message: selectedEmail.id });
 				await tick();
 				readingContent?.focus({ preventScroll: true });
 			}
 		} else if (key === 'u' || event.key === 'Escape') {
 			event.preventDefault();
 			if (showShortcuts) showShortcuts = false;
-			else mobileDetail = false;
+			else updateMailboxUrl({ message: null });
 		} else if (event.key === '?') {
 			event.preventDefault();
 			showShortcuts = !showShortcuts;
@@ -126,8 +148,7 @@
 	const submitMessageAction: SubmitFunction = () => async ({ result, update }) => {
 		await update();
 		if (result.type === 'success') {
-			selectedId = null;
-			mobileDetail = false;
+			updateMailboxUrl({ message: null });
 		}
 	};
 
@@ -171,7 +192,7 @@
 			<header class="pane-heading"><h2>{filterLabel}</h2><span>{visibleEmails.length} messages</span></header>
 			<div class="message-list">
 				{#each visibleEmails as email (email.id)}
-					<button class="message" class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => { selectedId = email.id; mobileDetail = true; }}>
+					<button class="message" class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => updateMailboxUrl({ message: email.id })}>
 						<span class="message-top"><strong>{senderName(email.fromAddress)}</strong><time>{formatDate(email.messageDate)}</time></span>
 						<span class="subject">{email.subject || '(No subject)'}</span>
 						<span class="preview">{email.snippet || email.body || 'No preview text.'}</span>
@@ -188,7 +209,7 @@
 
 		<section class="detail-pane" aria-label="Message detail">
 			<header class="pane-heading detail-toolbar">
-				<button class="back-button" onclick={() => { mobileDetail = false; }}>← Back to messages</button>
+				<button class="back-button" onclick={() => updateMailboxUrl({ message: null })}>← Back to messages</button>
 				<span>{selectedEmail ? (selectedEmail.category ? labels[selectedEmail.category] : 'Needs classification') : 'Message detail'}</span>
 				{#if selectedEmail && importance(selectedEmail) !== null}<span class="useful-tag">{importance(selectedEmail) === 'important' ? 'Important' : importance(selectedEmail) === 'useful' ? 'Useful' : 'Other'}</span>{/if}
 			</header>
