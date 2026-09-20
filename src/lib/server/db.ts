@@ -42,6 +42,10 @@ CREATE TABLE IF NOT EXISTS emails (
   content_hash TEXT NOT NULL,
   category TEXT,
   useful INTEGER CHECK (useful IN (0, 1)),
+  has_action_item INTEGER CHECK (has_action_item IN (0, 1)),
+  action_item_probability REAL,
+  has_reminder INTEGER CHECK (has_reminder IN (0, 1)),
+  reminder_probability REAL,
   category_confidence REAL,
   usefulness_confidence REAL,
   category_probabilities_json TEXT,
@@ -131,6 +135,12 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 		}
 		if (!emailColumns.some((column) => column.name === 'archived_at')) {
 			database.exec('ALTER TABLE emails ADD COLUMN archived_at TEXT');
+		}
+		if (!emailColumns.some((column) => column.name === 'has_action_item')) {
+			database.exec(`ALTER TABLE emails ADD COLUMN has_action_item INTEGER CHECK (has_action_item IN (0, 1));
+				ALTER TABLE emails ADD COLUMN action_item_probability REAL;
+				ALTER TABLE emails ADD COLUMN has_reminder INTEGER CHECK (has_reminder IN (0, 1));
+				ALTER TABLE emails ADD COLUMN reminder_probability REAL;`);
 		}
 	});
 	database.exec('PRAGMA optimize');
@@ -336,6 +346,10 @@ export function saveClassification(
 			`UPDATE emails SET
         category = $category,
         importance = $importance,
+		has_action_item = $hasActionItem,
+		action_item_probability = $actionItemProbability,
+		has_reminder = $hasReminder,
+		reminder_probability = $reminderProbability,
         category_confidence = $categoryConfidence,
         importance_confidence = $importanceConfidence,
         category_probabilities_json = $categoryProbabilities,
@@ -349,6 +363,10 @@ export function saveClassification(
 		.run({
 			$category: classification.category,
 			$importance: classification.importance,
+			$hasActionItem: classification.hasActionItem ? 1 : 0,
+			$actionItemProbability: classification.actionItemProbability,
+			$hasReminder: classification.hasReminder ? 1 : 0,
+			$reminderProbability: classification.reminderProbability,
 			$categoryConfidence: classification.categoryConfidence,
 			$importanceConfidence: classification.importanceConfidence,
 			$categoryProbabilities: JSON.stringify(classification.categoryProbabilities),
@@ -410,7 +428,8 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 	const statement = database.prepare(
 		`SELECT emails.id, account_email, gmail_id, thread_id, from_address, to_addresses,
       subject, message_date, snippet, body_text, body_html, body_truncated, labels_json, category,
-      importance, category_confidence, importance_confidence, classification_error, deleted_at
+      importance, has_action_item, action_item_probability, has_reminder, reminder_probability,
+      category_confidence, importance_confidence, classification_error, deleted_at
      FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
      ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
        WHEN 'important' THEN 0 WHEN 'useful' THEN 1 ELSE 2 END, message_date DESC, first_seen_at DESC`
@@ -435,6 +454,12 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		labels: JSON.parse(String(row.labels_json)) as string[],
 		category: row.category as StoredEmail['category'],
 		importance: row.importance as StoredEmail['importance'],
+		hasActionItem: row.has_action_item === null ? null : Boolean(row.has_action_item),
+		actionItemProbability:
+			row.action_item_probability === null ? null : Number(row.action_item_probability),
+		hasReminder: row.has_reminder === null ? null : Boolean(row.has_reminder),
+		reminderProbability:
+			row.reminder_probability === null ? null : Number(row.reminder_probability),
 		categoryConfidence: row.category_confidence === null ? null : Number(row.category_confidence),
 		importanceConfidence:
 			row.importance_confidence === null ? null : Number(row.importance_confidence),
@@ -489,7 +514,9 @@ export function deleteCategory(database: DatabaseSync, id: string): void {
 	withTransaction(database, () => {
 		database.prepare(`UPDATE emails SET category = NULL, category_confidence = NULL,
 			category_probabilities_json = NULL, importance = NULL, importance_confidence = NULL,
-			importance_probabilities_json = NULL, classified_at = NULL, classification_error = NULL
+			importance_probabilities_json = NULL, has_action_item = NULL,
+			action_item_probability = NULL, has_reminder = NULL, reminder_probability = NULL,
+			classified_at = NULL, classification_error = NULL
 			WHERE category = ?`).run(id);
 		database.prepare('DELETE FROM categories WHERE id = ?').run(id);
 	});

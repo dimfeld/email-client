@@ -34,7 +34,8 @@ it('notifies clients for account, mail, classification, deletion, and category w
 		() => upsertEmails(database!, 'one@example.com', [{ id: 'mail', subject: 'New mail' }]),
 		() => saveClassification(database!, 'one@example.com', 'mail', {
 			category: 'action', importance: null, model: 'test', categoryConfidence: 1,
-			importanceConfidence: null, categoryProbabilities: { action: 1 }, importanceProbabilities: {}
+			importanceConfidence: null, categoryProbabilities: { action: 1 }, importanceProbabilities: {},
+			hasActionItem: true, actionItemProbability: 1, hasReminder: false, reminderProbability: 0
 		}),
 		() => saveClassificationError(database!, 'one@example.com', 'mail', new Error('Retry')),
 		() => markDeleted(database!, 'one@example.com', ['mail']),

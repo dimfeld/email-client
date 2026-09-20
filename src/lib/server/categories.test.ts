@@ -17,7 +17,8 @@ afterEach(() => {
 
 const classification = {
 	category: 'action', importance: 'other' as const, model: 'test', categoryConfidence: 0.9,
-	importanceConfidence: 0.9, categoryProbabilities: { action: 0.9 }, importanceProbabilities: { other: 0.9 }
+	importanceConfidence: 0.9, categoryProbabilities: { action: 0.9 }, importanceProbabilities: { other: 0.9 },
+	hasActionItem: true, actionItemProbability: 0.9, hasReminder: false, reminderProbability: 0.2
 };
 
 describe('category settings', () => {

@@ -48,3 +48,25 @@ describe('email body storage', () => {
 		});
 	});
 });
+
+describe('email classification storage', () => {
+	it('adds action item and reminder fields to an existing database', () => {
+		directory = mkdtempSync(join(tmpdir(), 'email-check-classification-migration-'));
+		const path = join(directory, 'test.sqlite');
+		database = createDatabase(path);
+		database.exec(`ALTER TABLE emails DROP COLUMN has_action_item;
+			ALTER TABLE emails DROP COLUMN action_item_probability;
+			ALTER TABLE emails DROP COLUMN has_reminder;
+			ALTER TABLE emails DROP COLUMN reminder_probability;`);
+		database.close();
+
+		database = createDatabase(path);
+		const columns = database.prepare('PRAGMA table_info(emails)').all() as Array<{ name: string }>;
+		expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+			'has_action_item',
+			'action_item_probability',
+			'has_reminder',
+			'reminder_probability'
+		]));
+	});
+});

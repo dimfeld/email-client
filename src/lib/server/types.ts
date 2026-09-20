@@ -28,6 +28,10 @@ export type GmailWatchPayload = {
 export type Classification = {
 	category: EmailCategory;
 	importance: Importance | null;
+	hasActionItem: boolean;
+	actionItemProbability: number;
+	hasReminder: boolean;
+	reminderProbability: number;
 	model: string;
 	categoryConfidence: number;
 	importanceConfidence: number | null;
@@ -51,6 +55,10 @@ export type StoredEmail = {
 	labels: string[];
 	category: EmailCategory | null;
 	importance: Importance | null;
+	hasActionItem: boolean | null;
+	actionItemProbability: number | null;
+	hasReminder: boolean | null;
+	reminderProbability: number | null;
 	categoryConfidence: number | null;
 	importanceConfidence: number | null;
 	classificationError: string | null;

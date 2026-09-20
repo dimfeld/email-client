@@ -21,6 +21,10 @@ afterEach(() => {
 const classify: EmailClassifier = async () => ({
 	category: 'action',
 	importance: 'useful',
+	hasActionItem: true,
+	actionItemProbability: 1,
+	hasReminder: false,
+	reminderProbability: 0,
 	model: 'test',
 	categoryConfidence: 1,
 	importanceConfidence: 1,

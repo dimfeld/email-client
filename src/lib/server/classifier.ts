@@ -1,4 +1,4 @@
-import { choice, TypeSafeClient } from '@typesafe-ai/sdk';
+import { choice, noul, TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Category, Classification, IncomingEmail } from './types';
 import { getDatabase, listCategories } from './db';
 
@@ -15,6 +15,22 @@ const importanceCriteria = {
 	useful: 'The owner is likely to value, refer to, or intentionally read this message, but it does not need priority attention.',
 	other: 'The message does not need priority attention and is not useful to the owner.'
 } as const;
+
+const actionItemQuestion = noul(
+	'Does this email contain an action item or something that the owner might add to a todo list?',
+	{
+		true: 'The email asks, requires, or suggests that the owner complete a task, make a decision, reply, review, schedule, or follow up.',
+		false: 'The email does not give the owner a task or a possible todo item.'
+	}
+);
+
+const reminderQuestion = noul(
+	'Does this email contain something that might be useful for the owner to add as a reminder?',
+	{
+		true: 'The owner might benefit from a future reminder about an event, deadline, appointment, renewal, expiration, follow-up, or other time-sensitive information.',
+		false: 'The email does not contain information that would be useful in a future reminder.'
+	}
+);
 
 export function createJevClassifier(
 	apiKey = process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY,
@@ -40,7 +56,11 @@ export function createJevClassifier(
 		};
 		const response = await client.systemOne({
 			state,
-			questions: { category: choice('What is the primary category of this email?', categoryCriteria) }
+			questions: {
+				category: choice('What is the primary category of this email?', categoryCriteria),
+				actionItem: actionItemQuestion,
+				reminder: reminderQuestion
+			}
 		});
 		const category = categories.find((category) => category.id === response.answers.category.choice);
 		if (!category) throw new Error('Jev returned an unknown category.');
@@ -54,6 +74,10 @@ export function createJevClassifier(
 		return {
 			category: category.id,
 			importance,
+			hasActionItem: response.answers.actionItem.noul >= 0.5,
+			actionItemProbability: response.answers.actionItem.noul,
+			hasReminder: response.answers.reminder.noul >= 0.5,
+			reminderProbability: response.answers.reminder.noul,
 			model: response.model,
 			categoryConfidence: response.answers.category.confidence,
 			importanceConfidence: automatic?.answers.importance.confidence ?? null,
