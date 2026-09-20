@@ -1,12 +1,28 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import type { Category } from '$lib/categories';
+	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let drafts = $state.raw<Record<string, Category>>({});
 	let rows = $derived([
 		...data.categories,
-		{ id: '', name: '', description: '', level: 'auto' }
-	].map((category) => form?.values?.id === category.id ? form.values : category));
+		{ id: '', name: '', description: '', level: 'auto' as const }
+	].map((category) => drafts[category.id] ?? (form?.values?.id === category.id ? form.values : category)));
+
+	const submitCategory: SubmitFunction = ({ formData }) => async ({ result, update }) => {
+		await update({ reset: false });
+		if (result.type === 'success') {
+			const id = String(formData.get('id') ?? '');
+			const { [id]: saved, ...remaining } = drafts;
+			drafts = remaining;
+		}
+	};
+
+	function preserveDraft(category: Category) {
+		if (!drafts[category.id]) drafts = { ...drafts, [category.id]: category };
+	}
 </script>
 
 <svelte:head><title>Settings — Email Check</title></svelte:head>
@@ -25,7 +41,7 @@
 		{#if form?.error}<p class="feedback error" role="alert">{form.error}</p>{/if}
 		{#if form?.message}<p class="feedback" role="status">{form.message}</p>{/if}
 		{#each rows as category (category)}
-			<form method="POST" action="?/save" use:enhance class="category-card" aria-label={category.id ? `Edit ${category.name}` : 'Add category'}>
+			<form method="POST" action="?/save" use:enhance={submitCategory} oninput={() => preserveDraft(category)} class="category-card" aria-label={category.id ? `Edit ${category.name}` : 'Add category'}>
 				<input type="hidden" name="id" value={category.id} />
 				<div class="card-heading"><h3>{category.id ? category.name : 'Add category'}</h3><span class="badge">{category.level === 'important' ? 'Important' : category.level === 'useful' ? 'Useful' : category.level === 'auto' ? 'Auto' : 'Other'}</span></div>
 				<label for={`name-${category.id}`}>Name</label>

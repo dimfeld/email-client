@@ -63,6 +63,12 @@ Email content is sent to the TypeSafe API for classification.
 
 Open `http://127.0.0.1:3000`.
 
+## Live updates
+
+The browser connects to `/api/events` for server-sent events. Mail, classification, account, and category writes in the web server notify connected browsers to fetch current data. The browser also refreshes after reconnecting, returning online, or regaining focus. Background refreshes preserve the selected message and unsaved category fields.
+
+Commands run in separate processes do not send these notifications. Refresh the page after running an external sync or configuration command.
+
 ## Category settings
 
 Open **Settings** from the mailbox to add, edit, or remove categories. Each category has a name, a description, and a level: **Important**, **Useful**, **Other**, or **Auto**. Jev receives the saved name and description for each category when it classifies a message. Settings apply to all accounts and persist in SQLite.

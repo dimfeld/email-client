@@ -53,6 +53,12 @@ Sources:
 
 The SvelteKit server serves the UI and owns the Pub/Sub listeners. It reads enabled accounts from SQLite and groups them by subscription. The `bun run app` command builds and starts this single process. The `bun run dev` command uses the same subscriber path during development.
 
+### Browser updates
+
+Database writes in the server publish an in-process change signal after the write or transaction completes. `/api/events` sends that signal to each connected browser through server-sent events. Each new connection sends an initial signal to cover updates missed while disconnected. The event contains no mail data.
+
+The root layout invalidates the `app:state` dependency used by mailbox and settings loaders. Refreshes run in sequence, with one pending refresh for changes received during an active fetch. Settings forms retain draft fields during background loads. External command processes require a manual page refresh.
+
 ### Data model
 
 `accounts`

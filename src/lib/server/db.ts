@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Category, Classification, IncomingEmail, StoredEmail } from './types';
 
+import { publishStateChange } from './state-events';
 import { defaultCategories } from './default-categories';
 
 const defaultPath = resolve(process.env.DATABASE_PATH ?? 'data/email-check.sqlite');
@@ -141,6 +142,7 @@ export function upsertAccount(
 			$subscription: account.subscription ?? null,
 			$now: now
 		});
+	publishStateChange();
 }
 
 export function listAccounts(database: DatabaseSync): Array<{
@@ -174,6 +176,7 @@ export function setAccountHistoryId(
 	database
 		.prepare('UPDATE accounts SET history_id = ?, updated_at = ? WHERE email = ?')
 		.run(historyId, new Date().toISOString(), accountEmail);
+	publishStateChange();
 }
 
 function hashEmail(email: IncomingEmail): string {
@@ -295,6 +298,7 @@ export function saveClassification(
 			$account: accountEmail,
 			$gmailId: gmailId
 		});
+	publishStateChange();
 }
 
 export function saveClassificationError(
@@ -314,6 +318,7 @@ export function saveClassificationError(
 			accountEmail,
 			gmailId
 		);
+	publishStateChange();
 }
 
 export function markDeleted(database: DatabaseSync, accountEmail: string, gmailIds: string[]): void {
@@ -372,6 +377,7 @@ function withTransaction(database: DatabaseSync, operation: () => void): void {
 	try {
 		operation();
 		database.exec('COMMIT');
+		publishStateChange();
 	} catch (error) {
 		database.exec('ROLLBACK');
 		throw error;
@@ -403,6 +409,7 @@ export function saveCategory(database: DatabaseSync, input: Omit<Category, 'id'>
 	if (input.level === 'auto') {
 		database.prepare('UPDATE emails SET classified_at = NULL WHERE category = ? AND importance IS NULL').run(id);
 	}
+	publishStateChange();
 	return id;
 }
 

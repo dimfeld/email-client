@@ -1,4 +1,23 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { invalidate } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { createStateRefresh } from '$lib/state-refresh';
+
+	onMount(() => {
+		const refresh = createStateRefresh(() => invalidate('app:state'));
+		const events = new EventSource(resolve('/api/events'));
+		events.addEventListener('message', refresh.request);
+		window.addEventListener('focus', refresh.request);
+		window.addEventListener('online', refresh.request);
+		return () => {
+			refresh.stop();
+			events.close();
+			window.removeEventListener('focus', refresh.request);
+			window.removeEventListener('online', refresh.request);
+		};
+	});
+
 	let { children } = $props();
 </script>
 

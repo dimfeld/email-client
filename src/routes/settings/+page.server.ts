@@ -3,7 +3,8 @@ import { CategoryValidationError, deleteCategory, getDatabase, listCategories, s
 import type { CategoryLevel } from '$lib/server/types';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ setHeaders }) => {
+export const load: PageServerLoad = ({ setHeaders, depends }) => {
+	depends('app:state');
 	setHeaders({ 'cache-control': 'no-store' });
 	return { categories: listCategories(getDatabase()) };
 };
