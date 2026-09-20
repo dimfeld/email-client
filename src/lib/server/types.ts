@@ -1,15 +1,7 @@
-export const emailCategories = [
-	'action',
-	'personal',
-	'work',
-	'transaction',
-	'newsletter',
-	'notification',
-	'marketing',
-	'other'
-] as const;
+import type { Importance } from '$lib/categories';
+export type { Category, CategoryLevel } from '$lib/categories';
 
-export type EmailCategory = (typeof emailCategories)[number];
+export type EmailCategory = string;
 
 export type IncomingEmail = {
 	id: string;
@@ -34,12 +26,12 @@ export type GmailWatchPayload = {
 
 export type Classification = {
 	category: EmailCategory;
-	useful: boolean;
+	importance: Importance | null;
 	model: string;
 	categoryConfidence: number;
-	usefulnessConfidence: number;
+	importanceConfidence: number | null;
 	categoryProbabilities: Record<string, number>;
-	usefulnessProbabilities: Record<string, number>;
+	importanceProbabilities: Record<string, number>;
 };
 
 export type StoredEmail = {
@@ -56,9 +48,9 @@ export type StoredEmail = {
 	bodyTruncated: boolean;
 	labels: string[];
 	category: EmailCategory | null;
-	useful: boolean | null;
+	importance: Importance | null;
 	categoryConfidence: number | null;
-	usefulnessConfidence: number | null;
+	importanceConfidence: number | null;
 	classificationError: string | null;
 	deletedAt: string | null;
 };

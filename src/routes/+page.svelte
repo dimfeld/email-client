@@ -1,50 +1,37 @@
 <script lang="ts">
+	import { effectiveImportance } from '$lib/categories';
 	import type { PageData } from './$types';
 	import type { StoredEmail } from '$lib/server/types';
 
 	let { data }: { data: PageData } = $props();
 
-	const categoryOrder = [
-		'action',
-		'personal',
-		'work',
-		'transaction',
-		'newsletter',
-		'notification',
-		'marketing',
-		'other',
-		'pending'
-	] as const;
-
-	const labels: Record<(typeof categoryOrder)[number], string> = {
-		action: 'Action needed',
-		personal: 'Personal',
-		work: 'Work',
-		transaction: 'Transactions',
-		newsletter: 'Newsletters',
-		notification: 'Notifications',
-		marketing: 'Marketing',
-		other: 'Other',
-		pending: 'Needs classification'
-	};
-
-	type Filter = (typeof categoryOrder)[number] | 'all' | 'useful';
+	type Filter = string;
+	let labels = $derived(Object.fromEntries(data.categories.map((category) => [category.id, category.name])));
+	let categoryLevels = $derived(new Map(data.categories.map((category) => [category.id, category.level])));
+	function importance(email: StoredEmail) {
+		return effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance);
+	}
 	let activeFilter = $state<Filter>('all');
 	let selectedId = $state<number | null>(null);
 	let mobileDetail = $state(false);
-	let useful = $derived(data.emails.filter((email) => email.useful));
+	let useful = $derived(data.emails.filter((email) => (importance(email) === 'important' || importance(email) === 'useful')));
 	let filters = $derived([
 		{ category: 'all' as const, label: 'All mail', count: data.emails.length },
+		{ category: 'important', label: 'All important', count: data.emails.filter((email) => importance(email) === 'important').length },
 		{ category: 'useful' as const, label: 'Useful now', count: useful.length },
-		...categoryOrder.map((category) => ({
-			category,
-			label: labels[category],
-			count: data.emails.filter((email) => (email.category ?? 'pending') === category).length
-		}))
+		...data.categories.map((category) => ({
+			category: category.id,
+			label: category.name,
+			count: data.emails.filter((email) => email.category === category.id).length
+		})),
+		{ category: 'pending', label: 'Needs classification', count: data.emails.filter((email) => email.category === null).length }
 	]);
-	let visibleEmails = $derived(data.emails.filter((email) =>
-		activeFilter === 'all' || (activeFilter === 'useful' ? email.useful : (email.category ?? 'pending') === activeFilter)
-	));
+	let visibleEmails = $derived(data.emails.filter((email) => {
+		if (activeFilter === 'all') return true;
+		if (activeFilter === 'useful') return (importance(email) === 'important' || importance(email) === 'useful');
+		if (activeFilter === 'important') return importance(email) === 'important';
+		return (email.category ?? 'pending') === activeFilter;
+	}));
 	let selectedEmail = $derived(visibleEmails.find((email) => email.id === selectedId) ?? visibleEmails[0] ?? null);
 	let filterLabel = $derived(filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail');
 
@@ -90,6 +77,7 @@
 <main>
 	<header class="masthead">
 		<div class="brand"><span class="brand-mark" aria-hidden="true">@</span><h1>Email Check</h1></div>
+		<a class="settings-link" href="/settings">Settings</a>
 		<form method="GET" class="account-picker">
 			<label for="account">Account</label>
 			<select id="account" name="account" onchange={(event) => event.currentTarget.form?.submit()}>
@@ -106,7 +94,7 @@
 			<p class="eyebrow">MAILBOX</p>
 			{#each filters as filter}
 				<button class="filter" class:active={activeFilter === filter.category} aria-pressed={activeFilter === filter.category} onclick={() => selectFilter(filter.category)}>
-					<span>{filter.label}</span><span class="count">{filter.count}</span>
+					<span class="filter-label">{filter.label}</span><span class="count">{filter.count}</span>
 				</button>
 			{/each}
 		</nav>
@@ -119,7 +107,7 @@
 						<span class="message-top"><strong>{senderName(email.fromAddress)}</strong><time>{formatDate(email.messageDate)}</time></span>
 						<span class="subject">{email.subject || '(No subject)'}</span>
 						<span class="preview">{email.snippet || email.body || 'No preview text.'}</span>
-						<span class="message-bottom"><span class="account">{email.accountEmail}</span>{#if email.useful}<span class="useful-tag">Useful</span>{/if}{#if email.classificationError}<span class="error-tag">Retry needed</span>{/if}</span>
+						<span class="message-bottom"><span class="account">{email.accountEmail}</span>{#if (importance(email) === 'important' || importance(email) === 'useful')}<span class="useful-tag">{importance(email) === 'important' ? 'Important' : 'Useful'}</span>{/if}{#if email.classificationError}<span class="error-tag">Retry needed</span>{/if}</span>
 					</button>
 				{:else}
 					<div class="empty-state">
@@ -133,8 +121,8 @@
 		<section class="detail-pane" aria-label="Message detail">
 			<header class="pane-heading detail-toolbar">
 				<button class="back-button" onclick={() => { mobileDetail = false; }}>← Back to messages</button>
-				<span>{selectedEmail ? labels[selectedEmail.category ?? 'pending'] : 'Message detail'}</span>
-				{#if selectedEmail?.useful}<span class="useful-tag">Useful now</span>{/if}
+				<span>{selectedEmail ? (selectedEmail.category ? labels[selectedEmail.category] : 'Needs classification') : 'Message detail'}</span>
+				{#if selectedEmail && importance(selectedEmail) !== null}<span class="useful-tag">{importance(selectedEmail) === 'important' ? 'Important' : importance(selectedEmail) === 'useful' ? 'Useful' : 'Other'}</span>{/if}
 			</header>
 			{#if selectedEmail}
 				{#key selectedEmail.id}
@@ -176,6 +164,7 @@
 	.brand { display: flex; align-items: center; gap: 12px; }
 	.brand-mark { color: #6edff3; font-size: 1.7rem; }
 	h1 { font-size: 1.25rem; letter-spacing: -.035em; white-space: nowrap; }
+	.settings-link { margin-left: auto; color: #6edff3; font-size: .85rem; text-decoration: none; }
 	.account-picker { display: flex; align-items: center; gap: 12px; min-width: 0; }
 	.account-picker label { color: #8eabb8; font-size: .8rem; }
 	select { min-width: 0; max-width: 100%; border: 1px solid #365869; border-radius: 6px; padding: 8px 12px; background: #0d202b; color: #edf7fb; }
@@ -183,9 +172,10 @@
 	.sidebar { padding: 24px 12px; overflow-y: auto; border-right: 1px solid #23404e; }
 	.eyebrow { padding: 0 12px 16px; color: #7595a3; font-size: .7rem; font-weight: 700; letter-spacing: .14em; }
 	.filter { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 12px; background: transparent; color: #a9c0cb; font-size: .85rem; }
-	.filter:nth-of-type(2) { margin-bottom: 20px; }
+	.filter:nth-of-type(3) { margin-bottom: 20px; }
 	.filter:hover { background: #102631; }
 	.filter.active { background: #193a49; color: #a3effb; font-weight: 650; }
+	.filter-label { overflow-wrap: anywhere; }
 	.count { font-size: .75rem; font-variant-numeric: tabular-nums; }
 	.list-pane, .detail-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 	.list-pane { border-right: 1px solid #23404e; background: #0b1c26; }
@@ -236,7 +226,7 @@
 		.sidebar { display: flex; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 1px solid #23404e; }
 		.eyebrow { display: none; }
 		.filter { width: auto; flex-shrink: 0; gap: 12px; padding: 10px 12px; }
-		.filter:nth-of-type(2) { margin-bottom: 0; }
+		.filter:nth-of-type(3) { margin-bottom: 0; }
 		.list-pane { border-right: 0; }
 		.detail-pane { display: none; }
 		.show-detail .list-pane { display: none; }

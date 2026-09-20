@@ -10,7 +10,7 @@ The application must:
 - consume Gmail notifications with one in-app Pub/Sub listener for each unique subscription;
 - route a shared subscription notification to its configured Gmail account;
 - classify each stored message with Jev;
-- mark each message as useful or not useful from the Jev result;
+- use a fixed category level or ask Jev to classify message importance for Auto categories;
 - show useful messages first and group all messages by category;
 - include setup commands for accounts, an initial Gmail import, watch registration, and watch consumption;
 - have automated tests for the database, Pub/Sub routing, ingestion, and classification boundary.
@@ -34,12 +34,9 @@ Sources:
 
 The TypeSafe JavaScript SDK package is `@typesafe-ai/sdk`. A `TypeSafeClient` call to `systemOne` can evaluate multiple independent typed questions against one message state. A Choice result contains the chosen label, its probability distribution, and confidence.
 
-The application will ask two independent Choice questions in one request:
+The application first asks Jev to choose a saved category ID. Each choice includes the category name and description. The original category IDs remain the defaults.
 
-1. `category`: `action`, `personal`, `work`, `transaction`, `newsletter`, `notification`, `marketing`, or `other`.
-2. `usefulness`: `useful` or `not_useful`.
-
-This design does not invent a confidence threshold. The explicit usefulness choice controls whether the UI raises the message. The database still stores the probability and confidence values so later versions can tune behavior from observed data.
+A category can have an Important, Useful, Other, or Auto level. For Auto, a second Jev request chooses Important, Useful, or Other for the message. Fixed levels do not require a second request. The mailbox uses the current category level, or the stored message result for Auto. No confidence threshold controls this decision.
 
 The SDK reads `TYPESAFE_API_KEY`. The app will also accept the existing `JEV_API_KEY` name and pass it to the SDK.
 
@@ -67,15 +64,21 @@ The SvelteKit server serves the UI and owns the Pub/Sub listeners. It reads enab
 - enabled state;
 - creation and update timestamps.
 
+`categories`
+
+- stable ID, name, description, and level (Important, Useful, Other, or Auto);
+- shared across accounts;
+- existing IDs are seeded once when the table is created.
+
 `emails`
 
 - account and Gmail message ID, with a unique constraint for idempotency;
 - thread ID, headers, date, snippet, text body, body truncation state, and labels;
-- category, usefulness result, model, confidence, probabilities, and classification error;
+- category, importance result, model, confidence, probabilities, and classification error;
 - first-seen and update timestamps;
 - deleted timestamp for Gmail deletion notifications.
 
-Indexes will match the UI query: useful state, category, and message date. Foreign keys will preserve account ownership.
+Indexes will match the UI query: category and message date. Foreign keys will preserve account ownership.
 
 ### Ingestion and failure behavior
 
@@ -88,9 +91,10 @@ If download, storage, or classification fails, the subscriber does not advance t
 The first view is a compact inbox workspace. It contains:
 
 - an account selector with an `All accounts` option;
-- a useful section at the top;
-- category sections below it;
-- sender, subject, account, date, snippet, usefulness, and classification confidence for each message;
+- category navigation on the left, a message list in the middle, and message details on the right;
+- All important and Useful now filters;
+- a settings page for category names, descriptions, and levels;
+- sender, subject, account, date, snippet, importance, and classification confidence for each message;
 - clear empty and setup states.
 
 No account editor, message actions, search, pagination, or authentication is part of this MVP.

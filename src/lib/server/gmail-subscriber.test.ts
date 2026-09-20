@@ -18,12 +18,12 @@ afterEach(() => {
 
 const classify: EmailClassifier = async () => ({
 	category: 'action',
-	useful: true,
+	importance: 'useful',
 	model: 'test',
 	categoryConfidence: 1,
-	usefulnessConfidence: 1,
+	importanceConfidence: 1,
 	categoryProbabilities: { action: 1 },
-	usefulnessProbabilities: { useful: 1 }
+	importanceProbabilities: { useful: 1 }
 });
 
 describe('Gmail Pub/Sub routing', () => {

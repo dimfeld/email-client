@@ -1,8 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { Classification, IncomingEmail, StoredEmail } from './types';
+import type { Category, Classification, IncomingEmail, StoredEmail } from './types';
+
+import { defaultCategories } from './default-categories';
 
 const defaultPath = resolve(process.env.DATABASE_PATH ?? 'data/email-check.sqlite');
 let sharedDatabase: DatabaseSync | undefined;
@@ -67,6 +69,41 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	if (!accountColumns.some((column) => column.name === 'history_id')) {
 		database.exec('ALTER TABLE accounts ADD COLUMN history_id TEXT');
 	}
+	withTransaction(database, () => {
+		const exists = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'categories'").get();
+		if (!exists) {
+			database.exec(`CREATE TABLE categories (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+				description TEXT NOT NULL,
+				level TEXT NOT NULL CHECK (level IN ('important', 'useful', 'other', 'auto'))
+			)`);
+			const insert = database.prepare('INSERT INTO categories (id, name, description, level) VALUES (?, ?, ?, ?)');
+			for (const category of defaultCategories) insert.run(category.id, category.name, category.description, category.level);
+		} else {
+			const columns = database.prepare('PRAGMA table_info(categories)').all() as Array<{ name: string }>;
+			const table = database.prepare("SELECT sql FROM sqlite_master WHERE name = 'categories'").get() as { sql: string };
+			if (!table.sql.includes("'auto'")) {
+				const level = columns.some((column) => column.name === 'level')
+					? 'level'
+					: "CASE WHEN important = 1 THEN 'important' ELSE 'auto' END";
+				database.exec(`CREATE TABLE categories_updated (
+					id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+					description TEXT NOT NULL, level TEXT NOT NULL CHECK (level IN ('important', 'useful', 'other', 'auto'))
+				);
+				INSERT INTO categories_updated SELECT id, name, description, ${level} FROM categories ORDER BY rowid;
+				DROP TABLE categories;
+				ALTER TABLE categories_updated RENAME TO categories;`);
+			}
+		}
+		const emailColumns = database.prepare('PRAGMA table_info(emails)').all() as Array<{ name: string }>;
+		if (!emailColumns.some((column) => column.name === 'importance')) {
+			database.exec(`ALTER TABLE emails ADD COLUMN importance TEXT CHECK (importance IN ('important', 'useful', 'other'));
+				ALTER TABLE emails ADD COLUMN importance_confidence REAL;
+				ALTER TABLE emails ADD COLUMN importance_probabilities_json TEXT;
+				UPDATE emails SET importance = CASE useful WHEN 1 THEN 'useful' WHEN 0 THEN 'other' ELSE NULL END;`);
+		}
+	});
 	database.exec('PRAGMA optimize');
 	return database;
 }
@@ -188,7 +225,7 @@ export function upsertEmails(
       labels_json = excluded.labels_json,
       content_hash = excluded.content_hash,
       category = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.category ELSE NULL END,
-      useful = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.useful ELSE NULL END,
+      importance = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.importance ELSE NULL END,
       classified_at = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classified_at ELSE NULL END,
       classification_error = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classification_error ELSE NULL END,
       updated_at = excluded.updated_at,
@@ -228,15 +265,18 @@ export function saveClassification(
 	gmailId: string,
 	classification: Classification
 ): void {
+	if (!listCategories(database).some((category) => category.id === classification.category)) {
+		throw new Error('The selected category no longer exists. Classify this message again.');
+	}
 	database
 		.prepare(
 			`UPDATE emails SET
         category = $category,
-        useful = $useful,
+        importance = $importance,
         category_confidence = $categoryConfidence,
-        usefulness_confidence = $usefulnessConfidence,
+        importance_confidence = $importanceConfidence,
         category_probabilities_json = $categoryProbabilities,
-        usefulness_probabilities_json = $usefulnessProbabilities,
+        importance_probabilities_json = $importanceProbabilities,
         classification_model = $model,
         classification_error = NULL,
         classified_at = $now,
@@ -245,11 +285,11 @@ export function saveClassification(
 		)
 		.run({
 			$category: classification.category,
-			$useful: classification.useful ? 1 : 0,
+			$importance: classification.importance,
 			$categoryConfidence: classification.categoryConfidence,
-			$usefulnessConfidence: classification.usefulnessConfidence,
+			$importanceConfidence: classification.importanceConfidence,
 			$categoryProbabilities: JSON.stringify(classification.categoryProbabilities),
-			$usefulnessProbabilities: JSON.stringify(classification.usefulnessProbabilities),
+			$importanceProbabilities: JSON.stringify(classification.importanceProbabilities),
 			$model: classification.model,
 			$now: new Date().toISOString(),
 			$account: accountEmail,
@@ -292,11 +332,12 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		? 'WHERE deleted_at IS NULL AND account_email = $account'
 		: 'WHERE deleted_at IS NULL';
 	const statement = database.prepare(
-		`SELECT id, account_email, gmail_id, thread_id, from_address, to_addresses,
+		`SELECT emails.id, account_email, gmail_id, thread_id, from_address, to_addresses,
       subject, message_date, snippet, body, body_truncated, labels_json, category,
-      useful, category_confidence, usefulness_confidence, classification_error, deleted_at
-     FROM emails ${where}
-     ORDER BY CASE WHEN useful = 1 THEN 0 ELSE 1 END, message_date DESC, first_seen_at DESC`
+      importance, category_confidence, importance_confidence, classification_error, deleted_at
+     FROM emails LEFT JOIN categories ON categories.id = emails.category ${where}
+     ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
+       WHEN 'important' THEN 0 WHEN 'useful' THEN 1 ELSE 2 END, message_date DESC, first_seen_at DESC`
 	);
 	const rows = (account ? statement.all({ $account: account }) : statement.all()) as Array<
 		Record<string, unknown>
@@ -316,10 +357,10 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		bodyTruncated: Boolean(row.body_truncated),
 		labels: JSON.parse(String(row.labels_json)) as string[],
 		category: row.category as StoredEmail['category'],
-		useful: row.useful === null ? null : Boolean(row.useful),
+		importance: row.importance as StoredEmail['importance'],
 		categoryConfidence: row.category_confidence === null ? null : Number(row.category_confidence),
-		usefulnessConfidence:
-			row.usefulness_confidence === null ? null : Number(row.usefulness_confidence),
+		importanceConfidence:
+			row.importance_confidence === null ? null : Number(row.importance_confidence),
 		classificationError:
 			row.classification_error === null ? null : String(row.classification_error),
 		deletedAt: row.deleted_at === null ? null : String(row.deleted_at)
@@ -335,4 +376,42 @@ function withTransaction(database: DatabaseSync, operation: () => void): void {
 		database.exec('ROLLBACK');
 		throw error;
 	}
+}
+
+export function listCategories(database: DatabaseSync): Category[] {
+	return database.prepare('SELECT id, name, description, level FROM categories ORDER BY rowid').all() as Category[];
+}
+
+export class CategoryValidationError extends Error {}
+
+export function saveCategory(database: DatabaseSync, input: Omit<Category, 'id'> & { id?: string }): string {
+	const name = input.name.trim();
+	const description = input.description.trim();
+	if (!name || !description) throw new CategoryValidationError('Enter a name and a description.');
+	if (!['important', 'useful', 'other', 'auto'].includes(input.level)) throw new CategoryValidationError('Choose a category level.');
+	const categories = listCategories(database);
+	if (input.id && !categories.some((category) => category.id === input.id)) {
+		throw new CategoryValidationError('This category no longer exists. Reload Settings.');
+	}
+	if (categories.some((category) => category.id !== input.id && category.name.toLowerCase() === name.toLowerCase())) {
+		throw new CategoryValidationError('A category with this name already exists.');
+	}
+	const id = input.id ?? `category_${randomUUID().replaceAll('-', '')}`;
+	database.prepare(`INSERT INTO categories (id, name, description, level) VALUES (?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, level = excluded.level`)
+		.run(id, name, description, input.level);
+	if (input.level === 'auto') {
+		database.prepare('UPDATE emails SET classified_at = NULL WHERE category = ? AND importance IS NULL').run(id);
+	}
+	return id;
+}
+
+export function deleteCategory(database: DatabaseSync, id: string): void {
+	withTransaction(database, () => {
+		database.prepare(`UPDATE emails SET category = NULL, category_confidence = NULL,
+			category_probabilities_json = NULL, importance = NULL, importance_confidence = NULL,
+			importance_probabilities_json = NULL, classified_at = NULL, classification_error = NULL
+			WHERE category = ?`).run(id);
+		database.prepare('DELETE FROM categories WHERE id = ?').run(id);
+	});
 }

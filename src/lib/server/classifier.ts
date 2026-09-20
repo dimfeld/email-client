@@ -1,5 +1,6 @@
 import { choice, TypeSafeClient } from '@typesafe-ai/sdk';
-import type { Classification, IncomingEmail } from './types';
+import type { Category, Classification, IncomingEmail } from './types';
+import { getDatabase, listCategories } from './db';
 
 export type EmailClassifier = (email: IncomingEmail) => Promise<Classification>;
 
@@ -9,58 +10,55 @@ export function truncateBodyForJev(body: string | undefined): string {
 	return (body ?? '').slice(0, JEV_BODY_MAX_LENGTH);
 }
 
-const categoryCriteria = {
-	action: 'The owner must reply, decide, review, schedule, approve, or complete a task.',
-	personal: 'A personal message from a person or group, not mainly about work.',
-	work: 'Useful work information that does not request a direct action.',
-	transaction: 'A receipt, invoice, order, payment, booking, shipment, or account transaction.',
-	newsletter: 'A recurring publication, digest, or editorial update that the owner chose to receive.',
-	notification: 'An automated service, security, social, product, or system notification.',
-	marketing: 'A promotion, sales pitch, product announcement, or commercial campaign.',
-	other: 'The message does not fit the other categories.'
-} as const;
-
-const usefulnessCriteria = {
-	useful:
-		'The owner is likely to need, value, act on, refer to, or intentionally read this message.',
-	not_useful:
-		'The message is noise, unsolicited promotion, low-value automation, spam, or not relevant to the owner.'
+const importanceCriteria = {
+	important: 'The owner needs to act on or give priority attention to this message.',
+	useful: 'The owner is likely to value, refer to, or intentionally read this message, but it does not need priority attention.',
+	other: 'The message does not need priority attention and is not useful to the owner.'
 } as const;
 
 export function createJevClassifier(
-	apiKey = process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY
+	apiKey = process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY,
+	getCategories: () => Category[] = () => listCategories(getDatabase())
 ): EmailClassifier {
 	if (!apiKey) throw new Error('Set TYPESAFE_API_KEY or JEV_API_KEY before classifying email.');
-	const client = new TypeSafeClient({
-		apiKey,
-		defaultModel: process.env.TYPESAFE_MODEL ?? 'jev-latest'
-	});
+	const client = new TypeSafeClient({ apiKey, defaultModel: process.env.TYPESAFE_MODEL ?? 'jev-latest' });
 
 	return async (email) => {
+		const categories = getCategories();
+		if (categories.length === 0) throw new Error('Add a category in Settings before classifying email.');
+		const categoryCriteria = Object.fromEntries(categories.map((category) => [
+			category.id, `${category.name}: ${category.description}`
+		]));
+		const state = {
+			from: email.from ?? '',
+			to: email.to ?? '',
+			subject: email.subject ?? '',
+			date: email.date ?? '',
+			snippet: email.snippet ?? '',
+			body: truncateBodyForJev(email.body),
+			labels: email.labels ?? []
+		};
 		const response = await client.systemOne({
-			state: {
-				from: email.from ?? '',
-				to: email.to ?? '',
-				subject: email.subject ?? '',
-				date: email.date ?? '',
-				snippet: email.snippet ?? '',
-				body: truncateBodyForJev(email.body),
-				labels: email.labels ?? []
-			},
-			questions: {
-				category: choice('What is the primary category of this email?', categoryCriteria),
-				usefulness: choice('Is this email useful to its owner?', usefulnessCriteria)
-			}
+			state,
+			questions: { category: choice('What is the primary category of this email?', categoryCriteria) }
 		});
-
+		const category = categories.find((category) => category.id === response.answers.category.choice);
+		if (!category) throw new Error('Jev returned an unknown category.');
+		const automatic = category.level === 'auto'
+			? await client.systemOne({
+				state: { ...state, category: { name: category.name, description: category.description } },
+				questions: { importance: choice('How important is this email to its owner?', importanceCriteria) }
+			})
+			: null;
+		const importance = automatic?.answers.importance.choice ?? null;
 		return {
-			category: response.answers.category.choice,
-			useful: response.answers.usefulness.choice === 'useful',
+			category: category.id,
+			importance,
 			model: response.model,
 			categoryConfidence: response.answers.category.confidence,
-			usefulnessConfidence: response.answers.usefulness.confidence,
+			importanceConfidence: automatic?.answers.importance.confidence ?? null,
 			categoryProbabilities: { ...response.answers.category.probabilities },
-			usefulnessProbabilities: { ...response.answers.usefulness.probabilities }
+			importanceProbabilities: automatic ? { ...automatic.answers.importance.probabilities } : {}
 		};
 	};
 }

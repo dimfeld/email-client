@@ -1,4 +1,4 @@
-import { getDatabase, listAccounts, listEmails } from '$lib/server/db';
+import { getDatabase, listAccounts, listCategories, listEmails } from '$lib/server/db';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ url }) => {
@@ -10,6 +10,7 @@ export const load: PageServerLoad = ({ url }) => {
 		: null;
 	return {
 		accounts,
+		categories: listCategories(database),
 		selectedAccount,
 		emails: listEmails(database, selectedAccount ?? undefined)
 	};

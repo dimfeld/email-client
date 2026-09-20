@@ -13,12 +13,12 @@ afterEach(() => {
 
 const classify: EmailClassifier = async (email) => ({
 	category: email.subject?.includes('Reply') ? 'action' : 'newsletter',
-	useful: Boolean(email.subject?.includes('Reply')),
+	importance: email.subject?.includes('Reply') ? 'important' : 'useful',
 	model: 'jev-test',
 	categoryConfidence: 0.8,
-	usefulnessConfidence: 0.9,
+	importanceConfidence: 0.9,
 	categoryProbabilities: { action: 0.8, newsletter: 0.2 },
-	usefulnessProbabilities: { useful: 0.9, not_useful: 0.1 }
+	importanceProbabilities: { important: 0.9, other: 0.1 }
 });
 
 describe('Gmail ingestion', () => {
@@ -60,7 +60,7 @@ describe('Gmail ingestion', () => {
 		]);
 	});
 
-	it('stores the Jev category, usefulness decision, and confidence', async () => {
+	it('stores the Jev category, importance decision, and confidence', async () => {
 		database = createDatabase(':memory:');
 		await ingestGmailPayload(
 			database,
@@ -75,9 +75,9 @@ describe('Gmail ingestion', () => {
 
 		const [email] = listEmails(database);
 		expect(email.category).toBe('action');
-		expect(email.useful).toBe(true);
+		expect(email.importance).toBe('important');
 		expect(email.categoryConfidence).toBe(0.8);
-		expect(email.usefulnessConfidence).toBe(0.9);
+		expect(email.importanceConfidence).toBe(0.9);
 	});
 
 	it('keeps a downloaded message when classification fails', async () => {
