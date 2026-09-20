@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { normalizeGetMessage, normalizeSearchMessage } from './gog';
+import { normalizeGetMessage, normalizeSearchMessage, runGogJson } from './gog';
 
 function encoded(value: string) {
 	return Buffer.from(value).toString('base64url');
@@ -60,5 +60,50 @@ describe('gog message normalization', () => {
 
 		expect(message.bodyText).toBe('Readable text');
 		expect(message.bodyHtml).toBe('<p>HTML body</p>');
+	});
+});
+
+describe('gog command execution', () => {
+	it('retries Google rate-limit failures with backoff before returning JSON', async () => {
+		const attempts: string[][] = [];
+		const delays: number[] = [];
+		let calls = 0;
+
+		await expect(runGogJson(['gog', 'contacts', 'get'], {
+			runCommand: async (command) => {
+				attempts.push(command);
+				calls += 1;
+				return calls === 1
+					? {
+						stdout: '',
+						stderr: 'Google API error (429 rateLimitExceeded): quota exceeded',
+						exitCode: 7
+					}
+					: { stdout: '{"ok":true}', stderr: '', exitCode: 0 };
+			},
+			sleep: async (delay) => {
+				delays.push(delay);
+			},
+			random: () => 0
+		})).resolves.toEqual({ ok: true });
+
+		expect(attempts).toHaveLength(2);
+		expect(delays).toEqual([1000]);
+	});
+
+	it('does not retry non-rate-limit failures', async () => {
+		let calls = 0;
+
+		await expect(runGogJson(['gog', 'contacts', 'get'], {
+			runCommand: async () => {
+				calls += 1;
+				return { stdout: '', stderr: 'invalid credentials', exitCode: 7 };
+			},
+			sleep: async () => {
+				throw new Error('unexpected retry');
+			}
+		})).rejects.toThrow('invalid credentials');
+
+		expect(calls).toBe(1);
 	});
 });

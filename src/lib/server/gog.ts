@@ -9,17 +9,63 @@ export class GogCommandError extends Error {
 	}
 }
 
-export async function runGogJson(command: string[]): Promise<unknown> {
+type GogCommandResult = {
+	stdout: string;
+	stderr: string;
+	exitCode: number;
+};
+
+type GogRunnerOptions = {
+	runCommand?: (command: string[]) => Promise<GogCommandResult>;
+	sleep?: (delayMs: number) => Promise<void>;
+	random?: () => number;
+};
+
+export const GOG_RATE_LIMIT_INITIAL_DELAY_MS = 1000;
+export const GOG_RATE_LIMIT_MAX_DELAY_MS = 32000;
+
+export function isGogRateLimitError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /(?:\b429\b|rate[\s_-]*limit|too many requests|quota(?:[\s_-]*exceeded)?|resource[\s_-]*exhausted|userRateLimitExceeded)/i.test(
+		message
+	);
+}
+
+async function runGogCommand(command: string[]): Promise<GogCommandResult> {
 	const child = Bun.spawn(command, { stdout: 'pipe', stderr: 'pipe' });
 	const [stdout, stderr, exitCode] = await Promise.all([
 		new Response(child.stdout).text(),
 		new Response(child.stderr).text(),
 		child.exited
 	]);
-	if (exitCode !== 0) {
-		throw new GogCommandError(stderr.trim() || `${command[0]} exited with ${exitCode}.`, exitCode);
+	return { stdout, stderr, exitCode };
+}
+
+function wait(delayMs: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+export async function runGogJson(
+	command: string[],
+	{ runCommand = runGogCommand, sleep = wait, random = Math.random }: GogRunnerOptions = {}
+): Promise<unknown> {
+	let attempt = 0;
+	while (true) {
+		const { stdout, stderr, exitCode } = await runCommand(command);
+		if (exitCode === 0) return JSON.parse(stdout);
+
+		const error = new GogCommandError(stderr.trim() || `${command[0]} exited with ${exitCode}.`, exitCode);
+		if (!isGogRateLimitError(error)) throw error;
+
+		const backoff = Math.min(
+			GOG_RATE_LIMIT_MAX_DELAY_MS,
+			GOG_RATE_LIMIT_INITIAL_DELAY_MS * 2 ** attempt
+		);
+		const delay = backoff + Math.floor(random() * 1000);
+		console.warn(`gog rate limit reached; retrying in ${delay} ms.`);
+		await sleep(delay);
+		attempt += 1;
 	}
-	return JSON.parse(stdout);
 }
 
 function stringValue(value: Record<string, unknown>, ...keys: string[]): string | undefined {
