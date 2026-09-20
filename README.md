@@ -7,10 +7,11 @@ Email Check is a local SvelteKit application that downloads Gmail messages throu
 - Bun
 - `gog` with each Gmail account authenticated
 - a TypeSafe API key
+- an OpenAI API key if you want action item and reminder extraction
 - a Google Pub/Sub topic and pull subscription; accounts can share them
 - Google Application Default Credentials, or `GOOGLE_APPLICATION_CREDENTIALS`, with Pub/Sub subscriber access
 
-Email content is sent to the TypeSafe API for classification.
+Email content is sent to the TypeSafe API for classification. Messages that Jev flags for extraction are also sent to OpenAI when `OPENAI_API_KEY` is set.
 
 ## Setup
 
@@ -20,7 +21,7 @@ Email content is sent to the TypeSafe API for classification.
    bun install
    ```
 
-2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`, or keep the existing `JEV_API_KEY`.
+2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`, or keep the existing `JEV_API_KEY`. Set `OPENAI_API_KEY` to enable action item and reminder extraction.
 
 3. Discover all accounts that are already authenticated in `gog`.
 
@@ -74,6 +75,8 @@ Commands run in separate processes do not send these notifications. Refresh the 
 Open **Settings** from the mailbox to add, edit, or remove categories. Each category has a name, a description, and a level: **Important**, **Useful**, **Other**, or **Auto**. Jev receives the saved name and description for each category when it classifies a message. Settings apply to all accounts and persist in SQLite.
 
 Fixed levels apply to all messages in a category. For **Auto**, Jev makes a second decision for each message: Important, Useful, or Other. **Action needed** starts as Important; other default categories use Auto.
+
+Jev also checks each new message for possible action items and reminders. When either result is positive and `OPENAI_API_KEY` is set, the app uses GPT-5.6 Luna with medium reasoning and Structured Outputs to extract the relevant items. Classification still succeeds if the OpenAI key is absent or extraction fails. Messages classified without an OpenAI key remain pending and are extracted during the next sync or backfill after the key is available.
 
 **All important** shows messages with an effective level of Important. **Useful now** shows Important and Useful messages. Both views respect the selected account. Existing useful/not-useful results migrate to Useful/Other.
 

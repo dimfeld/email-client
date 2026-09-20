@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import type { Category, Classification, IncomingEmail, StoredEmail } from './types';
+import type { Category, Classification, EmailExtraction, IncomingEmail, StoredEmail } from './types';
 
 import { publishStateChange } from './state-events';
 import { defaultCategories } from './default-categories';
@@ -46,6 +46,11 @@ CREATE TABLE IF NOT EXISTS emails (
   action_item_probability REAL,
   has_reminder INTEGER CHECK (has_reminder IN (0, 1)),
   reminder_probability REAL,
+  action_items_json TEXT,
+  reminders_json TEXT,
+  extraction_model TEXT,
+  extraction_error TEXT,
+  extracted_at TEXT,
   category_confidence REAL,
   usefulness_confidence REAL,
   category_probabilities_json TEXT,
@@ -141,6 +146,13 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 				ALTER TABLE emails ADD COLUMN action_item_probability REAL;
 				ALTER TABLE emails ADD COLUMN has_reminder INTEGER CHECK (has_reminder IN (0, 1));
 				ALTER TABLE emails ADD COLUMN reminder_probability REAL;`);
+		}
+		if (!emailColumns.some((column) => column.name === 'action_items_json')) {
+			database.exec(`ALTER TABLE emails ADD COLUMN action_items_json TEXT;
+				ALTER TABLE emails ADD COLUMN reminders_json TEXT;
+				ALTER TABLE emails ADD COLUMN extraction_model TEXT;
+				ALTER TABLE emails ADD COLUMN extraction_error TEXT;
+				ALTER TABLE emails ADD COLUMN extracted_at TEXT;`);
 		}
 	});
 	database.exec('PRAGMA optimize');
@@ -293,6 +305,15 @@ export function upsertEmails(
       content_hash = excluded.content_hash,
       category = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.category ELSE NULL END,
       importance = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.importance ELSE NULL END,
+      has_action_item = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.has_action_item ELSE NULL END,
+      action_item_probability = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.action_item_probability ELSE NULL END,
+      has_reminder = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.has_reminder ELSE NULL END,
+      reminder_probability = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.reminder_probability ELSE NULL END,
+      action_items_json = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.action_items_json ELSE NULL END,
+      reminders_json = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.reminders_json ELSE NULL END,
+      extraction_model = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.extraction_model ELSE NULL END,
+      extraction_error = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.extraction_error ELSE NULL END,
+      extracted_at = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.extracted_at ELSE NULL END,
       classified_at = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classified_at ELSE NULL END,
       classification_error = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classification_error ELSE NULL END,
       archived_at = CASE
@@ -350,6 +371,11 @@ export function saveClassification(
 		action_item_probability = $actionItemProbability,
 		has_reminder = $hasReminder,
 		reminder_probability = $reminderProbability,
+		action_items_json = NULL,
+		reminders_json = NULL,
+		extraction_model = NULL,
+		extraction_error = NULL,
+		extracted_at = NULL,
         category_confidence = $categoryConfidence,
         importance_confidence = $importanceConfidence,
         category_probabilities_json = $categoryProbabilities,
@@ -377,6 +403,84 @@ export function saveClassification(
 			$gmailId: gmailId
 		});
 	publishStateChange();
+}
+
+export function saveEmailExtraction(
+	database: DatabaseSync,
+	accountEmail: string,
+	gmailId: string,
+	extraction: EmailExtraction
+): void {
+	database.prepare(`UPDATE emails SET
+		action_items_json = $actionItems,
+		reminders_json = $reminders,
+		extraction_model = $model,
+		extraction_error = NULL,
+		extracted_at = $now,
+		updated_at = $now
+		WHERE account_email = $account AND gmail_id = $gmailId`)
+		.run({
+			$actionItems: JSON.stringify(extraction.actionItems),
+			$reminders: JSON.stringify(extraction.reminders),
+			$model: extraction.model,
+			$now: new Date().toISOString(),
+			$account: accountEmail,
+			$gmailId: gmailId
+		});
+	publishStateChange();
+}
+
+export function saveEmailExtractionError(
+	database: DatabaseSync,
+	accountEmail: string,
+	gmailId: string,
+	error: unknown
+): void {
+	database.prepare(`UPDATE emails SET extraction_error = ?, updated_at = ?
+		WHERE account_email = ? AND gmail_id = ?`)
+		.run(
+			error instanceof Error ? error.message : String(error),
+			new Date().toISOString(),
+			accountEmail,
+			gmailId
+		);
+	publishStateChange();
+}
+
+export function listEmailsNeedingExtraction(
+	database: DatabaseSync,
+	accountEmail: string
+): Array<{
+	email: IncomingEmail;
+	targets: { actionItems: boolean; reminders: boolean };
+}> {
+	const rows = database.prepare(`SELECT gmail_id, thread_id, from_address, to_addresses, subject,
+		message_date, snippet, body_text, body_html, body_truncated, labels_json,
+		has_action_item, has_reminder
+		FROM emails
+		WHERE account_email = ? AND classified_at IS NOT NULL AND extracted_at IS NULL
+			AND extraction_error IS NULL AND deleted_at IS NULL
+			AND (has_action_item = 1 OR has_reminder = 1)`)
+		.all(accountEmail) as Array<Record<string, unknown>>;
+	return rows.map((row) => ({
+		email: {
+			id: String(row.gmail_id),
+			threadId: row.thread_id === null ? undefined : String(row.thread_id),
+			from: String(row.from_address),
+			to: String(row.to_addresses),
+			subject: String(row.subject),
+			date: row.message_date === null ? undefined : String(row.message_date),
+			snippet: String(row.snippet),
+			bodyText: String(row.body_text),
+			bodyHtml: row.body_html === null ? undefined : String(row.body_html),
+			bodyTruncated: Boolean(row.body_truncated),
+			labels: JSON.parse(String(row.labels_json)) as string[]
+		},
+		targets: {
+			actionItems: Boolean(row.has_action_item),
+			reminders: Boolean(row.has_reminder)
+		}
+	}));
 }
 
 export function saveClassificationError(
@@ -429,6 +533,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		`SELECT emails.id, account_email, gmail_id, thread_id, from_address, to_addresses,
       subject, message_date, snippet, body_text, body_html, body_truncated, labels_json, category,
       importance, has_action_item, action_item_probability, has_reminder, reminder_probability,
+      action_items_json, reminders_json, extraction_model, extraction_error,
       category_confidence, importance_confidence, classification_error, deleted_at
      FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
      ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
@@ -460,6 +565,14 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		hasReminder: row.has_reminder === null ? null : Boolean(row.has_reminder),
 		reminderProbability:
 			row.reminder_probability === null ? null : Number(row.reminder_probability),
+		actionItems: row.action_items_json === null
+			? []
+			: JSON.parse(String(row.action_items_json)) as StoredEmail['actionItems'],
+		reminders: row.reminders_json === null
+			? []
+			: JSON.parse(String(row.reminders_json)) as StoredEmail['reminders'],
+		extractionModel: row.extraction_model === null ? null : String(row.extraction_model),
+		extractionError: row.extraction_error === null ? null : String(row.extraction_error),
 		categoryConfidence: row.category_confidence === null ? null : Number(row.category_confidence),
 		importanceConfidence:
 			row.importance_confidence === null ? null : Number(row.importance_confidence),
@@ -516,6 +629,8 @@ export function deleteCategory(database: DatabaseSync, id: string): void {
 			category_probabilities_json = NULL, importance = NULL, importance_confidence = NULL,
 			importance_probabilities_json = NULL, has_action_item = NULL,
 			action_item_probability = NULL, has_reminder = NULL, reminder_probability = NULL,
+			action_items_json = NULL, reminders_json = NULL, extraction_model = NULL,
+			extraction_error = NULL, extracted_at = NULL,
 			classified_at = NULL, classification_error = NULL
 			WHERE category = ?`).run(id);
 		database.prepare('DELETE FROM categories WHERE id = ?').run(id);

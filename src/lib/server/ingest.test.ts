@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import type { EmailClassifier } from './classifier';
 import { createDatabase, listAccounts, listEmails, upsertAccount } from './db';
+import type { EmailExtractor } from './extractor';
 import { ingestGmailPayload } from './ingest';
 
 let database: DatabaseSync | undefined;
@@ -86,6 +87,106 @@ describe('Gmail ingestion', () => {
 		expect(email.reminderProbability).toBe(0.7);
 		expect(email.categoryConfidence).toBe(0.8);
 		expect(email.importanceConfidence).toBe(0.9);
+	});
+
+	it('extracts and stores the action items and reminders selected by Jev', async () => {
+		database = createDatabase(':memory:');
+		let targets: Parameters<EmailExtractor>[1] | undefined;
+		const extract: EmailExtractor = async (_email, requested) => {
+			targets = requested;
+			return {
+				actionItems: [{ title: 'Reply', details: 'Confirm attendance.', dueAt: '2026-09-21' }],
+				reminders: [{ title: 'Meeting', details: null, remindAt: '2026-09-22T09:00:00-10:00' }],
+				model: 'gpt-5.6-luna'
+			};
+		};
+
+		const result = await ingestGmailPayload(
+			database,
+			{
+				source: 'gmail', account: 'one@example.com', deletedMessageIds: [],
+				messages: [{ id: 'message-1', subject: 'Reply requested' }]
+			},
+			classify,
+			extract
+		);
+
+		expect(result.extracted).toBe(1);
+		expect(targets).toEqual({ actionItems: true, reminders: true });
+		expect(listEmails(database)[0]).toMatchObject({
+			actionItems: [{ title: 'Reply', details: 'Confirm attendance.', dueAt: '2026-09-21' }],
+			reminders: [{ title: 'Meeting', details: null, remindAt: '2026-09-22T09:00:00-10:00' }],
+			extractionModel: 'gpt-5.6-luna',
+			extractionError: null
+		});
+	});
+
+	it('extracts an unchanged pending message after the OpenAI key becomes available', async () => {
+		database = createDatabase(':memory:');
+		let classifications = 0;
+		const countingClassifier: EmailClassifier = async (email) => {
+			classifications += 1;
+			return classify(email);
+		};
+		const payload = {
+			source: 'gmail' as const,
+			account: 'one@example.com',
+			deletedMessageIds: [],
+			messages: [{ id: 'message-1', subject: 'Reply requested' }]
+		};
+		await ingestGmailPayload(database, payload, countingClassifier, null);
+
+		const result = await ingestGmailPayload(database, payload, countingClassifier, async () => ({
+			actionItems: [{ title: 'Reply', details: null, dueAt: null }],
+			reminders: [],
+			model: 'gpt-5.6-luna'
+		}));
+
+		expect(classifications).toBe(1);
+		expect(result).toMatchObject({ classified: 0, extracted: 1 });
+		expect(listEmails(database)[0].actionItems).toHaveLength(1);
+	});
+
+	it('does not call OpenAI when Jev selects neither extraction target', async () => {
+		database = createDatabase(':memory:');
+		let extractions = 0;
+		await ingestGmailPayload(
+			database,
+			{
+				source: 'gmail', account: 'one@example.com', deletedMessageIds: [],
+				messages: [{ id: 'message-1', subject: 'Information only' }]
+			},
+			async (email) => ({
+				...(await classify(email)),
+				hasActionItem: false,
+				hasReminder: false
+			}),
+			async () => {
+				extractions += 1;
+				return { actionItems: [], reminders: [], model: 'gpt-5.6-luna' };
+			}
+		);
+
+		expect(extractions).toBe(0);
+	});
+
+	it('keeps the Jev classification when OpenAI extraction fails', async () => {
+		database = createDatabase(':memory:');
+		await expect(ingestGmailPayload(
+			database,
+			{
+				source: 'gmail', account: 'one@example.com', deletedMessageIds: [],
+				messages: [{ id: 'message-1', subject: 'Reply requested' }]
+			},
+			classify,
+			async () => { throw new Error('OpenAI unavailable'); }
+		)).resolves.toMatchObject({ classified: 1, extracted: 0 });
+
+		expect(listEmails(database)[0]).toMatchObject({
+			category: 'action',
+			hasActionItem: true,
+			extractionError: 'OpenAI unavailable'
+		});
 	});
 
 	it('keeps a downloaded message when classification fails', async () => {

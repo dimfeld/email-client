@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountLastBackfillAt } from './db';
+import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { normalizeSearchMessage, runGogJson } from './gog';
 import { ingestGmailPayload } from './ingest';
 
@@ -11,6 +12,7 @@ export const GMAIL_BACKFILL_INITIAL_LOOKBACK_MS = 60 * 60 * 1000;
 type GmailBackfillDependencies = {
 	database: DatabaseSync;
 	classify: EmailClassifier;
+	extract?: EmailExtractor | null;
 	runJson?: typeof runGogJson;
 	now?: () => Date;
 	intervalMs?: number;
@@ -92,7 +94,8 @@ async function backfillAccount(
 			deletedMessageIds: [],
 			messages
 		},
-		dependencies.classify
+		dependencies.classify,
+		dependencies.extract ?? null
 	);
 	setAccountLastBackfillAt(dependencies.database, account.email, now.toISOString());
 	return { stored: ingested.stored, classified: ingested.classified };
@@ -139,6 +142,7 @@ export function startGmailBackfill(
 		database,
 		runJson = runGogJson,
 		classify,
+		extract,
 		intervalMs = GMAIL_BACKFILL_INTERVAL_MS
 	}: Partial<GmailBackfillDependencies> & { database?: DatabaseSync } = {}
 ): GmailBackfill {
@@ -155,7 +159,8 @@ export function startGmailBackfill(
 			await backfillGmail({
 				database: activeDatabase,
 				runJson,
-				classify: classify ?? createJevClassifier()
+				classify: classify ?? createJevClassifier(),
+				extract: extract === undefined ? createOpenAIEmailExtractor() : extract
 			});
 		} catch (error) {
 			console.error('Gmail backfill run failed.', error);

@@ -28,8 +28,11 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@ai-sdk/openai": "^4.0.71",
 		"@google-cloud/pubsub": "^6.1.0",
 		"@sveltejs/adapter-node": "^5.5.7",
-		"@typesafe-ai/sdk": "^0.6.0"
+		"@typesafe-ai/sdk": "^0.6.0",
+		"ai": "^7.0.107",
+		"zod": "^4.6.5"
 	}
 }

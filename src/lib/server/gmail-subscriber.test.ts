@@ -159,7 +159,7 @@ describe('Gmail notification processing', () => {
 			}
 		);
 
-		expect(result).toEqual({ stored: 0, classified: 0, deleted: 0 });
+		expect(result).toEqual({ stored: 0, classified: 0, extracted: 0, deleted: 0 });
 		expect(calls).toBe(1);
 		expect(account.historyId).toBe('100');
 		expect(listAccounts(database)[0].historyId).toBe('100');

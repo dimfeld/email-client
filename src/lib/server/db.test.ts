@@ -50,14 +50,19 @@ describe('email body storage', () => {
 });
 
 describe('email classification storage', () => {
-	it('adds action item and reminder fields to an existing database', () => {
+	it('adds classification and extraction fields to an existing database', () => {
 		directory = mkdtempSync(join(tmpdir(), 'email-check-classification-migration-'));
 		const path = join(directory, 'test.sqlite');
 		database = createDatabase(path);
 		database.exec(`ALTER TABLE emails DROP COLUMN has_action_item;
 			ALTER TABLE emails DROP COLUMN action_item_probability;
 			ALTER TABLE emails DROP COLUMN has_reminder;
-			ALTER TABLE emails DROP COLUMN reminder_probability;`);
+			ALTER TABLE emails DROP COLUMN reminder_probability;
+			ALTER TABLE emails DROP COLUMN action_items_json;
+			ALTER TABLE emails DROP COLUMN reminders_json;
+			ALTER TABLE emails DROP COLUMN extraction_model;
+			ALTER TABLE emails DROP COLUMN extraction_error;
+			ALTER TABLE emails DROP COLUMN extracted_at;`);
 		database.close();
 
 		database = createDatabase(path);
@@ -66,7 +71,12 @@ describe('email classification storage', () => {
 			'has_action_item',
 			'action_item_probability',
 			'has_reminder',
-			'reminder_probability'
+			'reminder_probability',
+			'action_items_json',
+			'reminders_json',
+			'extraction_model',
+			'extraction_error',
+			'extracted_at'
 		]));
 	});
 });

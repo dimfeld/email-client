@@ -2,6 +2,7 @@ import { PubSub, type Message, type Subscription } from '@google-cloud/pubsub';
 import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountHistoryId } from './db';
+import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { GogCommandError, normalizeGetMessage, runGogJson } from './gog';
 import { ingestGmailPayload } from './ingest';
 import type { IncomingEmail } from './types';
@@ -26,6 +27,7 @@ type HistoryResult = {
 type SubscriberDependencies = {
 	database: DatabaseSync;
 	classify: EmailClassifier;
+	extract?: EmailExtractor | null;
 	runJson?: typeof runGogJson;
 };
 
@@ -145,11 +147,11 @@ export async function processGmailNotification(
 	account: GmailSubscriberAccount,
 	notification: GmailNotification,
 	dependencies: SubscriberDependencies
-): Promise<{ stored: number; classified: number; deleted: number }> {
+): Promise<{ stored: number; classified: number; extracted: number; deleted: number }> {
 	const runJson = dependencies.runJson ?? runGogJson;
 	const currentHistoryId = await loadInitialHistoryId(account, dependencies.database, runJson);
 	if (!isNewerHistoryId(notification.historyId, currentHistoryId)) {
-		return { stored: 0, classified: 0, deleted: 0 };
+		return { stored: 0, classified: 0, extracted: 0, deleted: 0 };
 	}
 
 	const history = parseHistoryResult(
@@ -190,7 +192,8 @@ export async function processGmailNotification(
 			deletedMessageIds,
 			messages
 		},
-		dependencies.classify
+		dependencies.classify,
+		dependencies.extract ?? null
 	);
 	setAccountHistoryId(dependencies.database, account.email, history.historyId);
 	account.historyId = history.historyId;
@@ -204,6 +207,7 @@ export type GmailSubscribers = {
 
 export function startGmailSubscribers(): GmailSubscribers | null {
 	const database = getDatabase();
+	const extract = createOpenAIEmailExtractor();
 	const accounts = listAccounts(database)
 		.filter(
 			(account): account is typeof account & { subscription: string } =>
@@ -259,7 +263,8 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 					try {
 						await processGmailNotification(account, notification, {
 							database,
-							classify: createJevClassifier()
+							classify: createJevClassifier(),
+							extract
 						});
 						message.ack();
 					} catch (error) {

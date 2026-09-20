@@ -39,6 +39,24 @@ export type Classification = {
 	importanceProbabilities: Record<string, number>;
 };
 
+export type ExtractedActionItem = {
+	title: string;
+	details: string | null;
+	dueAt: string | null;
+};
+
+export type ExtractedReminder = {
+	title: string;
+	details: string | null;
+	remindAt: string | null;
+};
+
+export type EmailExtraction = {
+	actionItems: ExtractedActionItem[];
+	reminders: ExtractedReminder[];
+	model: string;
+};
+
 export type StoredEmail = {
 	id: number;
 	accountEmail: string;
@@ -59,6 +77,10 @@ export type StoredEmail = {
 	actionItemProbability: number | null;
 	hasReminder: boolean | null;
 	reminderProbability: number | null;
+	actionItems: ExtractedActionItem[];
+	reminders: ExtractedReminder[];
+	extractionModel: string | null;
+	extractionError: string | null;
 	categoryConfidence: number | null;
 	importanceConfidence: number | null;
 	classificationError: string | null;

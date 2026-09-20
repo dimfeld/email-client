@@ -1,5 +1,6 @@
 import { createJevClassifier } from '../src/lib/server/classifier';
 import { getDatabase } from '../src/lib/server/db';
+import { createOpenAIEmailExtractor } from '../src/lib/server/extractor';
 import { ingestGmailPayload } from '../src/lib/server/ingest';
 import { normalizeSearchMessage, readFlag, requireFlag, runJson } from './shared';
 
@@ -23,7 +24,8 @@ const messages = (result.messages ?? []).map(normalizeSearchMessage);
 const ingested = await ingestGmailPayload(
 	getDatabase(),
 	{ source: 'gmail', account, deletedMessageIds: [], messages },
-	createJevClassifier()
+	createJevClassifier(),
+	createOpenAIEmailExtractor()
 );
 
 console.log(`Stored ${ingested.stored} and classified ${ingested.classified} message(s).`);
