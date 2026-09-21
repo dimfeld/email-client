@@ -42,7 +42,7 @@ A category can have an Important, Useful, Other, or Auto level. For Auto, a seco
 
 The category request also asks Jev whether the message has a possible action item or reminder. If either answer is positive and `OPENAI_API_KEY` is set, the Vercel AI SDK sends the message to `gpt-5.6-luna` through the OpenAI Responses API. The request uses medium reasoning and a strict structured schema. The app stores extracted action items and reminders separately from the Jev classification. An extraction failure does not discard a successful classification.
 
-The SDK reads `TYPESAFE_API_KEY`. The app will also accept the existing `JEV_API_KEY` name and pass it to the SDK.
+The SDK reads `TYPESAFE_API_KEY`.
 
 Sources:
 

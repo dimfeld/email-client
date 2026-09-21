@@ -33,10 +33,10 @@ const reminderQuestion = noul(
 );
 
 export function createJevClassifier(
-	apiKey = process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY,
+	apiKey = process.env.TYPESAFE_API_KEY,
 	getCategories: () => Category[] = () => listCategories(getDatabase())
 ): EmailClassifier {
-	if (!apiKey) throw new Error('Set TYPESAFE_API_KEY or JEV_API_KEY before classifying email.');
+	if (!apiKey) throw new Error('Set TYPESAFE_API_KEY before classifying email.');
 	const client = new TypeSafeClient({ apiKey, defaultModel: process.env.TYPESAFE_MODEL ?? 'jev-latest' });
 
 	return async (email) => {

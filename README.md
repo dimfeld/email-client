@@ -21,7 +21,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun install
    ```
 
-2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`, or keep the existing `JEV_API_KEY`. Set `OPENAI_API_KEY` to enable action item and reminder extraction.
+2. Copy `.env.example` to `.env`. Set `TYPESAFE_API_KEY`. Set `OPENAI_API_KEY` to enable action item and reminder extraction.
 
 3. Discover all accounts that are already authenticated in `gog`.
 
