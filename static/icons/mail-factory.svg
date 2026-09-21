@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Mail Factory</title>
+  <rect width="512" height="512" rx="112" fill="#07131c"/>
+
+  <path d="M184 210v-70h52v40l58-40v40l58-40v70" fill="#173443" stroke="#6edff3" stroke-width="16" stroke-linejoin="round"/>
+  <rect x="168" y="202" width="208" height="154" rx="22" fill="#0d202b" stroke="#6edff3" stroke-width="16"/>
+  <path d="M205 248h42v42h-42zm92 0h42v42h-42z" fill="#ffde59"/>
+
+  <path d="M92 344h328" fill="none" stroke="#315364" stroke-width="30" stroke-linecap="round"/>
+  <circle cx="132" cy="344" r="15" fill="#edf7fb"/>
+  <circle cx="380" cy="344" r="15" fill="#edf7fb"/>
+
+  <g transform="rotate(-7 176 332)">
+    <rect x="102" y="278" width="148" height="106" rx="18" fill="#edf7fb" stroke="#07131c" stroke-width="12"/>
+    <path d="m112 294 64 48 64-48" fill="none" stroke="#173443" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <path d="M382 88v70" fill="none" stroke="#6edff3" stroke-width="18" stroke-linecap="round"/>
+  <path d="M414 71v87" fill="none" stroke="#6edff3" stroke-width="18" stroke-linecap="round"/>
+  <path d="M364 88h68" fill="none" stroke="#edf7fb" stroke-width="16" stroke-linecap="round"/>
+  <path d="M396 58h36" fill="none" stroke="#edf7fb" stroke-width="16" stroke-linecap="round"/>
+</svg>
