@@ -37,6 +37,9 @@ describe('OpenAI email extraction', () => {
 		expect((request?.model as { modelId: string }).modelId).toBe('gpt-5.6-luna');
 		expect(request?.providerOptions).toEqual({ openai: { reasoningEffort: 'medium' } });
 		expect(request?.schemaName).toBe('email_action_items_and_reminders');
+		expect(String(request?.instructions)).toContain('Each returned item must be self-contained in its title and details');
+		expect(String(request?.instructions)).toContain('Reply to the email with feedback');
+		expect(String(request?.instructions)).toContain('If the email does not provide enough context to write a self-contained item, omit that item');
 		expect(JSON.parse(String(request?.prompt))).toMatchObject({
 			extract: { actionItems: false, reminders: true },
 			email: { subject: 'Plan' }
