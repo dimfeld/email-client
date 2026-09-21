@@ -98,7 +98,7 @@ async function backfillAccount(
 		dependencies.classify,
 		dependencies.extract ?? null
 	);
-	gmailMessageArrivalStats.recordAndLog('backfill', ingested.stored);
+	gmailMessageArrivalStats.recordAndLog(account.email, 'backfill', ingested.stored);
 	setAccountLastBackfillAt(dependencies.database, account.email, now.toISOString());
 	return { stored: ingested.stored, classified: ingested.classified };
 }

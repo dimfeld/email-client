@@ -267,7 +267,7 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 							classify: createJevClassifier(),
 							extract
 						});
-						gmailMessageArrivalStats.recordAndLog('pubsub', result.stored);
+						gmailMessageArrivalStats.recordAndLog(account.email, 'pubsub', result.stored);
 						message.ack();
 					} catch (error) {
 						console.error(`Gmail notification failed for ${account.email}.`, error);

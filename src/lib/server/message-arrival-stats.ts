@@ -1,6 +1,7 @@
 export type MessageArrivalSource = 'pubsub' | 'backfill';
 
 export type MessageArrivalEvent = {
+	accountEmail: string;
 	source: MessageArrivalSource;
 	count: number;
 	at: number;
@@ -20,42 +21,61 @@ function emptyCounts(): MessageArrivalCounts {
 	return { pubsub: 0, backfill: 0 };
 }
 
+function normalizeAccountEmail(accountEmail: string): string {
+	return accountEmail.trim().toLowerCase();
+}
+
 export class MessageArrivalStats {
 	private readonly events: MessageArrivalEvent[] = [];
 
-	record(source: MessageArrivalSource, count: number, at = Date.now()): void {
+	record(accountEmail: string, source: MessageArrivalSource, count: number, at = Date.now()): void {
 		if (count <= 0) return;
-		this.events.push({ source, count, at });
+		this.events.push({ accountEmail: normalizeAccountEmail(accountEmail), source, count, at });
 		this.removeExpired(at);
 	}
 
-	snapshot(at = Date.now()): MessageArrivalStatsSnapshot {
+	snapshot(accountEmail: string, at = Date.now()): MessageArrivalStatsSnapshot {
 		this.removeExpired(at);
+		const normalizedAccountEmail = normalizeAccountEmail(accountEmail);
 		return {
-			lastHour: this.countSince(at - MESSAGE_STATS_HOUR_MS),
-			last24Hours: this.countSince(at - MESSAGE_STATS_DAY_MS)
+			lastHour: this.countSince(normalizedAccountEmail, at - MESSAGE_STATS_HOUR_MS),
+			last24Hours: this.countSince(normalizedAccountEmail, at - MESSAGE_STATS_DAY_MS)
 		};
 	}
 
-	log(at = Date.now()): void {
-		console.log('Gmail message arrival stats.', this.snapshot(at));
+	snapshotByAccount(at = Date.now()): Record<string, MessageArrivalStatsSnapshot> {
+		this.removeExpired(at);
+		const accounts = new Set(this.events.map((event) => event.accountEmail));
+		return Object.fromEntries(
+			[...accounts].sort().map((accountEmail) => [accountEmail, this.snapshot(accountEmail, at)])
+		);
 	}
 
-	recordAndLog(source: MessageArrivalSource, count: number, at = Date.now()): void {
+	log(accountEmail: string, at = Date.now()): void {
+		const normalizedAccountEmail = normalizeAccountEmail(accountEmail);
+		console.log('Gmail message arrival stats.', {
+			account: normalizedAccountEmail,
+			...this.snapshot(normalizedAccountEmail, at)
+		});
+	}
+
+	recordAndLog(accountEmail: string, source: MessageArrivalSource, count: number, at = Date.now()): void {
 		if (count <= 0) return;
-		this.record(source, count, at);
-		this.log(at);
+		this.record(accountEmail, source, count, at);
+		this.log(accountEmail, at);
 	}
 
 	private removeExpired(at: number): void {
 		const cutoff = at - MESSAGE_STATS_DAY_MS;
-		while (this.events[0]?.at < cutoff) this.events.shift();
+		for (let index = this.events.length - 1; index >= 0; index -= 1) {
+			if (this.events[index].at < cutoff) this.events.splice(index, 1);
+		}
 	}
 
-	private countSince(cutoff: number): MessageArrivalCounts {
+	private countSince(accountEmail: string, cutoff: number): MessageArrivalCounts {
 		const counts = emptyCounts();
 		for (const event of this.events) {
-			if (event.at >= cutoff) counts[event.source] += event.count;
+			if (event.accountEmail === accountEmail && event.at >= cutoff) counts[event.source] += event.count;
 		}
 		return counts;
 	}
