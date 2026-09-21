@@ -24,7 +24,8 @@ describe('configurable Jev categories', () => {
 			answers: {
 				category: { choice: 'custom', confidence: 1, probabilities: { custom: 1 } },
 				actionItem: { noul: 0.8 },
-				reminder: { noul: 0.3 }
+				reminder: { noul: 0.3 },
+				importance: { choice: 'important', confidence: 0.9, probabilities: { important: 0.9 } }
 			}
 		} as never);
 		try {
@@ -39,7 +40,7 @@ describe('configurable Jev categories', () => {
 				hasReminder: false,
 				reminderProbability: 0.3
 			});
-			expect(Object.keys(request.mock.calls[0][0].questions)).toEqual(['category', 'actionItem', 'reminder']);
+			expect(Object.keys(request.mock.calls[0][0].questions)).toEqual(['category', 'actionItem', 'reminder', 'importance']);
 			expect(request.mock.calls[0][0].questions.category).toEqual(expect.objectContaining({ criteria: { custom: 'Travel: Flights and hotels.' } }));
 			expect(request.mock.calls[0][0].questions.actionItem).toEqual(expect.objectContaining({
 				type: 'noul',
@@ -62,21 +63,21 @@ describe('configurable Jev categories', () => {
 });
 
 for (const importance of ['important', 'useful', 'other'] as const) {
-	it(`asks Jev for three-state importance only for Auto and stores ${importance}`, async () => {
+	it(`stores the three-state importance result for Auto categories: ${importance}`, async () => {
 		const request = spyOn(TypeSafeClient.prototype, 'systemOne')
-			.mockResolvedValueOnce({ model: 'test', answers: {
+			.mockResolvedValue({ model: 'test', answers: {
 				category: { choice: 'custom', confidence: 0.8, probabilities: { custom: 0.8 } },
-				actionItem: { noul: 0.5 }, reminder: { noul: 0.5 }
+				actionItem: { noul: 0.5 }, reminder: { noul: 0.5 },
+				importance: { choice: importance, confidence: 0.7, probabilities: { [importance]: 0.7 } }
 			} } as never)
-			.mockResolvedValueOnce({ model: 'test', answers: { importance: { choice: importance, confidence: 0.7, probabilities: { [importance]: 0.7 } } } } as never);
 		try {
 			const classify = createJevClassifier('test-key', () => [{ id: 'custom', name: 'Travel', description: 'Travel messages.', level: 'auto' }]);
 			const result = await classify({ id: 'message' });
 			expect(result.importance).toBe(importance);
 			expect(result.importanceConfidence).toBe(0.7);
 			expect(result.importanceProbabilities).toEqual({ [importance]: 0.7 });
-			expect(request).toHaveBeenCalledTimes(2);
-			expect(Object.keys(request.mock.calls[1][0].questions.importance.criteria ?? {})).toEqual(['important', 'useful', 'other']);
+			expect(request).toHaveBeenCalledTimes(1);
+			expect(Object.keys(request.mock.calls[0][0].questions.importance.criteria ?? {})).toEqual(['important', 'useful', 'other']);
 		} finally {
 			request.mockRestore();
 		}

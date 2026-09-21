@@ -59,18 +59,14 @@ export function createJevClassifier(
 			questions: {
 				category: choice('What is the primary category of this email?', categoryCriteria),
 				actionItem: actionItemQuestion,
-				reminder: reminderQuestion
+				reminder: reminderQuestion,
+				importance: choice('How important is this email to its owner?', importanceCriteria)
 			}
 		});
 		const category = categories.find((category) => category.id === response.answers.category.choice);
 		if (!category) throw new Error('Jev returned an unknown category.');
-		const automatic = category.level === 'auto'
-			? await client.systemOne({
-				state: { ...state, category: { name: category.name, description: category.description } },
-				questions: { importance: choice('How important is this email to its owner?', importanceCriteria) }
-			})
-			: null;
-		const importance = automatic?.answers.importance.choice ?? null;
+		const automatic = category.level === 'auto';
+		const importance = automatic ? response.answers.importance.choice : null;
 		return {
 			category: category.id,
 			importance,
@@ -80,9 +76,9 @@ export function createJevClassifier(
 			reminderProbability: response.answers.reminder.noul,
 			model: response.model,
 			categoryConfidence: response.answers.category.confidence,
-			importanceConfidence: automatic?.answers.importance.confidence ?? null,
+			importanceConfidence: automatic ? response.answers.importance.confidence : null,
 			categoryProbabilities: { ...response.answers.category.probabilities },
-			importanceProbabilities: automatic ? { ...automatic.answers.importance.probabilities } : {}
+			importanceProbabilities: automatic ? { ...response.answers.importance.probabilities } : {}
 		};
 	};
 }
