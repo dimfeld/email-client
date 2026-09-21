@@ -128,6 +128,59 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 
 CREATE INDEX IF NOT EXISTS idx_calendar_events_start
 ON calendar_events(start_at, end_at);
+
+CREATE TABLE IF NOT EXISTS google_sync_progress (
+  account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+  sync_type TEXT NOT NULL CHECK (sync_type IN ('contacts', 'calendar')),
+  sync_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  page_token TEXT,
+  calendar_id TEXT,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_email, sync_type)
+);
+
+CREATE TABLE IF NOT EXISTS google_sync_contacts (
+  account_email TEXT NOT NULL,
+  sync_id TEXT NOT NULL,
+  resource_name TEXT NOT NULL,
+  display_name TEXT NOT NULL DEFAULT '',
+  emails_json TEXT NOT NULL DEFAULT '[]',
+  phones_json TEXT NOT NULL DEFAULT '[]',
+  organization TEXT,
+  PRIMARY KEY (account_email, sync_id, resource_name)
+);
+
+CREATE TABLE IF NOT EXISTS google_sync_calendars (
+  account_email TEXT NOT NULL,
+  sync_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  time_zone TEXT,
+  background_color TEXT,
+  selected INTEGER NOT NULL DEFAULT 0 CHECK (selected IN (0, 1)),
+  events_loaded INTEGER NOT NULL DEFAULT 0 CHECK (events_loaded IN (0, 1)),
+  PRIMARY KEY (account_email, sync_id, calendar_id)
+);
+
+CREATE TABLE IF NOT EXISTS google_sync_calendar_events (
+  account_email TEXT NOT NULL,
+  sync_id TEXT NOT NULL,
+  calendar_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  description TEXT,
+  location TEXT,
+  start_at TEXT NOT NULL,
+  end_at TEXT NOT NULL,
+  all_day INTEGER NOT NULL DEFAULT 0 CHECK (all_day IN (0, 1)),
+  status TEXT NOT NULL DEFAULT '',
+  html_link TEXT,
+  organizer TEXT,
+  attendees_json TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (account_email, sync_id, calendar_id, event_id)
+);
 `;
 
 export function createDatabase(path = defaultPath): DatabaseSync {
@@ -288,6 +341,245 @@ export function listAccounts(database: DatabaseSync): Array<{
 		calendarSyncedAt: row.calendar_synced_at === null ? null : String(row.calendar_synced_at),
 		enabled: Boolean(row.enabled)
 	}));
+}
+
+export type GoogleSyncType = 'contacts' | 'calendar';
+export type GoogleSyncProgress = {
+	accountEmail: string;
+	syncType: GoogleSyncType;
+	syncId: string;
+	phase: string;
+	pageToken: string | null;
+	calendarId: string | null;
+	startedAt: string;
+};
+
+function readGoogleSyncProgress(row: Record<string, unknown>): GoogleSyncProgress {
+	return {
+		accountEmail: String(row.account_email),
+		syncType: String(row.sync_type) as GoogleSyncType,
+		syncId: String(row.sync_id),
+		phase: String(row.phase),
+		pageToken: row.page_token === null ? null : String(row.page_token),
+		calendarId: row.calendar_id === null ? null : String(row.calendar_id),
+		startedAt: String(row.started_at)
+	};
+}
+
+export function getGoogleSyncProgress(
+	database: DatabaseSync,
+	accountEmail: string,
+	syncType: GoogleSyncType
+): GoogleSyncProgress | null {
+	const row = database.prepare('SELECT * FROM google_sync_progress WHERE account_email = ? AND sync_type = ?')
+		.get(accountEmail, syncType) as Record<string, unknown> | null;
+	return row ? readGoogleSyncProgress(row) : null;
+}
+
+export function startGoogleSync(
+	database: DatabaseSync,
+	accountEmail: string,
+	syncType: GoogleSyncType
+): GoogleSyncProgress {
+	const existing = getGoogleSyncProgress(database, accountEmail, syncType);
+	if (existing) return existing;
+	const syncId = randomUUID();
+	const startedAt = new Date().toISOString();
+	const phase = syncType === 'contacts' ? 'contacts' : 'calendarList';
+	withTransaction(database, () => {
+		if (syncType === 'contacts') {
+			database.prepare('DELETE FROM google_sync_contacts WHERE account_email = ?').run(accountEmail);
+		} else {
+			database.prepare('DELETE FROM google_sync_calendars WHERE account_email = ?').run(accountEmail);
+			database.prepare('DELETE FROM google_sync_calendar_events WHERE account_email = ?').run(accountEmail);
+		}
+		database.prepare(`INSERT INTO google_sync_progress
+		(account_email, sync_type, sync_id, phase, page_token, calendar_id, started_at, updated_at)
+		VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)`)
+		.run(accountEmail, syncType, syncId, phase, startedAt, startedAt);
+	});
+	return { accountEmail, syncType, syncId, phase, pageToken: null, calendarId: null, startedAt };
+}
+
+function countRows(database: DatabaseSync, table: string, accountEmail: string, syncId?: string): number {
+	const row = syncId
+		? database.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE account_email = ? AND sync_id = ?`).get(accountEmail, syncId)
+		: database.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE account_email = ?`).get(accountEmail);
+	return Number((row as { count: number }).count);
+}
+
+export function getGoogleSyncCounts(database: DatabaseSync, accountEmail: string): {
+	contacts: number;
+	calendars: number;
+	events: number;
+} {
+	const contactProgress = getGoogleSyncProgress(database, accountEmail, 'contacts');
+	const calendarProgress = getGoogleSyncProgress(database, accountEmail, 'calendar');
+	return {
+		contacts: contactProgress
+			? countRows(database, 'google_sync_contacts', accountEmail, contactProgress.syncId)
+			: countRows(database, 'contacts', accountEmail),
+		calendars: calendarProgress
+			? countRows(database, 'google_sync_calendars', accountEmail, calendarProgress.syncId)
+			: countRows(database, 'calendars', accountEmail),
+		events: calendarProgress
+			? countRows(database, 'google_sync_calendar_events', accountEmail, calendarProgress.syncId)
+			: countRows(database, 'calendar_events', accountEmail)
+	};
+}
+
+export function saveContactsSyncPage(
+	database: DatabaseSync,
+	progress: GoogleSyncProgress,
+	contacts: Omit<SyncedContact, 'accountEmail'>[],
+	nextPageToken: string | undefined
+): boolean {
+	const updatedAt = new Date().toISOString();
+	let complete = false;
+	withTransaction(database, () => {
+		const insert = database.prepare(`INSERT INTO google_sync_contacts
+			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(account_email, sync_id, resource_name) DO UPDATE SET
+				display_name = excluded.display_name, emails_json = excluded.emails_json,
+				phones_json = excluded.phones_json, organization = excluded.organization`);
+		for (const contact of contacts) {
+			insert.run(progress.accountEmail, progress.syncId, contact.resourceName, contact.displayName,
+				JSON.stringify(contact.emails), JSON.stringify(contact.phones), contact.organization);
+		}
+		if (nextPageToken) {
+			database.prepare('UPDATE google_sync_progress SET page_token = ?, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+				.run(nextPageToken, updatedAt, progress.accountEmail, 'contacts');
+			return;
+		}
+		database.prepare('UPDATE google_sync_progress SET phase = ?, page_token = NULL, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+			.run('complete', updatedAt, progress.accountEmail, 'contacts');
+		complete = true;
+	});
+	return complete;
+}
+
+function finishCalendarSync(database: DatabaseSync, progress: GoogleSyncProgress, updatedAt: string): void {
+	database.prepare('UPDATE google_sync_progress SET phase = ?, page_token = NULL, calendar_id = NULL, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+		.run('complete', updatedAt, progress.accountEmail, 'calendar');
+}
+
+export function finalizeGoogleSync(database: DatabaseSync, accountEmail: string): void {
+	const contacts = getGoogleSyncProgress(database, accountEmail, 'contacts');
+	const calendar = getGoogleSyncProgress(database, accountEmail, 'calendar');
+	if (!contacts || contacts.phase !== 'complete' || !calendar || calendar.phase !== 'complete') {
+		throw new Error('Google sync cannot be finalized before Contacts and Calendar downloads are complete.');
+	}
+	const syncedAt = new Date().toISOString();
+	withTransaction(database, () => {
+		database.prepare('DELETE FROM contacts WHERE account_email = ?').run(accountEmail);
+		database.prepare(`INSERT INTO contacts
+			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
+			SELECT account_email, resource_name, display_name, emails_json, phones_json, organization, ?
+			FROM google_sync_contacts WHERE account_email = ? AND sync_id = ?`).run(syncedAt, accountEmail, contacts.syncId);
+		database.prepare('DELETE FROM calendar_events WHERE account_email = ?').run(accountEmail);
+		database.prepare('DELETE FROM calendars WHERE account_email = ?').run(accountEmail);
+		database.prepare(`INSERT INTO calendars
+			(account_email, calendar_id, summary, time_zone, background_color, selected, updated_at)
+			SELECT account_email, calendar_id, summary, time_zone, background_color, selected, ?
+			FROM google_sync_calendars WHERE account_email = ? AND sync_id = ?`).run(syncedAt, accountEmail, calendar.syncId);
+		database.prepare(`INSERT INTO calendar_events
+			(account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
+			 all_day, status, html_link, organizer, attendees_json, updated_at)
+			SELECT account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
+			 all_day, status, html_link, organizer, attendees_json, ?
+			FROM google_sync_calendar_events WHERE account_email = ? AND sync_id = ?`).run(syncedAt, accountEmail, calendar.syncId);
+		database.prepare('UPDATE accounts SET contacts_synced_at = ?, calendar_synced_at = ?, updated_at = ? WHERE email = ?')
+			.run(syncedAt, syncedAt, syncedAt, accountEmail);
+		database.prepare('DELETE FROM google_sync_contacts WHERE account_email = ? AND sync_id = ?').run(accountEmail, contacts.syncId);
+		database.prepare('DELETE FROM google_sync_calendars WHERE account_email = ? AND sync_id = ?').run(accountEmail, calendar.syncId);
+		database.prepare('DELETE FROM google_sync_calendar_events WHERE account_email = ? AND sync_id = ?').run(accountEmail, calendar.syncId);
+		database.prepare('DELETE FROM google_sync_progress WHERE account_email = ?').run(accountEmail);
+});
+}
+
+export function saveCalendarListSyncPage(
+	database: DatabaseSync,
+	progress: GoogleSyncProgress,
+	calendars: Omit<SyncedCalendar, 'accountEmail'>[],
+	nextPageToken: string | undefined
+): GoogleSyncProgress | null {
+	const updatedAt = new Date().toISOString();
+	let nextProgress: GoogleSyncProgress | null = null;
+	withTransaction(database, () => {
+		const insert = database.prepare(`INSERT INTO google_sync_calendars
+			(account_email, sync_id, calendar_id, summary, time_zone, background_color, selected)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(account_email, sync_id, calendar_id) DO UPDATE SET
+				summary = excluded.summary, time_zone = excluded.time_zone,
+				background_color = excluded.background_color, selected = excluded.selected`);
+		for (const calendar of calendars) {
+			insert.run(progress.accountEmail, progress.syncId, calendar.calendarId, calendar.summary,
+				calendar.timeZone, calendar.backgroundColor, calendar.selected ? 1 : 0);
+		}
+		if (nextPageToken) {
+			database.prepare('UPDATE google_sync_progress SET page_token = ?, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+				.run(nextPageToken, updatedAt, progress.accountEmail, 'calendar');
+			nextProgress = { ...progress, pageToken: nextPageToken };
+			return;
+		}
+		const first = database.prepare(`SELECT calendar_id FROM google_sync_calendars
+			WHERE account_email = ? AND sync_id = ? ORDER BY calendar_id LIMIT 1`).get(progress.accountEmail, progress.syncId) as { calendar_id: string } | null;
+		if (!first) {
+			finishCalendarSync(database, progress, updatedAt);
+			return;
+		}
+		database.prepare('UPDATE google_sync_progress SET phase = ?, page_token = NULL, calendar_id = ?, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+			.run('calendarEvents', first.calendar_id, updatedAt, progress.accountEmail, 'calendar');
+		nextProgress = { ...progress, phase: 'calendarEvents', pageToken: null, calendarId: first.calendar_id };
+	});
+	return nextProgress;
+}
+
+export function saveCalendarEventsSyncPage(
+	database: DatabaseSync,
+	progress: GoogleSyncProgress,
+	events: Omit<SyncedCalendarEvent, 'accountEmail'>[],
+	nextPageToken: string | undefined
+): GoogleSyncProgress | null {
+	if (!progress.calendarId) throw new Error('Calendar event sync progress is missing its calendar id.');
+	const updatedAt = new Date().toISOString();
+	let nextProgress: GoogleSyncProgress | null = null;
+	withTransaction(database, () => {
+		const insert = database.prepare(`INSERT INTO google_sync_calendar_events
+			(account_email, sync_id, calendar_id, event_id, summary, description, location, start_at, end_at,
+			 all_day, status, html_link, organizer, attendees_json)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(account_email, sync_id, calendar_id, event_id) DO UPDATE SET
+				summary = excluded.summary, description = excluded.description, location = excluded.location,
+				start_at = excluded.start_at, end_at = excluded.end_at, all_day = excluded.all_day,
+				status = excluded.status, html_link = excluded.html_link, organizer = excluded.organizer,
+				attendees_json = excluded.attendees_json`);
+		for (const event of events) {
+			insert.run(progress.accountEmail, progress.syncId, event.calendarId, event.eventId, event.summary,
+				event.description, event.location, event.startAt, event.endAt, event.allDay ? 1 : 0,
+				event.status, event.htmlLink, event.organizer, JSON.stringify(event.attendees));
+		}
+		if (nextPageToken) {
+			database.prepare('UPDATE google_sync_progress SET page_token = ?, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+				.run(nextPageToken, updatedAt, progress.accountEmail, 'calendar');
+			nextProgress = { ...progress, pageToken: nextPageToken };
+			return;
+		}
+		database.prepare('UPDATE google_sync_calendars SET events_loaded = 1 WHERE account_email = ? AND sync_id = ? AND calendar_id = ?')
+			.run(progress.accountEmail, progress.syncId, progress.calendarId);
+		const next = database.prepare(`SELECT calendar_id FROM google_sync_calendars
+			WHERE account_email = ? AND sync_id = ? AND events_loaded = 0 ORDER BY calendar_id LIMIT 1`)
+			.get(progress.accountEmail, progress.syncId) as { calendar_id: string } | null;
+		if (!next) {
+			finishCalendarSync(database, progress, updatedAt);
+			return;
+		}
+		database.prepare('UPDATE google_sync_progress SET page_token = NULL, calendar_id = ?, updated_at = ? WHERE account_email = ? AND sync_type = ?')
+			.run(next.calendar_id, updatedAt, progress.accountEmail, 'calendar');
+		nextProgress = { ...progress, pageToken: null, calendarId: next.calendar_id };
+	});
+	return nextProgress;
 }
 
 export function replaceContacts(

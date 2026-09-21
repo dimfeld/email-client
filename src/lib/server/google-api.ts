@@ -17,6 +17,11 @@ export class GoogleApiError extends Error {
 	}
 }
 
+export function isGoogleRateLimitError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return (error instanceof GoogleApiError && error.status === 429) || /(?:\b429\b|rate[\s_-]*limit|too many requests|quota(?:[\s_-]*exceeded)?|resource[\s_-]*exhausted|userRateLimitExceeded|rateLimitExceeded|dailyLimitExceeded|quotaExceeded)/i.test(message);
+}
+
 type OAuthClientCredentials = {
 	client_id?: unknown;
 	client_secret?: unknown;
@@ -103,8 +108,11 @@ function messageFromError(error: unknown): { message: string; status: number | u
 	const data = value.response?.data;
 	let message = typeof value.message === 'string' ? value.message : 'Google API request failed.';
 	if (data && typeof data === 'object') {
-		const apiMessage = (data as { error?: { message?: unknown } }).error?.message;
+		const apiError = (data as { error?: { message?: unknown; errors?: Array<{ reason?: unknown }> } }).error;
+		const apiMessage = apiError?.message;
+		const reasons = apiError?.errors?.flatMap((item) => typeof item.reason === 'string' ? [item.reason] : []) ?? [];
 		if (typeof apiMessage === 'string') message = apiMessage;
+		if (reasons.length > 0) message += ` (${reasons.join(', ')})`;
 	}
 	return { message, status };
 }

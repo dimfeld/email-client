@@ -1,6 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { listAccounts, replaceCalendars, replaceContacts } from './db';
-import { googleApiRequest, type GoogleAccount } from './google-api';
+import {
+	finalizeGoogleSync,
+	getGoogleSyncCounts,
+	getGoogleSyncProgress,
+	listAccounts,
+	saveCalendarEventsSyncPage,
+	saveCalendarListSyncPage,
+	saveContactsSyncPage,
+	startGoogleSync
+} from './db';
+import { googleApiRequest, isGoogleRateLimitError, type GoogleAccount } from './google-api';
 import type { SyncedCalendar, SyncedCalendarEvent, SyncedContact } from './types';
 
 export function normalizeContact(contact: Record<string, unknown>): Omit<SyncedContact, 'accountEmail'> {
@@ -63,51 +72,101 @@ export function normalizeCalendarEvent(event: Record<string, unknown>, calendarI
 	};
 }
 
-export type GoogleSyncResult = { contacts: number; calendars: number; events: number };
+export type GoogleSyncResult = { contacts: number; calendars: number; events: number; deferred?: boolean };
+export const GOOGLE_SYNC_PAGE_DELAY_MS = 250;
 type Request = typeof googleApiRequest;
+type SyncOptions = { pageDelayMs?: number; sleep?: (delayMs: number) => Promise<void> };
 
-export async function syncGoogleAccount(database: DatabaseSync, account: GoogleAccount, request: Request = googleApiRequest): Promise<GoogleSyncResult> {
-	const contacts: Omit<SyncedContact, 'accountEmail'>[] = [];
-	let pageToken: string | undefined;
-	do {
-		const result = await request<{ connections?: Record<string, unknown>[]; nextPageToken?: string }>(account,
-			'https://people.googleapis.com/v1/people/me/connections',
-			{ params: { personFields: 'names,emailAddresses,phoneNumbers,organizations', pageSize: 1000, pageToken } });
-		contacts.push(...(result.connections ?? []).map(normalizeContact));
-		pageToken = result.nextPageToken;
-	} while (pageToken);
-
-	const calendars: Omit<SyncedCalendar, 'accountEmail'>[] = [];
-	pageToken = undefined;
-	do {
-		const result: { items?: Record<string, unknown>[]; nextPageToken?: string } = await request(account,
-			'https://www.googleapis.com/calendar/v3/users/me/calendarList', { params: { pageToken } });
-		calendars.push(...(result.items ?? []).map(normalizeCalendar));
-		pageToken = result.nextPageToken;
-	} while (pageToken);
-
-	const events: Omit<SyncedCalendarEvent, 'accountEmail'>[] = [];
-	for (const calendar of calendars) {
-		pageToken = undefined;
-		do {
-			const result: { items?: Record<string, unknown>[]; nextPageToken?: string } = await request(account,
-				`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.calendarId)}/events`,
-				{ params: { singleEvents: true, orderBy: 'startTime', pageToken } });
-			events.push(...(result.items ?? []).map((event) => normalizeCalendarEvent(event, calendar.calendarId)));
-			pageToken = result.nextPageToken;
-		} while (pageToken);
-	}
-
-	const syncedAt = new Date().toISOString();
-	replaceContacts(database, account.email, contacts, syncedAt);
-	replaceCalendars(database, account.email, calendars, events, syncedAt);
-	return { contacts: contacts.length, calendars: calendars.length, events: events.length };
+function sleep(delayMs: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-export async function syncConfiguredGoogleAccounts(database: DatabaseSync, accountEmail?: string, request: Request = googleApiRequest): Promise<Array<{ account: string; result: GoogleSyncResult }>> {
+export async function syncGoogleAccount(
+	database: DatabaseSync,
+	account: GoogleAccount,
+	request: Request = googleApiRequest,
+	{ pageDelayMs = GOOGLE_SYNC_PAGE_DELAY_MS, sleep: wait = sleep }: SyncOptions = {}
+): Promise<GoogleSyncResult> {
+	let deferred = false;
+	let requestedPage = false;
+	const requestPage = async <T>(url: string, params: Record<string, string | number | boolean | undefined>): Promise<T> => {
+		if (requestedPage && pageDelayMs > 0) await wait(pageDelayMs);
+		requestedPage = true;
+		return request<T>(account, url, { params });
+	};
+
+	let contactsProgress = startGoogleSync(database, account.email, 'contacts');
+	while (contactsProgress.phase !== 'complete') {
+		let result: { connections?: Record<string, unknown>[]; nextPageToken?: string };
+		try {
+			result = await requestPage('https://people.googleapis.com/v1/people/me/connections', {
+				personFields: 'names,emailAddresses,phoneNumbers,organizations', pageSize: 1000,
+				pageToken: contactsProgress.pageToken ?? undefined
+			});
+		} catch (error) {
+			if (!isGoogleRateLimitError(error)) throw error;
+			deferred = true;
+			break;
+		}
+		saveContactsSyncPage(database, contactsProgress,
+			(result.connections ?? []).map(normalizeContact), result.nextPageToken);
+		contactsProgress = getGoogleSyncProgress(database, account.email, 'contacts')!;
+	}
+
+	if (!deferred) {
+		let calendarProgress = startGoogleSync(database, account.email, 'calendar');
+		while (calendarProgress.phase === 'calendarList') {
+			let result: { items?: Record<string, unknown>[]; nextPageToken?: string };
+			try {
+				result = await requestPage('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+					pageToken: calendarProgress.pageToken ?? undefined
+				});
+			} catch (error) {
+				if (!isGoogleRateLimitError(error)) throw error;
+				deferred = true;
+				break;
+			}
+			const next = saveCalendarListSyncPage(database, calendarProgress,
+				(result.items ?? []).map(normalizeCalendar), result.nextPageToken);
+			calendarProgress = next ?? getGoogleSyncProgress(database, account.email, 'calendar')!;
+		}
+
+		while (!deferred && calendarProgress.phase === 'calendarEvents') {
+			let result: { items?: Record<string, unknown>[]; nextPageToken?: string };
+			try {
+				result = await requestPage(
+					`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarProgress.calendarId!)}/events`,
+					{ singleEvents: true, orderBy: 'startTime', pageToken: calendarProgress.pageToken ?? undefined }
+				);
+			} catch (error) {
+				if (!isGoogleRateLimitError(error)) throw error;
+				deferred = true;
+				break;
+			}
+			const next = saveCalendarEventsSyncPage(database, calendarProgress,
+				(result.items ?? []).map((event) => normalizeCalendarEvent(event, calendarProgress.calendarId!)), result.nextPageToken);
+			calendarProgress = next ?? getGoogleSyncProgress(database, account.email, 'calendar')!;
+		}
+	}
+
+	if (!deferred) {
+		const calendarProgress = getGoogleSyncProgress(database, account.email, 'calendar');
+		const contactsProgress = getGoogleSyncProgress(database, account.email, 'contacts');
+		if (contactsProgress?.phase === 'complete' && calendarProgress?.phase === 'complete') finalizeGoogleSync(database, account.email);
+	}
+	const result = getGoogleSyncCounts(database, account.email);
+	return deferred ? { ...result, deferred: true } : result;
+}
+
+export async function syncConfiguredGoogleAccounts(
+	database: DatabaseSync,
+	accountEmail?: string,
+	request: Request = googleApiRequest,
+	options?: SyncOptions
+): Promise<Array<{ account: string; result: GoogleSyncResult }>> {
 	const accounts = listAccounts(database).filter((account) => account.enabled && account.refreshToken && (!accountEmail || account.email === accountEmail));
 	if (accountEmail && accounts.length === 0) throw new Error(`No connected account is configured for ${accountEmail}.`);
 	const results = [];
-	for (const account of accounts) results.push({ account: account.email, result: await syncGoogleAccount(database, account, request) });
+	for (const account of accounts) results.push({ account: account.email, result: await syncGoogleAccount(database, account, request, options) });
 	return results;
 }

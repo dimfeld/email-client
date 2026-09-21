@@ -42,7 +42,11 @@ export const actions: Actions = {
 		if (!account) return fail(400, { error: 'Choose an account to sync.' });
 		try {
 			const [{ result }] = await syncConfiguredGoogleAccounts(getDatabase(), account);
-			return { message: `Synced ${result.contacts} contacts, ${result.calendars} calendars, and ${result.events} events for ${account}.` };
+			return {
+				message: result.deferred
+					? `Google rate limit reached. Saved progress for ${account}; the next sync will resume from the last completed page.`
+					: `Synced ${result.contacts} contacts, ${result.calendars} calendars, and ${result.events} events for ${account}.`
+			};
 		} catch (error) {
 			return fail(502, { error: error instanceof Error ? error.message : String(error) });
 		}

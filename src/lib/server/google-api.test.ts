@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createGoogleAuthorizationRequest, normalizeGmailMessage } from './google-api';
+import { createGoogleAuthorizationRequest, GoogleApiError, isGoogleRateLimitError, normalizeGmailMessage } from './google-api';
 
 const originalOAuthEnvironment = {
 	clientFile: process.env.GOOGLE_OAUTH_CLIENT_FILE,
@@ -75,5 +75,13 @@ describe('Google Gmail message normalization', () => {
 			id: 'message-1', threadId: 'thread-1', from: 'Sender <sender@example.com>',
 			to: 'owner@example.com', subject: 'Hello', bodyText: 'Plain body', bodyHtml: '<p>HTML body</p>', labels: ['INBOX']
 		});
+	});
+});
+
+describe('Google API rate-limit detection', () => {
+	it('recognizes rate-limit status codes and Google quota messages', () => {
+		expect(isGoogleRateLimitError(new GoogleApiError('request failed', 429))).toBe(true);
+		expect(isGoogleRateLimitError(new Error('rateLimitExceeded'))).toBe(true);
+		expect(isGoogleRateLimitError(new Error('invalid credentials'))).toBe(false);
 	});
 });

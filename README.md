@@ -73,7 +73,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 Open `http://127.0.0.1:3000`.
 
-Use **Settings → Google data sync** to connect or refresh one account. **Contacts** shows the local address book and **Calendar** shows the downloaded events. A sync downloads all Contacts pages, calendars, and event pages from the Google APIs. The app replaces an account's local snapshot only after all remote downloads succeed, so a failed download keeps the prior data.
+Use **Settings → Google data sync** to connect or refresh one account. **Contacts** shows the local address book and **Calendar** shows the downloaded events. A sync downloads all Contacts pages, calendars, and event pages from the Google APIs. The app stores each page in SQLite staging, replaces an account's local snapshot only after all remote downloads succeed, and resumes from the last stored page after a rate limit. A failed download keeps the prior data.
 
 ## Live updates
 

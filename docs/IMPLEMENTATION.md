@@ -93,7 +93,8 @@ The root layout invalidates the `app:state` dependency used by mailbox and setti
 
 - use the account and Google resource ID as stable keys;
 - store the contact fields and event fields used by the read-only views;
-- replace one account's snapshot only after every remote page downloads successfully;
+- write each remote page to SQLite staging as it downloads, and replace one account's snapshot only after every remote page downloads successfully;
+- keep the next-page cursor in SQLite so a rate-limited sync resumes from its last stored page;
 - record separate Contacts and Calendar sync times on the account.
 
 Indexes will match the UI query: category and message date. Foreign keys will preserve account ownership.
