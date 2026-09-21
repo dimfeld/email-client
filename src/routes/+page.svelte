@@ -108,6 +108,27 @@
 		return `${Math.round(email.categoryConfidence * 100)}%`;
 	}
 
+	function probability(value: number | null): string | null {
+		if (value === null) return null;
+		return `${Math.round(value * 100)}%`;
+	}
+
+	function jevAnswer(value: boolean | null, probabilityValue: number | null): string | null {
+		if (value === null || probabilityValue === null) return null;
+		return `${value ? 'Yes' : 'No'} (${probability(probabilityValue)})`;
+	}
+
+	function extractedDate(value: string | null): string | null {
+		if (!value) return null;
+		const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+		const date = new Date(dateOnly ? `${value}T00:00:00Z` : value);
+		if (Number.isNaN(date.valueOf())) return value;
+		return new Intl.DateTimeFormat(undefined, dateOnly
+			? { dateStyle: 'medium', timeZone: 'UTC' }
+			: { dateStyle: 'medium', timeStyle: 'short' }
+		).format(date);
+	}
+
 	function moveSelection(offset: number) {
 		if (visibleEmails.length === 0) return;
 		const currentIndex = selectedEmail ? visibleEmails.findIndex((email) => email.id === selectedEmail.id) : -1;
@@ -232,8 +253,45 @@
 							<div><dt>Account</dt><dd>{selectedEmail.accountEmail}</dd></div>
 							<div><dt>Date</dt><dd>{selectedEmail.messageDate || 'Date unknown'}</dd></div>
 						</dl>
-						{#if confidence(selectedEmail)}<p class="classification">Category confidence: {confidence(selectedEmail)}</p>{/if}
+						<div class="classification-summary" aria-label="Jev classification results">
+							{#if confidence(selectedEmail)}<span>Category confidence: <strong>{confidence(selectedEmail)}</strong></span>{/if}
+							{#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span>Action item: <strong>{jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}</strong></span>{/if}
+							{#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span>Reminder: <strong>{jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}</strong></span>{/if}
+						</div>
 						{#if selectedEmail.classificationError}<p class="notice">Classification failed. This message needs another attempt.</p>{/if}
+						{#if selectedEmail.actionItems.length > 0 || selectedEmail.reminders.length > 0 || selectedEmail.extractionError}
+							<section class="extraction-panel" aria-label="Extracted action items and reminders">
+								{#if selectedEmail.actionItems.length > 0}
+									<div class="extraction-group">
+										<h3>Action items</h3>
+										<ul>
+											{#each selectedEmail.actionItems as item}
+												<li>
+													<strong>{item.title}</strong>
+													{#if item.details}<span>{item.details}</span>{/if}
+													{#if extractedDate(item.dueAt)}<small>Due {extractedDate(item.dueAt)}</small>{/if}
+												</li>
+											{/each}
+										</ul>
+									</div>
+								{/if}
+								{#if selectedEmail.reminders.length > 0}
+									<div class="extraction-group">
+										<h3>Reminders</h3>
+										<ul>
+											{#each selectedEmail.reminders as reminder}
+												<li>
+													<strong>{reminder.title}</strong>
+													{#if reminder.details}<span>{reminder.details}</span>{/if}
+													{#if extractedDate(reminder.remindAt)}<small>Reminder {extractedDate(reminder.remindAt)}</small>{/if}
+												</li>
+											{/each}
+										</ul>
+									</div>
+								{/if}
+								{#if selectedEmail.extractionError}<p class="notice extraction-error">Extraction failed: {selectedEmail.extractionError}</p>{/if}
+							</section>
+						{/if}
 						{#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
 						<div class="message-actions">
 							<form bind:this={archiveForm} method="POST" action="?/archive" use:enhance={submitMessageAction}>
@@ -333,11 +391,22 @@
 	.message-metadata { margin: 24px 0 12px; font-size: .8rem; line-height: 1.6; }
 	.message-metadata > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); margin-top: 4px; }
 	dt { color: #7595a3; } dd { margin: 0; color: #bfd1d8; }
-	.classification { color: #7595a3; font-size: .75rem; }
+	.classification-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; color: #7595a3; font-size: .75rem; }
+	.classification-summary strong { color: #d5e3e9; font-weight: 600; }
+	.extraction-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; padding: 16px; border: 1px solid #23404e; border-radius: 6px; background: #0b1c26; }
+	.extraction-group { min-width: 0; }
+	.extraction-group h3 { color: #a3effb; font-size: .78rem; letter-spacing: .02em; }
+	.extraction-group ul { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
+	.extraction-group li { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid #23404e; font-size: .82rem; line-height: 1.45; }
+	.extraction-group li:first-child { padding-top: 0; border-top: 0; }
+	.extraction-group li strong { color: #edf7fb; font-weight: 650; }
+	.extraction-group li span { color: #bfd1d8; }
+	.extraction-group li small { color: #8eabb8; font-size: .72rem; }
 	.message-body { margin-top: 28px; padding-top: 28px; border-top: 1px solid #23404e; white-space: pre-wrap; line-height: 1.75; font-size: .92rem; color: #d5e3e9; }
 	.html-message { display: block; width: 100%; height: 60dvh; margin-top: 28px; border: 0; background: white; color-scheme: light; }
 	.notice { margin-top: 20px; color: #ffde59; font-size: .8rem; }
 	.action-error { color: #ff9fb2; }
+	.extraction-error { grid-column: 1 / -1; margin-top: 0; }
 	.message-actions { display: flex; gap: 10px; margin-top: 20px; }
 	.message-actions button { border: 1px solid #6edff3; border-radius: 4px; padding: 8px 14px; background: #6edff3; color: #07131c; font-size: .8rem; font-weight: 650; }
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
@@ -378,5 +447,8 @@
 		.show-detail .detail-pane { display: flex; }
 		.back-button { display: block; }
 		.detail-toolbar { flex-wrap: wrap; }
+	}
+	@media (max-width: 560px) {
+		.extraction-panel { grid-template-columns: minmax(0, 1fr); }
 	}
 </style>
