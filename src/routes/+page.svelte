@@ -92,6 +92,10 @@
 		if (!value) return 'Date unknown';
 		const date = new Date(value);
 		if (Number.isNaN(date.valueOf())) return value;
+		const now = new Date();
+		if (date.toDateString() === now.toDateString()) {
+			return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+		}
 		return new Intl.DateTimeFormat(undefined, {
 			month: 'short',
 			day: 'numeric',
