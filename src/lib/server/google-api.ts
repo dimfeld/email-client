@@ -1,4 +1,5 @@
-import { OAuth2Client } from 'google-auth-library';
+import { readFileSync } from 'node:fs';
+import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import type { IncomingEmail } from './types';
 
 export const GOOGLE_OAUTH_SCOPES = [
@@ -16,7 +17,42 @@ export class GoogleApiError extends Error {
 	}
 }
 
+type OAuthClientCredentials = {
+	client_id?: unknown;
+	client_secret?: unknown;
+	auth_uri?: unknown;
+	token_uri?: unknown;
+};
+
 function oauthConfiguration() {
+	const clientFile = process.env.GOOGLE_OAUTH_CLIENT_FILE;
+	if (clientFile) {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(readFileSync(clientFile, 'utf8'));
+		} catch (error) {
+			throw new Error(`Could not read GOOGLE_OAUTH_CLIENT_FILE: ${error instanceof Error ? error.message : String(error)}`);
+		}
+		if (!parsed || typeof parsed !== 'object') throw new Error('GOOGLE_OAUTH_CLIENT_FILE must contain a Google OAuth client JSON object.');
+		const root = parsed as { installed?: OAuthClientCredentials; web?: OAuthClientCredentials };
+		const credentials = root.installed ?? root.web;
+		const clientId = credentials?.client_id;
+		const clientSecret = credentials?.client_secret;
+		if (typeof clientId !== 'string' || typeof clientSecret !== 'string' || !clientId || !clientSecret) {
+			throw new Error('GOOGLE_OAUTH_CLIENT_FILE must contain installed or web client_id and client_secret values.');
+		}
+		if (credentials?.auth_uri !== undefined && credentials.auth_uri !== 'https://accounts.google.com/o/oauth2/auth') {
+			throw new Error('GOOGLE_OAUTH_CLIENT_FILE has an unsupported OAuth authorization endpoint.');
+		}
+		if (credentials?.token_uri !== undefined && credentials.token_uri !== 'https://oauth2.googleapis.com/token') {
+			throw new Error('GOOGLE_OAUTH_CLIENT_FILE has an unsupported OAuth token endpoint.');
+		}
+		return {
+			clientId,
+			clientSecret,
+			redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? 'http://127.0.0.1:3000/auth/google/callback'
+		};
+	}
 	const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
 	const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 	if (!clientId || !clientSecret) {
@@ -34,19 +70,26 @@ export function createGoogleOAuthClient(): OAuth2Client {
 	return new OAuth2Client(config.clientId, config.clientSecret, config.redirectUri);
 }
 
-export function createGoogleAuthorizationUrl(state: string): string {
-	return createGoogleOAuthClient().generateAuthUrl({
-		access_type: 'offline',
-		include_granted_scopes: true,
-		prompt: 'consent',
-		scope: GOOGLE_OAUTH_SCOPES,
-		state
-	});
+export async function createGoogleAuthorizationRequest(state: string): Promise<{ url: string; codeVerifier: string }> {
+	const client = createGoogleOAuthClient();
+	const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
+	return {
+		url: client.generateAuthUrl({
+			access_type: 'offline',
+			code_challenge: codeChallenge,
+			code_challenge_method: CodeChallengeMethod.S256,
+			include_granted_scopes: true,
+			prompt: 'consent',
+			scope: GOOGLE_OAUTH_SCOPES,
+			state
+		}),
+		codeVerifier
+	};
 }
 
-export async function exchangeGoogleAuthorizationCode(code: string): Promise<{ email: string; refreshToken: string | null }> {
+export async function exchangeGoogleAuthorizationCode(code: string, codeVerifier?: string): Promise<{ email: string; refreshToken: string | null }> {
 	const client = createGoogleOAuthClient();
-	const { tokens } = await client.getToken(code);
+	const { tokens } = await client.getToken({ code, codeVerifier });
 	client.setCredentials(tokens);
 	const response = await client.request<{ email?: string }>({ url: 'https://www.googleapis.com/oauth2/v2/userinfo' });
 	if (!response.data.email) throw new Error('Google did not return the account email address.');
