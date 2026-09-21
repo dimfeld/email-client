@@ -26,6 +26,10 @@ Expose safe read operations through an MCP server. Initial tools could list rais
 
 Build a native mobile client after the local API and authentication model are stable. The first mobile version could show raised messages, categories, search results, and classification status. A later version could add notifications and safe Gmail actions.
 
+## Respond to calendar invites
+
+Add a safe workflow for accepting, declining, or marking Google Calendar invites as tentative from the app.
+
 ## Agent email search
 
 Given an LLM tools to search through email and ask it questions. The search can find various candidates and then use a
