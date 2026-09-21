@@ -13,6 +13,21 @@ export type EmailExtractor = (
 	targets: ExtractionTargets
 ) => Promise<EmailExtraction>;
 
+function isFlexResourceUnavailableError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false;
+
+	const apiError = error as {
+		message?: unknown;
+		responseBody?: unknown;
+		statusCode?: unknown;
+	};
+	if (apiError.statusCode !== 429) return false;
+
+	return [apiError.message, apiError.responseBody]
+		.filter((value): value is string => typeof value === 'string')
+		.some((value) => /resource unavailable/i.test(value));
+}
+
 const extractionSchema = z.object({
 	actionItems: z.array(z.object({
 		title: z.string().describe('A concise, self-contained task description. Include the concrete person, subject, project, event, product, or other context needed to identify the task without seeing the email.'),
@@ -34,12 +49,16 @@ export function createOpenAIEmailExtractor(
 	const openai = createOpenAI({ apiKey });
 
 	return async (email, targets) => {
-		const result = await generate({
+		const generateExtraction = (serviceTier: 'flex' | 'auto') => generate({
 			model: openai.responses('gpt-5.6-luna'),
 			schema: extractionSchema,
 			schemaName: 'email_action_items_and_reminders',
+			maxRetries: 0,
 			providerOptions: {
-				openai: { reasoningEffort: 'medium' } satisfies OpenAIResponsesProviderOptions
+				openai: {
+					reasoningEffort: 'medium',
+					serviceTier
+				} satisfies OpenAIResponsesProviderOptions
 			},
 			instructions: `Extract only information that is present in the email. Do not invent tasks, dates, or details.
 Each returned item must be self-contained in its title and details. Write it so a person can understand what it is without seeing the email. Include concrete context from the email, such as names, the subject, project, event, product, deadline, or reason. Do not use generic text such as "Reply to the email with feedback", "Follow up", or "Remember this" when it does not identify the subject. If the email does not provide enough context to write a self-contained item, omit that item.
@@ -58,6 +77,13 @@ Use null for a date or time that the email does not state clearly.`,
 				}
 			})
 		});
+		let result;
+		try {
+			result = await generateExtraction('flex');
+		} catch (error) {
+			if (!isFlexResourceUnavailableError(error)) throw error;
+			result = await generateExtraction('auto');
+		}
 
 		return {
 			actionItems: targets.actionItems ? result.object.actionItems : [],
