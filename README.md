@@ -21,13 +21,13 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun install
    ```
 
-2. In Google Cloud, enable the Gmail API, Google Calendar API, and People API. Configure the OAuth consent screen. Create a Web application OAuth client with this authorized redirect URI:
+2. In Google Cloud, enable the Gmail API, Google Calendar API, and People API. Configure the OAuth consent screen. Create a Desktop OAuth client and download its JSON file. The app uses a loopback callback at:
 
    ```text
    http://127.0.0.1:3000/auth/google/callback
    ```
 
-3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and the API keys that you use. Keep `GOOGLE_OAUTH_REDIRECT_URI` equal to the registered URI.
+3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_FILE` to the downloaded JSON path, and set the API keys that you use. The client ID and secret variables remain available when you do not use a client file.
 
 4. Start the app, open **Settings**, and select **Connect Google account** for each account. Restart the server after you connect or reconnect an account so the background Gmail listener reloads its credentials.
 
