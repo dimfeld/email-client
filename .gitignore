@@ -27,3 +27,4 @@ data/
 coverage/
 *.log
 proofshot-artifacts/
+oauth_client.json
