@@ -4,6 +4,7 @@ import { getDatabase, listAccounts, setAccountLastBackfillAt } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { normalizeSearchMessage, runGogJson } from './gog';
 import { ingestGmailPayload } from './ingest';
+import { gmailMessageArrivalStats } from './message-arrival-stats';
 
 export const GMAIL_BACKFILL_INTERVAL_MS = 5 * 60 * 1000;
 export const GMAIL_BACKFILL_OVERLAP_MS = 5 * 60 * 1000;
@@ -97,6 +98,7 @@ async function backfillAccount(
 		dependencies.classify,
 		dependencies.extract ?? null
 	);
+	gmailMessageArrivalStats.recordAndLog('backfill', ingested.stored);
 	setAccountLastBackfillAt(dependencies.database, account.email, now.toISOString());
 	return { stored: ingested.stored, classified: ingested.classified };
 }
@@ -110,9 +112,6 @@ export async function backfillGmail(
 		accounts.map(async (account) => {
 			try {
 				const result = await backfillAccount(account, dependencies, now);
-				console.log(
-					`Completed Gmail backfill for ${account.email}: ${result.stored} new message${result.stored === 1 ? '' : 's'} pulled in.`
-				);
 				return { ok: true, ...result };
 			} catch (error) {
 				if (isGmailRateLimitError(error)) {
@@ -148,7 +147,6 @@ export function startGmailBackfill(
 ): GmailBackfill {
 	const activeDatabase = database ?? getDatabase();
 	if (!listAccounts(activeDatabase).some((account) => account.enabled)) {
-		console.log('No enabled Gmail accounts are configured. The app will run without backfill.');
 		return { close() {} };
 	}
 	let running = false;

@@ -53,8 +53,7 @@ describe('Gmail backfill', () => {
 					}
 				})
 			).resolves.toMatchObject({ accounts: 2, succeeded: 2, failed: 0 });
-			expect(logs).toHaveBeenCalledWith('Completed Gmail backfill for one@example.com: 0 new messages pulled in.');
-			expect(logs).toHaveBeenCalledWith('Completed Gmail backfill for two@example.com: 0 new messages pulled in.');
+			expect(logs).not.toHaveBeenCalled();
 		} finally {
 			logs.mockRestore();
 		}

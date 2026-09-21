@@ -5,6 +5,7 @@ import { getDatabase, listAccounts, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { GogCommandError, normalizeGetMessage, runGogJson } from './gog';
 import { ingestGmailPayload } from './ingest';
+import { gmailMessageArrivalStats } from './message-arrival-stats';
 import type { IncomingEmail } from './types';
 
 export type GmailSubscriberAccount = {
@@ -261,11 +262,12 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 				.catch(() => undefined)
 				.then(async () => {
 					try {
-						await processGmailNotification(account, notification, {
+						const result = await processGmailNotification(account, notification, {
 							database,
 							classify: createJevClassifier(),
 							extract
 						});
+						gmailMessageArrivalStats.recordAndLog('pubsub', result.stored);
 						message.ack();
 					} catch (error) {
 						console.error(`Gmail notification failed for ${account.email}.`, error);
