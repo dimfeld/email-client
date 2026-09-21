@@ -44,11 +44,18 @@ describe('configurable Jev categories', () => {
 			expect(request.mock.calls[0][0].questions.category).toEqual(expect.objectContaining({ criteria: { custom: 'Travel: Flights and hotels.' } }));
 			expect(request.mock.calls[0][0].questions.actionItem).toEqual(expect.objectContaining({
 				type: 'noul',
-				instructions: expect.stringContaining('todo list')
+				instructions: expect.stringContaining('specific task')
+			}));
+			expect(request.mock.calls[0][0].questions.actionItem).toEqual(expect.objectContaining({
+				criteria: expect.objectContaining({
+					true: expect.stringContaining('A request or question alone is not enough'),
+					false: expect.stringContaining('specific todo')
+				})
 			}));
 			expect(request.mock.calls[0][0].questions.reminder).toEqual(expect.objectContaining({
 				type: 'noul',
-				instructions: expect.stringContaining('reminder')
+				instructions: expect.stringContaining('specific reminder'),
+				criteria: expect.objectContaining({ true: expect.stringContaining('likely to track with a reminder') })
 			}));
 			categories = [{ id: 'custom', name: 'Trips', description: 'Upcoming trips only.', level: 'other' }];
 			await classify({ id: 'message-2' });

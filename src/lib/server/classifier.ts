@@ -17,18 +17,18 @@ const importanceCriteria = {
 } as const;
 
 const actionItemQuestion = noul(
-	'Does this email contain an action item or something that the owner might add to a todo list?',
+	'Is this email likely to make the owner add a specific task to a todo list?',
 	{
-		true: 'The email asks, requires, or suggests that the owner complete a task, make a decision, reply, review, schedule, or follow up.',
-		false: 'The email does not give the owner a task or a possible todo item.'
+		true: 'Choose true only when the email gives the owner a concrete, owner-relevant task, decision, or follow-up that they are likely to track as a todo. The requested action and its subject should be clear enough to identify a specific task. A request or question alone is not enough.',
+		false: 'Choose false for routine questions or requests, generic requests to reply or follow up, optional suggestions, marketing calls to action, notifications, information that only needs reading, tasks for someone else, or anything the owner is not likely to add as a specific todo.'
 	}
 );
 
 const reminderQuestion = noul(
-	'Does this email contain something that might be useful for the owner to add as a reminder?',
+	'Is this email likely to make the owner add a specific reminder?',
 	{
-		true: 'The owner might benefit from a future reminder about an event, deadline, appointment, renewal, expiration, follow-up, or other time-sensitive information.',
-		false: 'The email does not contain information that would be useful in a future reminder.'
+		true: 'Choose true only when the email contains a concrete, owner-relevant future event, deadline, appointment, renewal, expiration, or follow-up that the owner is likely to track with a reminder. The reminder topic and timing should be clear enough to identify a specific reminder.',
+		false: 'Choose false for incidental dates, historical information, general schedules, marketing offers, newsletters, routine notifications, or vague future information that the owner is not likely to track as a specific reminder.'
 	}
 );
 
