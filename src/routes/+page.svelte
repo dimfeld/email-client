@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CalendarRail from '$lib/components/CalendarRail.svelte';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -28,6 +29,7 @@
 		return Number.isInteger(id) && id > 0 ? id : null;
 	});
 	let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
+	let showCategories = $state(false);
 	let showShortcuts = $state(false);
 	let archiveForm = $state<HTMLFormElement | null>(null);
 	let deleteForm = $state<HTMLFormElement | null>(null);
@@ -52,7 +54,7 @@
 		return (email.category ?? 'pending') === activeFilter;
 	}));
 	let selectedEmail = $derived(selectedId === null
-		? visibleEmails[0] ?? null
+		? null
 		: visibleEmails.find((email) => email.id === selectedId) ?? null);
 	let filterLabel = $derived(filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail');
 
@@ -159,9 +161,9 @@
 			event.preventDefault();
 			deleteForm.requestSubmit();
 		} else if (key === 'o' || event.key === 'Enter') {
-			if (selectedEmail) {
+			if (selectedEmail || visibleEmails[0]) {
 				event.preventDefault();
-				updateMailboxUrl({ message: selectedEmail.id });
+				updateMailboxUrl({ message: (selectedEmail ?? visibleEmails[0]).id });
 				await tick();
 				readingContent?.focus({ preventScroll: true });
 			}
@@ -194,7 +196,7 @@
 
 <main>
 	<header class="masthead">
-		<div class="brand"><span class="brand-mark" aria-hidden="true">@</span><h1>Email Check</h1></div>
+		<div class="brand"><button class="menu-button" aria-label="Toggle mail categories" aria-expanded={showCategories} onclick={() => showCategories = !showCategories}>☰</button><h1>Inbox</h1></div>
 		<nav class="app-links" aria-label="Application"><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a><a href="/settings">Settings</a></nav>
 		<button class="shortcuts-button" type="button" onclick={() => { showShortcuts = true; }}>Shortcuts <kbd>?</kbd></button>
 		<form method="GET" class="account-picker">
@@ -208,7 +210,7 @@
 		</form>
 	</header>
 
-	<div class="mailbox" class:show-detail={mobileDetail}>
+	<div class="mailbox" class:show-detail={mobileDetail} class:show-categories={showCategories}>
 		<nav class="sidebar" aria-label="Mail categories">
 			<p class="eyebrow">MAILBOX</p>
 			{#each filters as filter}
@@ -219,19 +221,21 @@
 		</nav>
 
 		<section class="list-pane" aria-label="Message list">
-			<header class="pane-heading"><h2>{filterLabel}</h2><span>{visibleEmails.length} messages</span></header>
+			<header class="pane-heading"><div class="mail-tabs"><button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}>All mail <small>{data.emails.length}</small></button><button class:tab-active={activeFilter === 'important'} onclick={() => selectFilter('important')}>Important</button><button class:tab-active={activeFilter === 'useful'} onclick={() => selectFilter('useful')}>Useful</button></div><span>{filterLabel} · {visibleEmails.length}</span></header>
 			<div class="message-list">
 				{#each visibleEmails as email (email.id)}
-					<button class="message" class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => updateMailboxUrl({ message: email.id })}>
-						<span class="message-top"><strong>{senderName(email.fromAddress)}</strong><time>{formatDate(email.messageDate)}</time></span>
-						<span class="subject">{email.subject || '(No subject)'}</span>
-						<span class="preview">{email.snippet || (email.bodyHtml ? 'HTML message' : email.bodyText) || 'No preview text.'}</span>
-						<span class="message-bottom"><span class="account">{email.accountEmail}</span>{#if (importance(email) === 'important' || importance(email) === 'useful')}<span class="useful-tag">{importance(email) === 'important' ? 'Important' : 'Useful'}</span>{/if}{#if email.classificationError}<span class="error-tag">Retry needed</span>{/if}</span>
+					<button class="message" class:unread={email.labels.includes('UNREAD')} class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => updateMailboxUrl({ message: email.id })}>
+						<span class="sender-avatar" aria-hidden="true">{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span>
+						<strong class="sender" title={email.fromAddress}>{senderName(email.fromAddress)}</strong>
+						<span class="message-line"><span class="subject">{email.subject || '(No subject)'}</span><span class="preview"> — {email.snippet || email.bodyText || 'No preview text.'}</span></span>
+						<span class="category-tag">{email.category ? labels[email.category] : 'Pending'}</span>
+						{#if importance(email) === 'important'}<span class="star" aria-label="Important">★</span>{:else}<span></span>{/if}
+						<time title={email.accountEmail}>{formatDate(email.messageDate)}</time>
 					</button>
 				{:else}
 					<div class="empty-state">
 						<h3>{data.accounts.length === 0 ? 'No accounts yet' : data.emails.length === 0 ? 'No downloaded email' : 'No messages here'}</h3>
-						<p>{data.accounts.length === 0 ? 'Connect an account to see your mail.' : data.emails.length === 0 ? 'Messages will appear after your account syncs.' : 'Choose another category to see more mail.'}</p>
+						<p>{data.accounts.length === 0 ? 'Connect an account to see your mail.' : data.emails.length === 0 ? 'Messages will appear after your account syncs.' : 'Try another search or category.'}</p>
 					</div>
 				{/each}
 			</div>
@@ -253,11 +257,12 @@
 							<div><dt>Account</dt><dd>{selectedEmail.accountEmail}</dd></div>
 							<div><dt>Date</dt><dd>{selectedEmail.messageDate || 'Date unknown'}</dd></div>
 						</dl>
-						<div class="classification-summary" aria-label="Jev classification results">
+						<details><summary>Classification details</summary><div class="classification-summary" aria-label="Jev classification results">
 							{#if confidence(selectedEmail)}<span>Category confidence: <strong>{confidence(selectedEmail)}</strong></span>{/if}
 							{#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span>Action item: <strong>{jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}</strong></span>{/if}
 							{#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span>Reminder: <strong>{jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}</strong></span>{/if}
 						</div>
+						</details>
 						{#if selectedEmail.classificationError}<p class="notice">Classification failed. This message needs another attempt.</p>{/if}
 						{#if selectedEmail.actionItems.length > 0 || selectedEmail.reminders.length > 0 || selectedEmail.extractionError}
 							<section class="extraction-panel" aria-label="Extracted action items and reminders">
@@ -318,6 +323,7 @@
 				<div class="detail-empty"><span aria-hidden="true">@</span><h2>No message selected</h2><p>Choose a category and a message to read it here.</p></div>
 			{/if}
 		</section>
+		<CalendarRail events={data.calendarEvents} day={data.calendarDay} />
 	</div>
 	{#if showShortcuts}
 		<div class="shortcut-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) showShortcuts = false; }}>
@@ -339,116 +345,127 @@
 
 <style>
 	:global(*) { box-sizing: border-box; }
-	:global(html) { background: #07131c; color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-	:global(body) { margin: 0; min-width: 320px; color: #edf7fb; }
+	:global(html) { background: #0b0b0d; color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+	:global(body) { margin: 0; min-width: 320px; color: #dededf; }
 	:global(button), :global(select) { font: inherit; }
 	button { cursor: pointer; color: inherit; }
-	button:focus-visible, select:focus-visible { outline: 2px solid #6edff3; outline-offset: -3px; }
+	button:focus-visible, select:focus-visible { outline: 2px solid #35b6ee; outline-offset: -3px; }
 	h1, h2, h3, p { margin: 0; }
 	main { height: 100dvh; display: flex; flex-direction: column; }
-	.masthead { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 24px; border-bottom: 1px solid #23404e; }
+	.masthead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; border-bottom: 1px solid #2a2a2d; }
 	.brand { display: flex; align-items: center; gap: 12px; }
-	.brand-mark { color: #6edff3; font-size: 1.7rem; }
-	h1 { font-size: 1.25rem; letter-spacing: -.035em; white-space: nowrap; }
+	.menu-button { background: none; border: 0; font-size: 1.1rem; color: #999; }
+	h1 { font-size: .95rem; letter-spacing: -.035em; white-space: nowrap; }
 	.app-links { margin-left: auto; display: flex; gap: 16px; }
-	.app-links a { color: #6edff3; font-size: .85rem; text-decoration: none; }
+	.app-links a { color: #35b6ee; font-size: .85rem; text-decoration: none; }
 	.account-picker { display: flex; align-items: center; gap: 12px; min-width: 0; }
-	.account-picker label { color: #8eabb8; font-size: .8rem; }
-	.shortcuts-button { border: 0; background: transparent; color: #6edff3; font-size: .8rem; cursor: pointer; }
-	kbd { display: inline-block; min-width: 1.5em; padding: 2px 5px; border: 1px solid #365869; border-radius: 3px; background: #102631; color: #d5e3e9; font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
-	select { min-width: 0; max-width: 100%; border: 1px solid #365869; border-radius: 6px; padding: 8px 12px; background: #0d202b; color: #edf7fb; }
-	.mailbox { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(280px, 360px) minmax(0, 1fr); }
-	.sidebar { padding: 24px 12px; overflow-y: auto; border-right: 1px solid #23404e; }
-	.eyebrow { padding: 0 12px 16px; color: #7595a3; font-size: .7rem; font-weight: 700; letter-spacing: .14em; }
-	.filter { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 12px; background: transparent; color: #a9c0cb; font-size: .85rem; }
+	.account-picker label { color: #939398; font-size: .8rem; }
+	.shortcuts-button { border: 0; background: transparent; color: #35b6ee; font-size: .8rem; cursor: pointer; }
+	kbd { display: inline-block; min-width: 1.5em; padding: 2px 5px; border: 1px solid #36363a; border-radius: 3px; background: #242427; color: #ceced2; font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+	select { min-width: 0; max-width: 100%; border: 1px solid #36363a; border-radius: 6px; padding: 8px 12px; background: #161618; color: #dededf; }
+	.mailbox { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 210px; }
+	.sidebar { display: none; padding: 24px 12px; overflow-y: auto; border-right: 1px solid #2a2a2d; }
+	.eyebrow { padding: 0 12px 16px; color: #85858b; font-size: .7rem; font-weight: 700; letter-spacing: .14em; }
+	.filter { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; border: 0; border-radius: 6px; padding: 12px; background: transparent; color: #aaaab0; font-size: .85rem; }
 	.filter:nth-of-type(3) { margin-bottom: 20px; }
-	.filter:hover { background: #102631; }
-	.filter.active { background: #193a49; color: #a3effb; font-weight: 650; }
+	.filter:hover { background: #242427; }
+	.filter.active { background: #173e50; color: #79cbed; font-weight: 650; }
 	.filter-label { overflow-wrap: anywhere; }
 	.count { font-size: .75rem; font-variant-numeric: tabular-nums; }
 	.list-pane, .detail-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-	.list-pane { border-right: 1px solid #23404e; background: #0b1c26; }
-	.pane-heading { min-height: 68px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #23404e; }
-	.pane-heading h2 { font-size: 1rem; }
-	.pane-heading > span { color: #91adb9; font-size: .75rem; }
+	.list-pane { border-right: 1px solid #2a2a2d; background: #161618; }
+	.pane-heading { min-height: 48px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #2a2a2d; }
+	.pane-heading > span { color: #99999e; font-size: .75rem; }
 	.message-list { overflow-y: auto; flex: 1; }
-	.message { display: block; width: 100%; padding: 20px; text-align: left; border: 0; border-bottom: 1px solid #203743; border-left: 3px solid transparent; background: transparent; }
-	.message:hover { background: #102a37; }
-	.message.selected { background: #153443; border-left-color: #6edff3; }
-	.message-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-	.message-top strong { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	time { flex-shrink: 0; color: #8eabb8; font-size: .7rem; }
-	.subject { display: block; margin-top: 8px; font-size: .88rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.preview { display: -webkit-box; overflow: hidden; margin-top: 7px; color: #91adb9; font-size: .8rem; line-height: 1.5; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
-	.message-bottom { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-	.account { min-width: 0; overflow-wrap: anywhere; color: #7595a3; font-size: .7rem; }
-	.useful-tag, .error-tag { display: inline-block; border-radius: 4px; padding: 3px 6px; font-size: .65rem; font-weight: 700; }
+	.message { display: grid; grid-template-columns: 24px minmax(110px, 19%) minmax(0, 1fr) auto 14px 66px; align-items: center; gap: 9px; width: 100%; height: 36px; padding: 0 16px; text-align: left; border: 0; border-left: 2px solid transparent; background: transparent; color: #99999e; font-size: .75rem; }
+	.message:hover { background: #222225; }
+	.message.selected { background: #173e50; border-left-color: #35b6ee; }
+	.sender-avatar { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 5px; background: #354555; color: #cfdeee; font-size: .7rem; }
+	.sender, .subject { font-weight: 400; }
+	.sender, .message-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.unread .sender, .unread .subject, .unread time { color: #ddd; font-weight: 650; }
+	.preview { color: #707075; }
+	.category-tag { padding: 2px 5px; border-radius: 3px; background: #242426; color: #96969a; font-size: .6rem; }
+	.star { color: #dcad32; }
+	time { text-align: right; font-size: .62rem; }
+	.mail-tabs { display: flex; gap: 6px; }
+	.mail-tabs button { border: 0; border-radius: 5px; padding: 5px 8px; color: #888; background: none; font-size: .8rem; }
+	.mail-tabs .tab-active { color: #ddd; background: #2c2c2e; }
+	.mail-tabs small { color: #888; }
+	.mailbox.show-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 210px; }
+	.mailbox.show-categories { grid-template-columns: 180px minmax(0, 1fr) 210px; }
+	.mailbox.show-categories.show-detail { grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr) 210px; }
+	.show-categories .sidebar { display: block; }
+	.show-detail .detail-pane { display: flex; }
+	.show-detail .category-tag { display: none; }
+	.show-detail .message { grid-template-columns: 22px minmax(85px, 23%) minmax(0, 1fr) 14px 56px; padding-inline: 10px; }
+	details { margin-top: 12px; font-size: .7rem; color: #888; }
+
+	.useful-tag { display: inline-block; border-radius: 4px; padding: 3px 6px; font-size: .65rem; font-weight: 700; }
 	.useful-tag { background: #ffde5920; color: #ffde59; }
-	.error-tag { background: #ff708d20; color: #ff9fb2; }
-	.detail-pane { background: #0d202b; }
-	.reading-content { padding: 32px; overflow-y: auto; overflow-wrap: anywhere; }
-	.reading-content h2 { font-size: 1.6rem; line-height: 1.35; letter-spacing: -.025em; }
+	.detail-pane { display: none; border-right: 1px solid #2a2a2d; background: #161618; }
+	.reading-content { padding: 24px; overflow-y: auto; overflow-wrap: anywhere; }
+	.reading-content h2 { font-size: 1.05rem; line-height: 1.35; letter-spacing: -.025em; }
 	.message-metadata { margin: 24px 0 12px; font-size: .8rem; line-height: 1.6; }
 	.message-metadata > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); margin-top: 4px; }
-	dt { color: #7595a3; } dd { margin: 0; color: #bfd1d8; }
-	.classification-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; color: #7595a3; font-size: .75rem; }
-	.classification-summary strong { color: #d5e3e9; font-weight: 600; }
-	.extraction-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; padding: 16px; border: 1px solid #23404e; border-radius: 6px; background: #0b1c26; }
+	dt { color: #85858b; } dd { margin: 0; color: #b6b6bb; }
+	.classification-summary { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; color: #85858b; font-size: .75rem; }
+	.classification-summary strong { color: #ceced2; font-weight: 600; }
+	.extraction-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; padding: 16px; border: 1px solid #2a2a2d; border-radius: 6px; background: #161618; }
 	.extraction-group { min-width: 0; }
-	.extraction-group h3 { color: #a3effb; font-size: .78rem; letter-spacing: .02em; }
+	.extraction-group h3 { color: #79cbed; font-size: .78rem; letter-spacing: .02em; }
 	.extraction-group ul { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
-	.extraction-group li { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid #23404e; font-size: .82rem; line-height: 1.45; }
+	.extraction-group li { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid #2a2a2d; font-size: .82rem; line-height: 1.45; }
 	.extraction-group li:first-child { padding-top: 0; border-top: 0; }
-	.extraction-group li strong { color: #edf7fb; font-weight: 650; }
-	.extraction-group li span { color: #bfd1d8; }
-	.extraction-group li small { color: #8eabb8; font-size: .72rem; }
-	.message-body { margin-top: 28px; padding-top: 28px; border-top: 1px solid #23404e; white-space: pre-wrap; line-height: 1.75; font-size: .92rem; color: #d5e3e9; }
+	.extraction-group li strong { color: #dededf; font-weight: 650; }
+	.extraction-group li span { color: #b6b6bb; }
+	.extraction-group li small { color: #939398; font-size: .72rem; }
+	.message-body { margin-top: 28px; padding-top: 28px; border-top: 1px solid #2a2a2d; white-space: pre-wrap; line-height: 1.75; font-size: .92rem; color: #ceced2; }
 	.html-message { display: block; width: 100%; height: 60dvh; margin-top: 28px; border: 0; background: white; color-scheme: light; }
 	.notice { margin-top: 20px; color: #ffde59; font-size: .8rem; }
 	.action-error { color: #ff9fb2; }
 	.extraction-error { grid-column: 1 / -1; margin-top: 0; }
 	.message-actions { display: flex; gap: 10px; margin-top: 20px; }
-	.message-actions button { border: 1px solid #6edff3; border-radius: 4px; padding: 8px 14px; background: #6edff3; color: #07131c; font-size: .8rem; font-weight: 650; }
+	.message-actions button { border: 1px solid #35b6ee; border-radius: 4px; padding: 8px 14px; background: #35b6ee; color: #0b0b0d; font-size: .8rem; font-weight: 650; }
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
-	.message-actions .remote-images-button { border-color: #365869; background: transparent; color: #a3effb; }
+	.message-actions .remote-images-button { border-color: #36363a; background: transparent; color: #79cbed; }
 	.shortcut-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: #0009; }
-	.shortcut-dialog { width: min(420px, 100%); padding: 24px; border: 1px solid #365869; border-radius: 8px; background: #0d202b; box-shadow: 0 20px 60px #0008; }
+	.shortcut-dialog { width: min(420px, 100%); padding: 24px; border: 1px solid #36363a; border-radius: 8px; background: #161618; box-shadow: 0 20px 60px #0008; }
 	.shortcut-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 	.shortcut-heading h2 { font-size: 1.1rem; }
-	.shortcut-heading button { border: 0; background: transparent; color: #8eabb8; font-size: 1.5rem; cursor: pointer; }
+	.shortcut-heading button { border: 0; background: transparent; color: #939398; font-size: 1.5rem; cursor: pointer; }
 	.shortcut-dialog dl { margin: 20px 0 0; }
-	.shortcut-dialog dl > div { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid #23404e; }
+	.shortcut-dialog dl > div { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid #2a2a2d; }
 	.shortcut-dialog dt { display: flex; gap: 4px; }
-	.shortcut-dialog dd { margin: 0; color: #d5e3e9; font-size: .85rem; }
+	.shortcut-dialog dd { margin: 0; color: #ceced2; font-size: .85rem; }
 	.empty-state { padding: 32px 20px; } .empty-state h3 { font-size: 1rem; }
-	.empty-state p, .detail-empty p { margin-top: 10px; color: #8eabb8; font-size: .85rem; line-height: 1.6; }
+	.empty-state p, .detail-empty p { margin-top: 10px; color: #939398; font-size: .85rem; line-height: 1.6; }
 	.detail-empty { margin: auto; padding: 32px; text-align: center; }
-	.detail-empty > span { display: block; margin-bottom: 20px; font-size: 3rem; color: #365869; }
+	.detail-empty > span { display: block; margin-bottom: 20px; font-size: 3rem; color: #36363a; }
 	.detail-empty h2 { font-size: 1.2rem; }
-	.back-button { display: none; background: transparent; border: 0; padding: 8px 0; color: #6edff3; font-size: .8rem; }
-	@media (max-width: 1000px) {
-		.mailbox { grid-template-columns: 180px 280px minmax(0, 1fr); }
-		.sidebar { padding-inline: 6px; }
-		.filter { padding-inline: 8px; font-size: .78rem; }
-		.reading-content { padding: 24px; }
+	.back-button { display: block; background: transparent; border: 0; padding: 8px 0; color: #35b6ee; font-size: .8rem; }
+	@media (max-width: 1100px) {
+		.mailbox > :global(aside) { display: none; }
+		.mailbox { grid-template-columns: minmax(0, 1fr); }
+		.mailbox.show-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+		.mailbox.show-categories { grid-template-columns: 160px minmax(0, 1fr); }
+		.mailbox.show-categories.show-detail { grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1fr); }
 	}
 	@media (max-width: 760px) {
-		.masthead { padding: 12px 16px; flex-wrap: wrap; gap: 12px; }
-		.account-picker { flex: 1; justify-content: flex-end; }
-		.account-picker label { display: none; }
-		.mailbox { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-		.sidebar { display: flex; overflow-x: auto; padding: 10px; border-right: 0; border-bottom: 1px solid #23404e; }
+		.masthead { flex-wrap: wrap; gap: 10px; }
+		.account-picker { margin-left: auto; }
+		.account-picker label, .shortcuts-button { display: none; }
+		.mailbox, .mailbox.show-detail, .mailbox.show-categories, .mailbox.show-categories.show-detail { grid-template-columns: minmax(0, 1fr); }
+		.show-categories .sidebar { display: flex; overflow-x: auto; padding: 6px; }
+		.show-categories { grid-template-rows: auto minmax(0, 1fr); }
 		.eyebrow { display: none; }
-		.filter { width: auto; flex-shrink: 0; gap: 12px; padding: 10px 12px; }
+		.filter { width: auto; flex-shrink: 0; gap: 8px; }
 		.filter:nth-of-type(3) { margin-bottom: 0; }
-		.list-pane { border-right: 0; }
-		.detail-pane { display: none; }
 		.show-detail .list-pane { display: none; }
-		.show-detail .detail-pane { display: flex; }
-		.back-button { display: block; }
+		.message { grid-template-columns: 22px 90px minmax(0, 1fr) 52px; padding-inline: 8px; height: 44px; }
+		.message > .category-tag, .message > .star, .message > span:empty { display: none; }
+		.pane-heading > span { display: none; }
 		.detail-toolbar { flex-wrap: wrap; }
-	}
-	@media (max-width: 560px) {
 		.extraction-panel { grid-template-columns: minmax(0, 1fr); }
 	}
 </style>
