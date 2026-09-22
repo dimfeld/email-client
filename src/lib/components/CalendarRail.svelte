@@ -92,7 +92,7 @@
     display: flex;
     flex-direction: column;
     background: var(--color-bg);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     overflow: hidden;
   }
   header {
@@ -113,7 +113,7 @@
   }
   strong {
     margin-right: auto;
-    font-size: 0.65rem;
+    font-size: var(--text-xs);
     text-transform: uppercase;
   }
   button {
@@ -139,7 +139,7 @@
     position: absolute;
     left: 6px;
     color: var(--color-text-faint);
-    font-size: 0.6rem;
+    font-size: var(--text-xs);
   }
   .event {
     position: absolute;

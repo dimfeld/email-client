@@ -395,7 +395,7 @@
     font-size: 0.85rem;
   }
   .save-status {
-    font-size: 0.65rem;
+    font-size: var(--text-xs);
     color: var(--color-text-secondary);
   }
   button,
@@ -467,7 +467,7 @@
     border-top: 1px solid var(--color-border-strong);
   }
   footer span {
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     color: var(--color-text-muted);
     margin-right: auto;
   }

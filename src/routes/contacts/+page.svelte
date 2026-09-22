@@ -242,7 +242,7 @@
   .count {
     padding: 2px 14px 8px;
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
   .list {
     flex: 1;
@@ -256,7 +256,7 @@
     padding: 4px 14px;
     background: var(--color-surface);
     color: var(--color-accent);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     letter-spacing: 0.1em;
     border-top: 1px solid var(--color-accent-bg-subtle);
@@ -295,7 +295,7 @@
   }
   .sub {
     color: var(--color-text-muted);
-    font-size: 0.74rem;
+    font-size: var(--text-xs);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -384,7 +384,7 @@
   }
   .fields h2 {
     color: var(--color-text-muted);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;

@@ -126,7 +126,7 @@
   span {
     display: block;
     margin-top: 2px;
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     color: var(--color-text-secondary);
   }
 </style>

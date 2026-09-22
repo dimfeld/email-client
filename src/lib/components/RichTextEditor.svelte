@@ -196,7 +196,7 @@
     border-radius: var(--radius-sm);
     padding: 5px 7px;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     cursor: pointer;
   }
   button[aria-pressed='true'] {
@@ -241,7 +241,7 @@
   .hint {
     margin: 0;
     padding: 8px 12px;
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     color: var(--color-text-muted);
   }
   .insert {

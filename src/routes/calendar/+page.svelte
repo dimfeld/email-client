@@ -557,7 +557,7 @@
     gap: 18px;
   }
   .account h2 {
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     color: var(--color-text-muted);
     overflow-wrap: anywhere;
     flex: 1;
@@ -570,7 +570,7 @@
   }
   .account-heading button {
     font: inherit;
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     padding: 2px 6px;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-sm);
@@ -632,7 +632,7 @@
     background: transparent;
     color: var(--color-text);
     font: inherit;
-    font-size: 0.74rem;
+    font-size: var(--text-xs);
     text-align: left;
     cursor: pointer;
     overflow: hidden;
@@ -681,7 +681,7 @@
     padding: 8px;
     background: var(--color-surface);
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     text-align: center;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -753,7 +753,7 @@
     gap: 2px;
     padding: 8px 4px;
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     text-decoration: none;
@@ -786,7 +786,7 @@
   .allday-row .corner {
     padding: 6px 8px;
     color: var(--color-text-muted);
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     text-align: right;
   }
   .allday-cell {
@@ -811,7 +811,7 @@
     height: var(--hour);
     padding: 0 8px;
     color: var(--color-text-muted);
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     text-align: right;
     transform: translateY(-0.55em);
   }
@@ -841,7 +841,7 @@
     background: color-mix(in srgb, var(--color) 28%, var(--color-surface));
     color: var(--color-text);
     font: inherit;
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     text-align: left;
     cursor: pointer;
     overflow: hidden;
@@ -908,7 +908,7 @@
     align-items: center;
     gap: 10px;
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
   .badge {
     padding: 3px 7px;

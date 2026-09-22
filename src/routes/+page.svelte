@@ -883,7 +883,7 @@
   .eyebrow {
     padding: 0 12px 16px;
     color: var(--color-text-faint);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     letter-spacing: 0.14em;
   }
@@ -949,18 +949,18 @@
   }
   .message {
     display: grid;
-    grid-template-columns: 24px minmax(110px, 19%) minmax(0, 1fr) auto 14px 66px;
+    grid-template-columns: 24px minmax(120px, 19%) minmax(0, 1fr) auto 14px 72px;
     align-items: center;
     gap: 9px;
     width: 100%;
-    height: 36px;
+    height: 40px;
     padding: 0 16px;
     text-align: left;
     border: 0;
     border-left: 2px solid transparent;
     background: transparent;
     color: var(--color-text-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
   .message:hover {
     background: var(--color-surface-hover);
@@ -981,7 +981,7 @@
     border-radius: var(--radius-md);
     background: var(--color-avatar-bg);
     color: var(--color-avatar-text);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
   }
   .sender,
   .subject {
@@ -1007,14 +1007,14 @@
     border-radius: var(--radius-sm);
     background: var(--color-surface-raised);
     color: var(--color-text-muted);
-    font-size: 0.6rem;
+    font-size: var(--text-xs);
   }
   .star {
     color: var(--color-star);
   }
   time {
     text-align: right;
-    font-size: 0.62rem;
+    font-size: var(--text-xs);
   }
   .mail-tabs {
     display: flex;
@@ -1054,12 +1054,12 @@
     display: none;
   }
   .show-detail .message {
-    grid-template-columns: 22px minmax(85px, 23%) minmax(0, 1fr) 14px 56px;
+    grid-template-columns: 22px minmax(90px, 23%) minmax(0, 1fr) 14px 66px;
     padding-inline: 10px;
   }
   details {
     margin-top: 12px;
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     color: var(--color-text-muted);
   }
 
@@ -1067,7 +1067,7 @@
     display: inline-block;
     border-radius: var(--radius-sm);
     padding: 3px 6px;
-    font-size: 0.65rem;
+    font-size: var(--text-xs);
     font-weight: 700;
   }
   .useful-tag {
@@ -1164,7 +1164,7 @@
   }
   .extraction-group li small {
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
   }
   .message-body {
     margin-top: 28px;
@@ -1402,7 +1402,7 @@
   .search-summary,
   .search-error {
     padding: 8px 16px;
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     color: var(--color-text-muted);
     border-bottom: 1px solid var(--color-border);
   }
@@ -1474,7 +1474,7 @@
       display: none;
     }
     .message {
-      grid-template-columns: 22px 90px minmax(0, 1fr) 52px;
+      grid-template-columns: 22px 96px minmax(0, 1fr) 60px;
       padding-inline: 8px;
       height: 44px;
     }

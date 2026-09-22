@@ -336,7 +336,7 @@
     color: var(--color-warning);
     padding: 4px 8px;
     border-radius: var(--radius-sm);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
   }
   label {
     display: block;

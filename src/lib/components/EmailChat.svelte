@@ -122,7 +122,7 @@
   small {
     display: block;
     color: var(--color-text-muted);
-    font-size: 0.7rem;
+    font-size: var(--text-xs);
     overflow-wrap: anywhere;
   }
   button {
@@ -154,7 +154,7 @@
     background: var(--color-accent-bg);
   }
   article strong {
-    font-size: 0.72rem;
+    font-size: var(--text-xs);
     color: var(--color-text-secondary);
   }
   p {

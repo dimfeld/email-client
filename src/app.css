@@ -46,6 +46,11 @@
   --color-shadow: #0008;
   --color-backdrop: #0009;
 
+  /* Type scale. Secondary text never goes below --text-xs. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.85rem;
+  --text-md: 0.95rem;
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
