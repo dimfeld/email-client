@@ -1,7 +1,7 @@
 import { query } from '$app/server';
 import { z } from 'zod';
 import { addDays, isDateKey } from '$lib/calendar';
-import { getDatabase, getEmail, listAccounts, listCalendars, listCalendarEventsBetween, listCategories, listEmailSummaries } from '$lib/server/db';
+import { getDatabase, getEmail, listAccounts, listCalendars, listCalendarEventsBetween, listCategories, listEmailSummaries, listRemoteImageRules } from '$lib/server/db';
 import { searchEmailSummaries, SearchQueryError } from '$lib/server/email-search';
 
 const accountInput = z.string().nullable();
@@ -14,6 +14,8 @@ export const getMailAccounts = query(() =>
 );
 
 export const getMailCategories = query(() => listCategories(getDatabase()));
+
+export const getRemoteImageRules = query(() => listRemoteImageRules(getDatabase()));
 
 export const getMailCalendars = query(() => listCalendars(getDatabase()));
 

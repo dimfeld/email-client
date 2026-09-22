@@ -10,7 +10,8 @@
 	import { effectiveImportance } from '$lib/categories';
 	import { dateKeyFromDate, isDateKey } from '$lib/calendar';
 	import { buildEmailDocument, hasRemoteImages } from '$lib/email-html';
-	import { getMailAccounts, getMailCalendars, getMailCategories, getMailEvents, getMailList, getSelectedMessage } from './mail.remote';
+	import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
+	import { getMailAccounts, getMailCalendars, getMailCategories, getMailEvents, getMailList, getRemoteImageRules, getSelectedMessage } from './mail.remote';
 	import type { ActionData } from './$types';
 	import type { EmailSummary, StoredEmail } from '$lib/server/types';
 
@@ -28,6 +29,7 @@
 		return Number.isInteger(id) && id > 0 ? id : null;
 	});
 	let categories = $derived(await getMailCategories());
+	let remoteImageRules = $derived(await getRemoteImageRules());
 	let calendars = $derived(await getMailCalendars());
 	let calendarEvents = $derived(await getMailEvents({ account: selectedAccount, day: calendarDay }));
 	let mailList = $derived(await getMailList({ account: selectedAccount, search }));
@@ -73,6 +75,7 @@
 	let selectedEmail = $derived(selectedId === null
 		? null
 		: selectedMessage);
+	let remoteImagesAllowed = $derived(selectedEmail !== null && (remoteImagesFor === selectedEmail.id || allowsRemoteImages(selectedEmail.fromAddress, remoteImageRules)));
 	let filterLabel = $derived(filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail');
 
 	function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
@@ -221,6 +224,14 @@
 		}
 	};
 
+	const saveRemoteImageRule: SubmitFunction = ({ formData }) => async ({ result, update }) => {
+		await update({ invalidateAll: false });
+		if (result.type === 'success') {
+			await getRemoteImageRules().refresh();
+			remoteImagesFor = Number(formData.get('id'));
+		}
+	};
+
 	$effect(() => {
 		window.addEventListener('keydown', handleKeydown);
 		return () => window.removeEventListener('keydown', handleKeydown);
@@ -359,12 +370,31 @@
 								<input type="hidden" name="id" value={selectedEmail.id} />
 								<button type="submit" class="delete-button">Delete</button>
 							</form>
-							{#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && remoteImagesFor !== selectedEmail.id}
-								<button type="button" class="remote-images-button" onclick={() => { remoteImagesFor = selectedEmail.id; }}>Load remote images</button>
+							{#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed}
+								<div class="remote-images-control">
+									<button type="button" class="remote-images-button" onclick={() => { remoteImagesFor = selectedEmail.id; }}>Load remote images</button>
+									<details class="remote-images-menu">
+										<summary aria-label="Remote image options">▾</summary>
+										<div class="remote-images-options">
+											{#if senderAddress(selectedEmail.fromAddress)}
+												<form method="POST" action="?/saveRemoteImageRule" use:enhance={saveRemoteImageRule}>
+													<input type="hidden" name="id" value={selectedEmail.id} />
+													<input type="hidden" name="kind" value="address" />
+													<button type="submit">Always load from {senderAddress(selectedEmail.fromAddress)}</button>
+												</form>
+												<form method="POST" action="?/saveRemoteImageRule" use:enhance={saveRemoteImageRule}>
+													<input type="hidden" name="id" value={selectedEmail.id} />
+													<input type="hidden" name="kind" value="domain" />
+													<button type="submit">Always load from {senderDomain(selectedEmail.fromAddress)}</button>
+												</form>
+											{:else}<p>No sender address is available for this message.</p>{/if}
+										</div>
+									</details>
+								</div>
 							{/if}
 						</div>
 						{#if selectedEmail.bodyHtml}
-							<iframe class="html-message" title="Email message content" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesFor === selectedEmail.id)} onload={handleMessageFrameLoad}></iframe>
+								<iframe class="html-message" title="Email message content" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesAllowed)} onload={handleMessageFrameLoad}></iframe>
 						{:else}
 							<div class="message-body">{selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}</div>
 						{/if}
@@ -486,7 +516,16 @@
 	.message-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 	.message-actions button { border: 1px solid #35b6ee; border-radius: 4px; padding: 8px 14px; background: #35b6ee; color: #0b0b0d; font-size: .8rem; font-weight: 650; }
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
-	.message-actions .remote-images-button { border-color: #36363a; background: transparent; color: #79cbed; }
+	.remote-images-control { display: flex; position: relative; }
+	.message-actions .remote-images-button { border-color: #36363a; border-radius: 4px 0 0 4px; background: transparent; color: #79cbed; }
+	.remote-images-menu { position: relative; }
+	.remote-images-menu summary { display: flex; align-items: center; height: 100%; padding: 0 9px; border: 1px solid #36363a; border-left: 0; border-radius: 0 4px 4px 0; color: #79cbed; cursor: pointer; list-style: none; }
+	.remote-images-menu summary::-webkit-details-marker { display: none; }
+	.remote-images-menu summary:focus-visible { outline: 2px solid #35b6ee; }
+	.remote-images-options { position: absolute; top: calc(100% + 4px); right: 0; z-index: 2; min-width: 230px; max-width: min(350px, 80vw); padding: 4px; border: 1px solid #36363a; border-radius: 4px; background: #242427; box-shadow: 0 8px 24px #0008; }
+	.message-actions .remote-images-options button { width: 100%; padding: 9px 10px; border: 0; background: transparent; color: #dededf; text-align: left; overflow-wrap: anywhere; }
+	.message-actions .remote-images-options button:hover { background: #36363a; }
+	.remote-images-options p { padding: 8px; color: #939398; font-size: .8rem; }
 	.shortcut-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: #0009; }
 	.shortcut-dialog { width: min(420px, 100%); padding: 24px; border: 1px solid #36363a; border-radius: 8px; background: #161618; box-shadow: 0 20px 60px #0008; }
 	.shortcut-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }

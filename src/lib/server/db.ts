@@ -19,6 +19,7 @@ import { historicalBackfillSchema } from './historical-backfill-schema';
 import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
 import { defaultCategories } from './default-categories';
+import type { RemoteImageRule } from '$lib/remote-images';
 
 const defaultPath = resolve(process.env.DATABASE_PATH ?? 'data/email-check.sqlite');
 let sharedDatabase: DatabaseSync | undefined;
@@ -41,6 +42,12 @@ CREATE TABLE IF NOT EXISTS accounts (
   enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS remote_image_rules (
+  kind TEXT NOT NULL CHECK (kind IN ('address', 'domain')),
+  value TEXT NOT NULL,
+  PRIMARY KEY (kind, value)
 );
 
 CREATE TABLE IF NOT EXISTS emails (
@@ -364,6 +371,18 @@ export function getDatabase(): DatabaseSync {
 export function closeSharedDatabase(): void {
 	sharedDatabase?.close();
 	sharedDatabase = undefined;
+}
+
+export function listRemoteImageRules(database: DatabaseSync): RemoteImageRule[] {
+	return database.prepare('SELECT kind, value FROM remote_image_rules ORDER BY kind, value').all() as RemoteImageRule[];
+}
+
+export function saveRemoteImageRule(database: DatabaseSync, rule: RemoteImageRule): void {
+	database.prepare('INSERT OR IGNORE INTO remote_image_rules (kind, value) VALUES (?, ?)').run(rule.kind, rule.value);
+}
+
+export function deleteRemoteImageRule(database: DatabaseSync, rule: RemoteImageRule): void {
+	database.prepare('DELETE FROM remote_image_rules WHERE kind = ? AND value = ?').run(rule.kind, rule.value);
 }
 
 export function upsertAccount(

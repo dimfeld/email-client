@@ -1,6 +1,6 @@
 import { createHistoricalBackfill, defaultHistoricalDelayMs, historicalBackfillWorker, listHistoricalBackfills, setHistoricalBackfillPaused } from '$lib/server/historical-backfill';
 import { fail } from '@sveltejs/kit';
-import { CategoryValidationError, deleteCategory, getDatabase, listAccounts, listCalendars, listCategories, saveCategory } from '$lib/server/db';
+import { CategoryValidationError, deleteCategory, deleteRemoteImageRule, getDatabase, listAccounts, listCalendars, listCategories, listRemoteImageRules, saveCategory } from '$lib/server/db';
 import { syncConfiguredGoogleAccounts } from '$lib/server/google-sync';
 import type { CategoryLevel } from '$lib/server/types';
 import type { Actions, PageServerLoad } from './$types';
@@ -11,6 +11,7 @@ export const load: PageServerLoad = ({ setHeaders, depends }) => {
 	const database = getDatabase();
 	return {
 		categories: listCategories(database),
+		remoteImageRules: listRemoteImageRules(database),
 		calendars: listCalendars(database),
 		historicalBackfills: listHistoricalBackfills(database),
 		historicalDelayMs: defaultHistoricalDelayMs,
@@ -19,6 +20,16 @@ export const load: PageServerLoad = ({ setHeaders, depends }) => {
 };
 
 export const actions: Actions = {
+	removeRemoteImageRule: async ({ request }) => {
+		const fields = await request.formData();
+		const kind = fields.get('kind');
+		const value = fields.get('value');
+		if ((kind !== 'address' && kind !== 'domain') || typeof value !== 'string' || !value) {
+			return fail(400, { error: 'The image setting is invalid.' });
+		}
+		deleteRemoteImageRule(getDatabase(), { kind, value });
+		return { message: `Remote images from ${value} now need approval.` };
+	},
 	startHistory: async ({ request }) => {
 		const fields = await request.formData();
 		try {
