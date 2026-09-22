@@ -37,7 +37,7 @@ The application first asks Jev to choose a saved category ID. Each choice includ
 
 A category can have an Important, Useful, Other, or Auto level. For Auto, a second Jev request chooses Important, Useful, or Other for the message. Fixed levels do not require a second request. The mailbox uses the current category level, or the stored message result for Auto. No confidence threshold controls this decision.
 
-The category request also asks Jev whether the message has a possible action item or reminder. If either answer is positive and `OPENAI_API_KEY` is set, the Vercel AI SDK sends the message to `gpt-5.6-luna` through the OpenAI Responses API. The request uses medium reasoning and a strict structured schema. The app stores extracted action items and reminders separately from the Jev classification. An extraction failure does not discard a successful classification.
+The category request also asks Jev whether the message has a possible action item or reminder. If either answer is positive and `OPENAI_API_KEY` is set, the Vercel AI SDK sends the message to `gpt-6-luna` through the OpenAI Responses API. The request uses medium reasoning and a strict structured schema. The app stores extracted action items and reminders separately from the Jev classification. An extraction failure does not discard a successful classification.
 
 The SDK reads `TYPESAFE_API_KEY`.
 
@@ -47,7 +47,7 @@ Sources:
 - [TypeSafe JavaScript SDK](https://docs.typesafe.ai/sdk/javascript)
 - [Choice primitive](https://docs.typesafe.ai/primitives/choice)
 - [Jev models](https://docs.typesafe.ai/models)
-- [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+- [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)
 - [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
 - [AI SDK structured data](https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data)
 

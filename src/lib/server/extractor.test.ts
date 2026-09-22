@@ -7,7 +7,7 @@ describe('OpenAI email extraction', () => {
 		expect(createOpenAIEmailExtractor('')).toBeNull();
 	});
 
-	it('uses GPT-5.6 Luna with medium reasoning and returns only requested results', async () => {
+	it('uses GPT-6 Luna with medium reasoning and returns only requested results', async () => {
 		let request: Record<string, unknown> | undefined;
 		const generateMock = mock(async (options: Record<string, unknown>) => {
 			request = options;
@@ -16,7 +16,7 @@ describe('OpenAI email extraction', () => {
 					actionItems: [{ title: 'Reply to Alex', details: 'Confirm the plan.', dueAt: null }],
 					reminders: [{ title: 'Plan starts', details: null, remindAt: '2026-09-25' }]
 				},
-				response: { modelId: 'gpt-5.6-luna' }
+				response: { modelId: 'gpt-6-luna' }
 			} as never;
 		});
 		const generate = generateMock as unknown as typeof generateObject;
@@ -32,9 +32,9 @@ describe('OpenAI email extraction', () => {
 		expect(result).toEqual({
 			actionItems: [],
 			reminders: [{ title: 'Plan starts', details: null, remindAt: '2026-09-25' }],
-			model: 'gpt-5.6-luna'
+			model: 'gpt-6-luna'
 		});
-		expect((request?.model as { modelId: string }).modelId).toBe('gpt-5.6-luna');
+		expect((request?.model as { modelId: string }).modelId).toBe('gpt-6-luna');
 		expect(request?.maxRetries).toBe(0);
 		expect(request?.providerOptions).toEqual({ openai: { reasoningEffort: 'medium', serviceTier: 'flex' } });
 		expect(request?.schemaName).toBe('email_action_items_and_reminders');
@@ -58,7 +58,7 @@ describe('OpenAI email extraction', () => {
 			}
 			return {
 				object: { actionItems: [], reminders: [] },
-				response: { modelId: 'gpt-5.6-luna' }
+				response: { modelId: 'gpt-6-luna' }
 			} as never;
 		});
 		const extract = createOpenAIEmailExtractor('test-key', generateMock as unknown as typeof generateObject);

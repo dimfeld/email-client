@@ -50,7 +50,7 @@ export function createOpenAIEmailExtractor(
 
 	return async (email, targets) => {
 		const generateExtraction = (serviceTier: 'flex' | 'auto') => generate({
-			model: openai.responses('gpt-5.6-luna'),
+			model: openai.responses('gpt-6-luna'),
 			schema: extractionSchema,
 			schemaName: 'email_action_items_and_reminders',
 			maxRetries: 0,

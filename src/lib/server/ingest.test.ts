@@ -97,7 +97,7 @@ describe('Gmail ingestion', () => {
 			return {
 				actionItems: [{ title: 'Reply', details: 'Confirm attendance.', dueAt: '2026-09-21' }],
 				reminders: [{ title: 'Meeting', details: null, remindAt: '2026-09-22T09:00:00-10:00' }],
-				model: 'gpt-5.6-luna'
+				model: 'gpt-6-luna'
 			};
 		};
 
@@ -116,7 +116,7 @@ describe('Gmail ingestion', () => {
 		expect(listEmails(database)[0]).toMatchObject({
 			actionItems: [{ title: 'Reply', details: 'Confirm attendance.', dueAt: '2026-09-21' }],
 			reminders: [{ title: 'Meeting', details: null, remindAt: '2026-09-22T09:00:00-10:00' }],
-			extractionModel: 'gpt-5.6-luna',
+			extractionModel: 'gpt-6-luna',
 			extractionError: null
 		});
 	});
@@ -139,7 +139,7 @@ describe('Gmail ingestion', () => {
 		const result = await ingestGmailPayload(database, payload, countingClassifier, async () => ({
 			actionItems: [{ title: 'Reply', details: null, dueAt: null }],
 			reminders: [],
-			model: 'gpt-5.6-luna'
+			model: 'gpt-6-luna'
 		}));
 
 		expect(classifications).toBe(1);
@@ -163,7 +163,7 @@ describe('Gmail ingestion', () => {
 			}),
 			async () => {
 				extractions += 1;
-				return { actionItems: [], reminders: [], model: 'gpt-5.6-luna' };
+				return { actionItems: [], reminders: [], model: 'gpt-6-luna' };
 			}
 		);
 

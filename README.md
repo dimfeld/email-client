@@ -87,7 +87,7 @@ Open **Settings** from the mailbox to add, edit, or remove categories. Each cate
 
 Fixed levels apply to all messages in a category. For **Auto**, Jev makes a second decision for each message: Important, Useful, or Other. **Action needed** starts as Important; other default categories use Auto.
 
-Jev also checks each new message for possible action items and reminders. When either result is positive and `OPENAI_API_KEY` is set, the app uses GPT-5.6 Luna with medium reasoning and Structured Outputs to extract the relevant items. Classification still succeeds if the OpenAI key is absent or extraction fails. Messages classified without an OpenAI key remain pending and are extracted during the next sync or backfill after the key is available.
+Jev also checks each new message for possible action items and reminders. When either result is positive and `OPENAI_API_KEY` is set, the app uses GPT-6 Luna with medium reasoning and Structured Outputs to extract the relevant items. Classification still succeeds if the OpenAI key is absent or extraction fails. Messages classified without an OpenAI key remain pending and are extracted during the next sync or backfill after the key is available.
 
 **All important** shows messages with an effective level of Important. **Useful now** shows Important and Useful messages. Both views respect the selected account. Existing useful/not-useful results migrate to Useful/Other.
 
@@ -137,7 +137,7 @@ The index is created for existing mail when the app opens the database. Message 
 
 Select **Chat with email** in the inbox. Ask a question, then ask follow-up questions in the same panel. The selected account sets the search scope. Changing accounts starts a new conversation. **Stop** cancels a request; **New chat** clears the conversation.
 
-Set `OPENAI_API_KEY` to enable chat. It uses the existing GPT-5.6 Luna model by default; set `EMAIL_CHAT_MODEL` to use another Responses model that supports tools and structured output. When `TYPESAFE_API_KEY` is set, the model can ask Jev to check candidate relevance. Chat sends the question, conversation, and retrieved email content to these providers. Conversations remain in browser memory while the panel is open.
+Set `OPENAI_API_KEY` to enable chat. It uses the existing GPT-6 Luna model by default; set `EMAIL_CHAT_MODEL` to use another Responses model that supports tools and structured output. When `TYPESAFE_API_KEY` is set, the model can ask Jev to check candidate relevance. Chat sends the question, conversation, and retrieved email content to these providers. Conversations remain in browser memory while the panel is open.
 
 Chat can only search and read downloaded mail. Answers include links to messages read during the request. It cannot change messages or send calendar replies. Check the linked messages when you need to confirm a detail.
 
