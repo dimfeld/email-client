@@ -19,6 +19,85 @@ export class GoogleApiError extends Error {
 	}
 }
 
+const GMAIL_API_USAGE_WINDOW_MS = 60_000;
+const gmailQuotaUnitsByMethod: Record<string, number> = {
+	'getProfile': 1,
+	'history.list': 2,
+	'messages.list': 5,
+	'messages.get': 20,
+	'messages.modify': 5,
+	'messages.trash': 20,
+	'messages.attachments.get': 20,
+	'messages.send': 100,
+	'watch': 100
+};
+
+type GmailApiUsageCounts = { requests: number; estimatedQuotaUnits: number; unestimatedRequests: number };
+type GmailApiUsageState = {
+	windowStartedAt: number | null;
+	accounts: Map<string, Map<string, GmailApiUsageCounts>>;
+	timer: ReturnType<typeof setTimeout> | null;
+};
+
+const gmailUsageStateKey = Symbol.for('email-check.gmail-api-usage');
+const gmailUsageGlobal = globalThis as typeof globalThis & { [gmailUsageStateKey]?: GmailApiUsageState };
+const gmailUsageState = gmailUsageGlobal[gmailUsageStateKey] ??= {
+	windowStartedAt: null,
+	accounts: new Map(),
+	timer: null
+};
+
+function gmailApiMethod(url: string, httpMethod: string): string | null {
+	const parsed = new URL(url);
+	if (parsed.hostname !== 'gmail.googleapis.com') return null;
+	const path = parsed.pathname.match(/\/gmail\/v1\/users\/[^/]+\/(.*)$/)?.[1] ?? '';
+	if (path === 'profile' && httpMethod === 'GET') return 'getProfile';
+	if (path === 'history' && httpMethod === 'GET') return 'history.list';
+	if (path === 'watch' && httpMethod === 'POST') return 'watch';
+	if (path === 'messages' && httpMethod === 'GET') return 'messages.list';
+	if (path === 'messages/send' && httpMethod === 'POST') return 'messages.send';
+	if (/^messages\/[^/]+\/attachments\/[^/]+$/.test(path) && httpMethod === 'GET') return 'messages.attachments.get';
+	if (/^messages\/[^/]+\/modify$/.test(path) && httpMethod === 'POST') return 'messages.modify';
+	if (/^messages\/[^/]+\/trash$/.test(path) && httpMethod === 'POST') return 'messages.trash';
+	if (/^messages\/[^/]+$/.test(path) && httpMethod === 'GET') return 'messages.get';
+	return `${httpMethod} ${path.split('/').map((part, index) => index > 1 ? ':id' : part).join('/')}`;
+}
+
+function flushGmailApiUsage(): void {
+	const { windowStartedAt, accounts } = gmailUsageState;
+	if (windowStartedAt === null || accounts.size === 0) return;
+	const windowEndedAt = Date.now();
+	for (const [account, methods] of accounts) {
+		console.info('Gmail API usage window.', {
+			account,
+			windowStartedAt: new Date(windowStartedAt).toISOString(),
+			windowEndedAt: new Date(windowEndedAt).toISOString(),
+			methods: Object.fromEntries([...methods.entries()].sort(([a], [b]) => a.localeCompare(b)))
+		});
+	}
+	gmailUsageState.accounts.clear();
+	gmailUsageState.windowStartedAt = null;
+	gmailUsageState.timer = null;
+}
+
+function recordGmailApiUsage(account: string, method: string): number | undefined {
+	const now = Date.now();
+	if (gmailUsageState.windowStartedAt === null) {
+		gmailUsageState.windowStartedAt = now;
+		gmailUsageState.timer = setTimeout(flushGmailApiUsage, GMAIL_API_USAGE_WINDOW_MS);
+		gmailUsageState.timer.unref?.();
+	}
+	let methods = gmailUsageState.accounts.get(account);
+	if (!methods) gmailUsageState.accounts.set(account, methods = new Map());
+	let counts = methods.get(method);
+	if (!counts) methods.set(method, counts = { requests: 0, estimatedQuotaUnits: 0, unestimatedRequests: 0 });
+	const quotaUnits = gmailQuotaUnitsByMethod[method];
+	counts.requests += 1;
+	if (quotaUnits === undefined) counts.unestimatedRequests += 1;
+	else counts.estimatedQuotaUnits += quotaUnits;
+	return quotaUnits;
+}
+
 export function isGoogleRateLimitError(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : String(error);
 	return (error instanceof GoogleApiError && error.status === 429) || /(?:\b429\b|rate[\s_-]*limit|too many requests|quota(?:[\s_-]*exceeded)?|resource[\s_-]*exhausted|userRateLimitExceeded|rateLimitExceeded|dailyLimitExceeded|quotaExceeded)/i.test(message);
@@ -125,13 +204,25 @@ export async function googleApiRequest<T>(
 	options: { method?: string; params?: Record<string, string | number | boolean | undefined>; data?: unknown; headers?: Record<string, string> } = {}
 ): Promise<T> {
 	if (!account.refreshToken) throw new Error(`${account.email} is not connected to Google OAuth.`);
+	const httpMethod = (options.method ?? 'GET').toUpperCase();
+	const apiMethod = gmailApiMethod(url, httpMethod);
+	const estimatedQuotaUnits = apiMethod ? recordGmailApiUsage(account.email, apiMethod) : undefined;
 	const client = createGoogleOAuthClient();
 	client.setCredentials({ refresh_token: account.refreshToken });
 	try {
-		const response = await client.request<T>({ url, method: options.method, params: options.params, data: options.data, headers: options.headers });
+		const response = await client.request<T>({ url, method: httpMethod, params: options.params, data: options.data, headers: options.headers });
 		return response.data;
 	} catch (error) {
 		const details = messageFromError(error);
+		if (apiMethod && (isGoogleRateLimitError(error) || /quota|rate.?limit|too many requests/i.test(details.message))) {
+			console.warn('Gmail API request was rate limited.', {
+				account: account.email,
+				method: apiMethod,
+				httpMethod,
+				status: details.status,
+				estimatedQuotaUnits: estimatedQuotaUnits ?? null
+			});
+		}
 		const headers = (error as { response?: { headers?: { get?: (name: string) => string | null } } }).response?.headers;
 		const retryAfter = headers?.get?.('retry-after');
 		const retryAfterMs = retryAfter ? (/^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now())) : undefined;
