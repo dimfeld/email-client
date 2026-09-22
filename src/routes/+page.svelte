@@ -156,10 +156,10 @@
     updateMailboxUrl({ category: filter, message: null });
   }
 
-  function resizeHtmlMessage(event: Event) {
-    const frame = event.currentTarget as HTMLIFrameElement;
+  function fitMessageFrame(frame: HTMLIFrameElement, reset: boolean) {
     try {
-      frame.style.height = '0px';
+      // A reset lets the frame shrink. Later fits only follow content growth, such as images.
+      if (reset) frame.style.height = '0px';
       const document = frame.contentDocument;
       if (document) frame.style.height = `${document.documentElement.scrollHeight}px`;
     } catch {
@@ -262,12 +262,24 @@
     }
   }
 
-  function handleMessageFrameLoad(event: Event) {
-    resizeHtmlMessage(event);
-    const document = (event.currentTarget as HTMLIFrameElement).contentDocument;
-    document?.addEventListener('keydown', handleKeydown);
-    document?.addEventListener('click', handleMessageLinkClick);
-    document?.addEventListener('auxclick', handleMessageLinkClick);
+  function messageFrame(frame: HTMLIFrameElement) {
+    let observer: ResizeObserver | undefined;
+    function load() {
+      observer?.disconnect();
+      fitMessageFrame(frame, true);
+      const document = frame.contentDocument;
+      if (!document) return;
+      observer = new ResizeObserver(() => fitMessageFrame(frame, false));
+      observer.observe(document.body ?? document.documentElement);
+      document.addEventListener('keydown', handleKeydown);
+      document.addEventListener('click', handleMessageLinkClick);
+      document.addEventListener('auxclick', handleMessageLinkClick);
+    }
+    frame.addEventListener('load', load);
+    return () => {
+      frame.removeEventListener('load', load);
+      observer?.disconnect();
+    };
   }
 
   async function handleKeydown(event: KeyboardEvent) {
@@ -741,7 +753,7 @@
                 sandbox="allow-same-origin"
                 referrerpolicy="no-referrer"
                 srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesAllowed)}
-                onload={handleMessageFrameLoad}
+                {@attach messageFrame}
               ></iframe>
             {:else}
               <div class="message-body">
