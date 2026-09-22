@@ -8,27 +8,41 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { tick } from 'svelte';
 	import { effectiveImportance } from '$lib/categories';
+	import { dateKeyFromDate, isDateKey } from '$lib/calendar';
 	import { buildEmailDocument, hasRemoteImages } from '$lib/email-html';
-	import type { ActionData, PageData } from './$types';
-	import type { StoredEmail } from '$lib/server/types';
+	import { getMailAccounts, getMailCalendars, getMailCategories, getMailEvents, getMailList, getSelectedMessage } from './mail.remote';
+	import type { ActionData } from './$types';
+	import type { EmailSummary, StoredEmail } from '$lib/server/types';
 
-	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let { form }: { form: ActionData } = $props();
+	let currentUrl = $derived(page.url.href);
+	let requestedAccount = $derived(new URL(currentUrl).searchParams.get('account'));
+	let accounts = $derived(await getMailAccounts());
+	let selectedAccount = $derived(accounts.some((account) => account.email === requestedAccount) ? requestedAccount : null);
+	let search = $derived(new URL(currentUrl).searchParams.get('q')?.trim() ?? '');
+	let requestedDay = $derived(new URL(currentUrl).searchParams.get('day'));
+	let calendarDay = $derived(isDateKey(requestedDay) ? requestedDay : dateKeyFromDate(new Date()));
+	let selectedId = $derived.by(() => {
+		const requested = new URL(currentUrl).searchParams.get('message');
+		const id = requested ? Number(requested) : NaN;
+		return Number.isInteger(id) && id > 0 ? id : null;
+	});
+	let categories = $derived(await getMailCategories());
+	let calendars = $derived(await getMailCalendars());
+	let calendarEvents = $derived(await getMailEvents({ account: selectedAccount, day: calendarDay }));
+	let mailList = $derived(await getMailList({ account: selectedAccount, search }));
+	let selectedMessage = $derived(selectedId === null ? null : await getSelectedMessage({ account: selectedAccount, id: selectedId }));
+	let data = $derived({ accounts, categories, calendars, calendarEvents, calendarDay, selectedAccount, query: search, ...mailList });
 
 	type Filter = string;
 	let labels = $derived(Object.fromEntries(data.categories.map((category) => [category.id, category.name])));
 	let categoryLevels = $derived(new Map(data.categories.map((category) => [category.id, category.level])));
-	let currentUrl = $derived(page.url.href);
-	function importance(email: StoredEmail) {
+	function importance(email: EmailSummary | StoredEmail) {
 		return effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance);
 	}
 	let activeFilter = $derived.by(() => {
 		const requested = new URL(currentUrl).searchParams.get('category') ?? 'all';
 		return filters.some((filter) => filter.category === requested) ? requested : 'all';
-	});
-	let selectedId = $derived.by(() => {
-		const requested = new URL(currentUrl).searchParams.get('message');
-		const id = requested ? Number(requested) : NaN;
-		return Number.isInteger(id) && id > 0 ? id : null;
 	});
 	let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
 	let showChat = $state(false);
@@ -58,7 +72,7 @@
 	}));
 	let selectedEmail = $derived(selectedId === null
 		? null
-		: data.selectedMessage ?? null);
+		: selectedMessage);
 	let filterLabel = $derived(filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail');
 
 	function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
@@ -200,9 +214,10 @@
 	}
 
 	const submitMessageAction: SubmitFunction = () => async ({ result, update }) => {
-		await update();
+		await update({ invalidateAll: false });
 		if (result.type === 'success') {
 			updateMailboxUrl({ message: null });
+			await getMailList({ account: selectedAccount, search }).refresh();
 		}
 	};
 
@@ -261,7 +276,7 @@
 					<button class="message" class:unread={email.labels.includes('UNREAD')} class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => updateMailboxUrl({ message: email.id })}>
 						<span class="sender-avatar" aria-hidden="true">{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span>
 						<strong class="sender" title={email.fromAddress}>{senderName(email.fromAddress)}</strong>
-						<span class="message-line"><span class="subject">{email.subject || '(No subject)'}</span><span class="preview"> — {email.snippet || email.bodyText || 'No preview text.'}</span></span>
+						<span class="message-line"><span class="subject">{email.subject || '(No subject)'}</span><span class="preview"> — {email.snippet || 'No preview text.'}</span></span>
 						<span class="category-tag">{email.category ? labels[email.category] : 'Pending'}</span>
 						{#if importance(email) === 'important'}<span class="star" aria-label="Important">★</span>{:else}<span></span>{/if}
 						<time title={email.accountEmail}>{formatDate(email.messageDate)}</time>

@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { isDateKey } from '$lib/calendar';
-import { emailFromRow } from './db';
+import { emailFromRow, emailSummaryColumns, emailSummaryFromRow } from './db';
+import type { EmailSummary, StoredEmail } from './types';
 
 export class SearchQueryError extends Error {}
 
@@ -64,7 +65,7 @@ export function parseSearchQuery(query: string) {
 	return { match: terms.join(' AND '), filters, empty: tokens.length > 0 && terms.length === 0 && filters.length === 0 };
 }
 
-export function searchEmails(database: DatabaseSync, query: string, account?: string, page?: { offset: number; limit: number }) {
+function searchEmailRows(database: DatabaseSync, query: string, account?: string, page?: { offset: number; limit: number }, summary = false) {
 	const parsed = parseSearchQuery(query);
 	if (parsed.empty) return [];
 	const where = ['e.deleted_at IS NULL'];
@@ -80,7 +81,14 @@ export function searchEmails(database: DatabaseSync, query: string, account?: st
 	}
 	const pagination = page ? ' LIMIT ? OFFSET ?' : '';
 	if (page) params.push(page.limit, page.offset);
-	const rows = database.prepare(`SELECT e.* FROM emails e ${parsed.match ? 'JOIN email_fts ON email_fts.rowid = e.id' : ''}
+	return database.prepare(`SELECT ${summary ? emailSummaryColumns : 'e.*'} FROM emails e ${parsed.match ? 'JOIN email_fts ON email_fts.rowid = e.id' : ''}
 		WHERE ${where.join(' AND ')} ORDER BY ${parsed.match ? 'bm25(email_fts), ' : ''}email_search_date(e.message_date) DESC, e.id DESC${pagination}`).all(...params);
-	return rows.map(emailFromRow);
+}
+
+export function searchEmails(database: DatabaseSync, query: string, account?: string, page?: { offset: number; limit: number }): StoredEmail[] {
+	return searchEmailRows(database, query, account, page).map(emailFromRow);
+}
+
+export function searchEmailSummaries(database: DatabaseSync, query: string, account?: string): EmailSummary[] {
+	return searchEmailRows(database, query, account, undefined, true).map(emailSummaryFromRow);
 }

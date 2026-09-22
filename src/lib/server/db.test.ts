@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { applyCalendarEventsIncrementalSync, applyCalendarListIncrementalSync, createDatabase, getGoogleSyncState, listAccounts, listCalendarEventsBetween, listEmails, upsertAccount, upsertEmails } from './db';
+import { applyCalendarEventsIncrementalSync, applyCalendarListIncrementalSync, createDatabase, getEmail, getGoogleSyncState, listAccounts, listCalendarEventsBetween, listEmailSummaries, listEmails, upsertAccount, upsertEmails } from './db';
 
 let database: DatabaseSync | undefined;
 let directory: string | undefined;
@@ -16,6 +16,15 @@ afterEach(() => {
 });
 
 describe('email body storage', () => {
+	it('returns small inbox summaries and loads the body for one selected message', () => {
+		database = createDatabase(':memory:');
+		upsertEmails(database, 'one@example.com', [{ id: 'message', subject: 'Hello', snippet: 'Preview', bodyText: 'Private body', bodyHtml: '<p>Private body</p>' }]);
+		const [summary] = listEmailSummaries(database);
+		expect(summary).toMatchObject({ subject: 'Hello', snippet: 'Preview' });
+		expect(summary).not.toHaveProperty('bodyText');
+		expect(summary).not.toHaveProperty('bodyHtml');
+		expect(getEmail(database, summary.id)?.bodyHtml).toBe('<p>Private body</p>');
+	});
 	it('stores plain text and HTML separately', () => {
 		database = createDatabase(':memory:');
 		upsertEmails(database, 'one@example.com', [{

@@ -89,6 +89,10 @@ export type StoredEmail = {
 	deletedAt: string | null;
 };
 
+export type EmailSummary = Pick<StoredEmail,
+	'id' | 'accountEmail' | 'fromAddress' | 'subject' | 'messageDate' | 'snippet' | 'labels' | 'category' | 'importance'
+>;
+
 export type SyncedContact = {
 	accountEmail: string;
 	resourceName: string;

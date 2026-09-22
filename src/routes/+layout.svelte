@@ -3,11 +3,11 @@
 	import type { LayoutData } from './$types';
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
-	import { afterNavigate, beforeNavigate, invalidate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, refreshAll } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { createStateRefresh } from '$lib/state-refresh';
 
-	const refresh = createStateRefresh(() => invalidate('app:state'));
+	const refresh = createStateRefresh(() => refreshAll());
 	// A refresh of the old URL can cancel an active SvelteKit navigation.
 	beforeNavigate(() => refresh.pause());
 	afterNavigate(() => refresh.resume());

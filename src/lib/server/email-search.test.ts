@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDatabase, getEmail, markArchived, markDeleted, upsertEmails } from './db';
-import { searchEmails } from './email-search';
+import { searchEmailSummaries, searchEmails } from './email-search';
 
 const directory = mkdtempSync(join(tmpdir(), 'mail-search-'));
 let database = createDatabase(':memory:');
@@ -25,6 +25,8 @@ test('uses BM25 rank, preserves account scope, and searches archived mail', () =
 	const matches = searchEmails(database, 'kiwi', 'a@test.com');
 	expect(matches.map(x => x.gmailId)).toEqual(['a', 'b']);
 	expect(getEmail(database, matches[0].id, 'b@test.com')).toBeNull();
+	expect(searchEmailSummaries(database, 'kiwi', 'a@test.com').map(x => x.id)).toEqual(matches.map(x => x.id));
+	expect(searchEmailSummaries(database, 'kiwi', 'a@test.com')[0]).not.toHaveProperty('bodyText');
 });
 
 test('matches addresses and domains exactly and accepts RFC email dates', () => {

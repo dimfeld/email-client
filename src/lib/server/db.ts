@@ -6,6 +6,7 @@ import type {
 	Category,
 	Classification,
 	EmailExtraction,
+	EmailSummary,
 	IncomingEmail,
 	StoredEmail,
 	SyncedCalendar,
@@ -1392,6 +1393,31 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 	>;
 
 	return rows.map(emailFromRow);
+}
+
+export const emailSummaryColumns = `e.id, e.account_email, e.from_address, e.subject,
+	e.message_date, e.snippet, e.labels_json, e.category, e.importance`;
+
+export function emailSummaryFromRow(row: Record<string, unknown>): EmailSummary {
+	return {
+		id: Number(row.id),
+		accountEmail: String(row.account_email),
+		fromAddress: String(row.from_address),
+		subject: String(row.subject),
+		messageDate: row.message_date === null ? null : String(row.message_date),
+		snippet: String(row.snippet),
+		labels: JSON.parse(String(row.labels_json)) as string[],
+		category: row.category as EmailSummary['category'],
+		importance: row.importance as EmailSummary['importance']
+	};
+}
+
+export function listEmailSummaries(database: DatabaseSync, account?: string): EmailSummary[] {
+	const rows = database.prepare(`SELECT ${emailSummaryColumns} FROM emails e
+		WHERE e.deleted_at IS NULL AND e.archived_at IS NULL${account ? ' AND e.account_email = ?' : ''}
+		ORDER BY e.message_date DESC, e.first_seen_at DESC`)
+		.all(...(account ? [account] : []));
+	return rows.map(emailSummaryFromRow);
 }
 
 export function getEmail(database: DatabaseSync, id: number, account?: string): StoredEmail | null {
