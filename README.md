@@ -52,11 +52,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run watch:renew
    ```
 
-7. Import existing email. You select the import scope with a Gmail query. The command downloads all matches for that query.
-
-   ```sh
-   bun run sync -- --account you@example.com --query "newer_than:30d"
-   ```
+7. Optional: import existing email from **Settings → Historical email import**. Choose an account and, if needed, enter a Gmail query or date range. Leave these fields empty to import all mail from before the task starts. The import runs in the background and resumes after a server restart.
 
 8. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
