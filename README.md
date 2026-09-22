@@ -58,14 +58,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run sync -- --account you@example.com --query "newer_than:30d"
    ```
 
-8. Sync the Google address book, calendar list, and calendar events for all enabled accounts. Add `--account` to sync only one account.
-
-   ```sh
-   bun run sync:google
-   bun run sync:google -- --account you@example.com
-   ```
-
-9. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
+8. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
