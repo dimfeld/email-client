@@ -91,3 +91,11 @@ textarea {
   justify-content: center;
   gap: 0.35em;
 }
+
+/* Touch screens get 44px hit areas on icon-only controls. The icon keeps its size. */
+@media (pointer: coarse) {
+  :where(button, a):where(:has(> .icon:only-child)) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
