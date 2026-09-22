@@ -267,6 +267,7 @@
     function load() {
       observer?.disconnect();
       fitMessageFrame(frame, true);
+      frame.dataset.loaded = '';
       const document = frame.contentDocument;
       if (!document) return;
       observer = new ResizeObserver(() => fitMessageFrame(frame, false));
@@ -747,14 +748,16 @@
               {/if}
             </div>
             {#if selectedEmail.bodyHtml}
-              <iframe
-                class="html-message"
-                title="Email message content"
-                sandbox="allow-same-origin"
-                referrerpolicy="no-referrer"
-                srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesAllowed)}
-                {@attach messageFrame}
-              ></iframe>
+              <div class="message-paper">
+                <iframe
+                  class="html-message"
+                  title="Email message content"
+                  sandbox="allow-same-origin"
+                  referrerpolicy="no-referrer"
+                  srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesAllowed)}
+                  {@attach messageFrame}
+                ></iframe>
+              </div>
             {:else}
               <div class="message-body">
                 {selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}
@@ -1271,14 +1274,29 @@
     font-size: 0.92rem;
     color: var(--color-text);
   }
+  .message-paper {
+    margin-top: 28px;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background: var(--color-paper);
+  }
   .html-message {
     display: block;
     width: 100%;
     height: 60dvh;
-    margin-top: 28px;
     border: 0;
-    background: white;
+    background: var(--color-paper);
     color-scheme: light;
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+  .html-message:global([data-loaded]) {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .html-message {
+      transition: none;
+    }
   }
   .notice {
     margin-top: 20px;
