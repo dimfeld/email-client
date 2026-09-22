@@ -355,7 +355,7 @@
       <input
         name="q"
         aria-label="Search email"
-        placeholder="Search email · "exact phrase" · from:example.com"
+        placeholder={'Search email · "exact phrase" · from:example.com'}
         value={data.query}
       />
       <button type="submit" aria-label="Search">⌕</button>
