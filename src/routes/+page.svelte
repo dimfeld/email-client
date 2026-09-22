@@ -426,21 +426,18 @@
         >{/if}
     </form>
     <button
-      class="chat-button"
+      class="compose-button"
       onclick={() => openComposer({ mode: 'new', account: data.selectedAccount ?? undefined })}
       >Compose</button
     >
-    <button class="drafts-button" onclick={() => window.dispatchEvent(new Event('email:drafts'))}
+    <button class="text-button" onclick={() => window.dispatchEvent(new Event('email:drafts'))}
       >Drafts</button
     >
-    <button class="chat-button" onclick={() => (showChat = !showChat)}>Chat with email</button>
-    <nav class="app-links" aria-label="Application">
-      <a href="/contacts">Contacts</a><a href="/calendar">Calendar</a><a href="/settings"
-        >Settings</a
-      >
-    </nav>
+    <button class="text-button" aria-pressed={showChat} onclick={() => (showChat = !showChat)}
+      >Chat</button
+    >
     <button
-      class="shortcuts-button"
+      class="text-button shortcuts-button"
       type="button"
       onclick={() => {
         showShortcuts = true;
@@ -462,10 +459,13 @@
         {/each}
       </select>
     </form>
+    <a class="settings-link" href="/settings" aria-label="Settings" title="Settings"
+      ><Icon name="settings" size="1.25rem" /></a
+    >
   </header>
 
   <div class="mailbox" class:show-detail={mobileDetail} class:show-categories={showCategories}>
-    <nav class="sidebar" aria-label="Mail categories">
+    <nav class="sidebar" aria-label="Mailbox">
       <p class="eyebrow">MAILBOX</p>
       {#each filters as filter}
         <button
@@ -477,6 +477,10 @@
           <span class="filter-label">{filter.label}</span><span class="count">{filter.count}</span>
         </button>
       {/each}
+      <p class="eyebrow app-heading">APPS</p>
+      <a class="filter" href="/calendar">Calendar</a>
+      <a class="filter" href="/contacts">Contacts</a>
+      <a class="filter" href="/settings">Settings</a>
     </nav>
 
     <section class="list-pane" aria-label="Message list">
@@ -908,14 +912,44 @@
     letter-spacing: -0.035em;
     white-space: nowrap;
   }
-  .app-links {
+  .compose-button {
     margin-left: auto;
-    display: flex;
-    gap: 16px;
+    border: 0;
+    border-radius: var(--radius-md);
+    padding: 8px 14px;
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+    font-size: var(--text-sm);
+    font-weight: 650;
+    white-space: nowrap;
   }
-  .app-links a {
+  .compose-button:hover {
+    background: var(--color-accent-hover);
+  }
+  .text-button {
+    border: 0;
+    border-radius: var(--radius-md);
+    padding: 8px;
+    background: none;
     color: var(--color-accent);
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
+    white-space: nowrap;
+  }
+  .text-button:hover,
+  .text-button[aria-pressed='true'] {
+    background: var(--color-accent-bg-subtle);
+  }
+  .settings-link {
+    padding: 8px;
+    color: var(--color-text-muted);
+  }
+  .settings-link:hover {
+    color: var(--color-text);
+  }
+  .app-heading {
+    margin-top: 24px;
+  }
+  a.filter {
     text-decoration: none;
   }
   .account-picker {
@@ -924,22 +958,12 @@
     gap: 12px;
     min-width: 0;
   }
+  .account-picker select {
+    max-width: 220px;
+  }
   .account-picker label {
     color: var(--color-text-muted);
     font-size: 0.8rem;
-  }
-  .drafts-button {
-    background: none;
-    border: 0;
-    color: var(--color-accent);
-    font-size: 0.8rem;
-  }
-  .shortcuts-button {
-    border: 0;
-    background: transparent;
-    color: var(--color-accent);
-    font-size: 0.8rem;
-    cursor: pointer;
   }
   kbd {
     display: inline-block;
@@ -960,6 +984,7 @@
     padding: 8px 12px;
     background: var(--color-surface);
     color: var(--color-text);
+    font-size: var(--text-sm);
   }
   .mailbox {
     flex: 1;
@@ -1113,6 +1138,7 @@
   }
   time {
     text-align: right;
+    white-space: nowrap;
     font-size: var(--text-xs);
   }
   .mail-tabs {
@@ -1473,21 +1499,12 @@
     color: var(--color-accent);
     font-size: 0.8rem;
   }
-  .chat-button {
-    background: var(--color-accent-bg-subtle);
-    color: var(--color-accent-text);
-    border: 0;
-    border-radius: var(--radius-md);
-    padding: 8px;
-    font-size: 0.75rem;
-    white-space: nowrap;
-  }
   .search-form {
     display: flex;
     align-items: center;
     flex: 1;
+    min-width: 180px;
     max-width: 560px;
-    margin-left: auto;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-md);
   }
@@ -1531,6 +1548,10 @@
     }
   }
   @media (max-width: 1100px) {
+    .account-picker label,
+    .shortcuts-button {
+      display: none;
+    }
     .mailbox > :global(aside) {
       display: none;
     }

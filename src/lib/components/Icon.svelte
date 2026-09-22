@@ -11,6 +11,8 @@
     'chevron-left': 'M15 6l-6 6 6 6',
     'chevron-right': 'M9 6l6 6-6 6',
     'arrow-left': 'M19 12H5M11 6l-6 6 6 6',
+    settings:
+      'M20 7h-9M14 17H5M17 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
     today: 'M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0',
   } as const;
   export type IconName = keyof typeof paths;
