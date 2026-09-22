@@ -4,8 +4,10 @@ import { readFlag } from './shared';
 
 const results = await syncConfiguredGoogleAccounts(getDatabase(), readFlag('--account'));
 for (const { account, result } of results) {
-	console.log(result.deferred
-		? `Google rate limit reached for ${account}; the next sync will resume from the last completed page.`
-		: `Fetched ${result.contacts} contact(s), ${result.calendars} calendar(s), and ${result.events} event(s) for ${account}.`);
+  console.log(
+    result.deferred
+      ? `Google rate limit reached for ${account}; the next sync will resume from the last completed page.`
+      : `Fetched ${result.contacts} contact(s), ${result.calendars} calendar(s), and ${result.events} event(s) for ${account}.`
+  );
 }
 if (results.length === 0) console.log('No enabled Google OAuth accounts are configured.');

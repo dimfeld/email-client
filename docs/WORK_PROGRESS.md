@@ -62,11 +62,11 @@ Use the existing project structure. Add tests that prove search correctness, cha
 
 ## Feature commits
 
-| Item | Commit |
-| --- | --- |
-| Mail UI | `5661b170` |
-| BM25 search | `9901a12a` |
-| Email chat | `88a820f9` |
-| Calendar invitation replies | `6a34f9b3` |
-| Historical email import | `88bdc374` |
+| Item                                   | Commit     |
+| -------------------------------------- | ---------- |
+| Mail UI                                | `5661b170` |
+| BM25 search                            | `9901a12a` |
+| Email chat                             | `88a820f9` |
+| Calendar invitation replies            | `6a34f9b3` |
+| Historical email import                | `88bdc374` |
 | Popup composer and 10-second Undo Send | `ed0d9292` |

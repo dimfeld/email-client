@@ -3,302 +3,409 @@ import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import type { IncomingEmail } from './types';
 
 export const GOOGLE_OAUTH_SCOPES = [
-	'https://www.googleapis.com/auth/gmail.modify',
-	'https://www.googleapis.com/auth/contacts.readonly',
-	'https://www.googleapis.com/auth/contacts.other.readonly',
-	'https://www.googleapis.com/auth/calendar.readonly',
-	'https://www.googleapis.com/auth/calendar.events',
-	'https://www.googleapis.com/auth/userinfo.email'
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/contacts.other.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/userinfo.email',
 ];
 
 export type GoogleAccount = { email: string; refreshToken: string | null };
 
 export class GoogleApiError extends Error {
-	constructor(message: string, readonly status: number | undefined, readonly retryAfterMs?: number) {
-		super(message);
-	}
+  constructor(
+    message: string,
+    readonly status: number | undefined,
+    readonly retryAfterMs?: number
+  ) {
+    super(message);
+  }
 }
 
 const GMAIL_API_USAGE_WINDOW_MS = 60_000;
 const gmailQuotaUnitsByMethod: Record<string, number> = {
-	'getProfile': 1,
-	'history.list': 2,
-	'messages.list': 5,
-	'messages.get': 20,
-	'messages.modify': 5,
-	'messages.trash': 20,
-	'messages.attachments.get': 20,
-	'messages.send': 100,
-	'watch': 100
+  getProfile: 1,
+  'history.list': 2,
+  'messages.list': 5,
+  'messages.get': 20,
+  'messages.modify': 5,
+  'messages.trash': 20,
+  'messages.attachments.get': 20,
+  'messages.send': 100,
+  watch: 100,
 };
 
-type GmailApiUsageCounts = { requests: number; estimatedQuotaUnits: number; unestimatedRequests: number };
+type GmailApiUsageCounts = {
+  requests: number;
+  estimatedQuotaUnits: number;
+  unestimatedRequests: number;
+};
 type GmailApiUsageState = {
-	windowStartedAt: number | null;
-	accounts: Map<string, Map<string, GmailApiUsageCounts>>;
-	timer: ReturnType<typeof setTimeout> | null;
+  windowStartedAt: number | null;
+  accounts: Map<string, Map<string, GmailApiUsageCounts>>;
+  timer: ReturnType<typeof setTimeout> | null;
 };
 
 const gmailUsageStateKey = Symbol.for('email-check.gmail-api-usage');
-const gmailUsageGlobal = globalThis as typeof globalThis & { [gmailUsageStateKey]?: GmailApiUsageState };
-const gmailUsageState = gmailUsageGlobal[gmailUsageStateKey] ??= {
-	windowStartedAt: null,
-	accounts: new Map(),
-	timer: null
+const gmailUsageGlobal = globalThis as typeof globalThis & {
+  [gmailUsageStateKey]?: GmailApiUsageState;
 };
+const gmailUsageState = (gmailUsageGlobal[gmailUsageStateKey] ??= {
+  windowStartedAt: null,
+  accounts: new Map(),
+  timer: null,
+});
 
 function gmailApiMethod(url: string, httpMethod: string): string | null {
-	const parsed = new URL(url);
-	if (parsed.hostname !== 'gmail.googleapis.com') return null;
-	const path = parsed.pathname.match(/\/gmail\/v1\/users\/[^/]+\/(.*)$/)?.[1] ?? '';
-	if (path === 'profile' && httpMethod === 'GET') return 'getProfile';
-	if (path === 'history' && httpMethod === 'GET') return 'history.list';
-	if (path === 'watch' && httpMethod === 'POST') return 'watch';
-	if (path === 'messages' && httpMethod === 'GET') return 'messages.list';
-	if (path === 'messages/send' && httpMethod === 'POST') return 'messages.send';
-	if (/^messages\/[^/]+\/attachments\/[^/]+$/.test(path) && httpMethod === 'GET') return 'messages.attachments.get';
-	if (/^messages\/[^/]+\/modify$/.test(path) && httpMethod === 'POST') return 'messages.modify';
-	if (/^messages\/[^/]+\/trash$/.test(path) && httpMethod === 'POST') return 'messages.trash';
-	if (/^messages\/[^/]+$/.test(path) && httpMethod === 'GET') return 'messages.get';
-	return `${httpMethod} ${path.split('/').map((part, index) => index > 1 ? ':id' : part).join('/')}`;
+  const parsed = new URL(url);
+  if (parsed.hostname !== 'gmail.googleapis.com') return null;
+  const path = parsed.pathname.match(/\/gmail\/v1\/users\/[^/]+\/(.*)$/)?.[1] ?? '';
+  if (path === 'profile' && httpMethod === 'GET') return 'getProfile';
+  if (path === 'history' && httpMethod === 'GET') return 'history.list';
+  if (path === 'watch' && httpMethod === 'POST') return 'watch';
+  if (path === 'messages' && httpMethod === 'GET') return 'messages.list';
+  if (path === 'messages/send' && httpMethod === 'POST') return 'messages.send';
+  if (/^messages\/[^/]+\/attachments\/[^/]+$/.test(path) && httpMethod === 'GET')
+    return 'messages.attachments.get';
+  if (/^messages\/[^/]+\/modify$/.test(path) && httpMethod === 'POST') return 'messages.modify';
+  if (/^messages\/[^/]+\/trash$/.test(path) && httpMethod === 'POST') return 'messages.trash';
+  if (/^messages\/[^/]+$/.test(path) && httpMethod === 'GET') return 'messages.get';
+  return `${httpMethod} ${path
+    .split('/')
+    .map((part, index) => (index > 1 ? ':id' : part))
+    .join('/')}`;
 }
 
 function flushGmailApiUsage(): void {
-	const { windowStartedAt, accounts } = gmailUsageState;
-	if (windowStartedAt === null || accounts.size === 0) return;
-	const windowEndedAt = Date.now();
-	for (const [account, methods] of accounts) {
-		console.info('Gmail API usage window.', {
-			account,
-			windowStartedAt: new Date(windowStartedAt).toISOString(),
-			windowEndedAt: new Date(windowEndedAt).toISOString(),
-			methods: Object.fromEntries([...methods.entries()].sort(([a], [b]) => a.localeCompare(b)))
-		});
-	}
-	gmailUsageState.accounts.clear();
-	gmailUsageState.windowStartedAt = null;
-	gmailUsageState.timer = null;
+  const { windowStartedAt, accounts } = gmailUsageState;
+  if (windowStartedAt === null || accounts.size === 0) return;
+  const windowEndedAt = Date.now();
+  for (const [account, methods] of accounts) {
+    console.info('Gmail API usage window.', {
+      account,
+      windowStartedAt: new Date(windowStartedAt).toISOString(),
+      windowEndedAt: new Date(windowEndedAt).toISOString(),
+      methods: Object.fromEntries([...methods.entries()].sort(([a], [b]) => a.localeCompare(b))),
+    });
+  }
+  gmailUsageState.accounts.clear();
+  gmailUsageState.windowStartedAt = null;
+  gmailUsageState.timer = null;
 }
 
 function recordGmailApiUsage(account: string, method: string): number | undefined {
-	const now = Date.now();
-	if (gmailUsageState.windowStartedAt === null) {
-		gmailUsageState.windowStartedAt = now;
-		gmailUsageState.timer = setTimeout(flushGmailApiUsage, GMAIL_API_USAGE_WINDOW_MS);
-		gmailUsageState.timer.unref?.();
-	}
-	let methods = gmailUsageState.accounts.get(account);
-	if (!methods) gmailUsageState.accounts.set(account, methods = new Map());
-	let counts = methods.get(method);
-	if (!counts) methods.set(method, counts = { requests: 0, estimatedQuotaUnits: 0, unestimatedRequests: 0 });
-	const quotaUnits = gmailQuotaUnitsByMethod[method];
-	counts.requests += 1;
-	if (quotaUnits === undefined) counts.unestimatedRequests += 1;
-	else counts.estimatedQuotaUnits += quotaUnits;
-	return quotaUnits;
+  const now = Date.now();
+  if (gmailUsageState.windowStartedAt === null) {
+    gmailUsageState.windowStartedAt = now;
+    gmailUsageState.timer = setTimeout(flushGmailApiUsage, GMAIL_API_USAGE_WINDOW_MS);
+    gmailUsageState.timer.unref?.();
+  }
+  let methods = gmailUsageState.accounts.get(account);
+  if (!methods) gmailUsageState.accounts.set(account, (methods = new Map()));
+  let counts = methods.get(method);
+  if (!counts)
+    methods.set(method, (counts = { requests: 0, estimatedQuotaUnits: 0, unestimatedRequests: 0 }));
+  const quotaUnits = gmailQuotaUnitsByMethod[method];
+  counts.requests += 1;
+  if (quotaUnits === undefined) counts.unestimatedRequests += 1;
+  else counts.estimatedQuotaUnits += quotaUnits;
+  return quotaUnits;
 }
 
 export function isGoogleRateLimitError(error: unknown): boolean {
-	const message = error instanceof Error ? error.message : String(error);
-	return (error instanceof GoogleApiError && error.status === 429) || /(?:\b429\b|rate[\s_-]*limit|too many requests|quota(?:[\s_-]*exceeded)?|resource[\s_-]*exhausted|userRateLimitExceeded|rateLimitExceeded|dailyLimitExceeded|quotaExceeded)/i.test(message);
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    (error instanceof GoogleApiError && error.status === 429) ||
+    /(?:\b429\b|rate[\s_-]*limit|too many requests|quota(?:[\s_-]*exceeded)?|resource[\s_-]*exhausted|userRateLimitExceeded|rateLimitExceeded|dailyLimitExceeded|quotaExceeded)/i.test(
+      message
+    )
+  );
 }
 
 type OAuthClientCredentials = {
-	client_id?: unknown;
-	client_secret?: unknown;
-	auth_uri?: unknown;
-	token_uri?: unknown;
+  client_id?: unknown;
+  client_secret?: unknown;
+  auth_uri?: unknown;
+  token_uri?: unknown;
 };
 
 function oauthConfiguration() {
-	const clientFile = process.env.GOOGLE_OAUTH_CLIENT_FILE;
-	if (clientFile) {
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(readFileSync(clientFile, 'utf8'));
-		} catch (error) {
-			throw new Error(`Could not read GOOGLE_OAUTH_CLIENT_FILE: ${error instanceof Error ? error.message : String(error)}`);
-		}
-		if (!parsed || typeof parsed !== 'object') throw new Error('GOOGLE_OAUTH_CLIENT_FILE must contain a Google OAuth client JSON object.');
-		const root = parsed as { installed?: OAuthClientCredentials; web?: OAuthClientCredentials };
-		const credentials = root.installed ?? root.web;
-		const clientId = credentials?.client_id;
-		const clientSecret = credentials?.client_secret;
-		if (typeof clientId !== 'string' || typeof clientSecret !== 'string' || !clientId || !clientSecret) {
-			throw new Error('GOOGLE_OAUTH_CLIENT_FILE must contain installed or web client_id and client_secret values.');
-		}
-		if (credentials?.auth_uri !== undefined && credentials.auth_uri !== 'https://accounts.google.com/o/oauth2/auth') {
-			throw new Error('GOOGLE_OAUTH_CLIENT_FILE has an unsupported OAuth authorization endpoint.');
-		}
-		if (credentials?.token_uri !== undefined && credentials.token_uri !== 'https://oauth2.googleapis.com/token') {
-			throw new Error('GOOGLE_OAUTH_CLIENT_FILE has an unsupported OAuth token endpoint.');
-		}
-		return {
-			clientId,
-			clientSecret,
-			redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? 'http://127.0.0.1:3000/auth/google/callback'
-		};
-	}
-	const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-	const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-	if (!clientId || !clientSecret) {
-		throw new Error('Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET before connecting Google accounts.');
-	}
-	return {
-		clientId,
-		clientSecret,
-		redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? 'http://127.0.0.1:3000/auth/google/callback'
-	};
+  const clientFile = process.env.GOOGLE_OAUTH_CLIENT_FILE;
+  if (clientFile) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(readFileSync(clientFile, 'utf8'));
+    } catch (error) {
+      throw new Error(
+        `Could not read GOOGLE_OAUTH_CLIENT_FILE: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    if (!parsed || typeof parsed !== 'object')
+      throw new Error('GOOGLE_OAUTH_CLIENT_FILE must contain a Google OAuth client JSON object.');
+    const root = parsed as { installed?: OAuthClientCredentials; web?: OAuthClientCredentials };
+    const credentials = root.installed ?? root.web;
+    const clientId = credentials?.client_id;
+    const clientSecret = credentials?.client_secret;
+    if (
+      typeof clientId !== 'string' ||
+      typeof clientSecret !== 'string' ||
+      !clientId ||
+      !clientSecret
+    ) {
+      throw new Error(
+        'GOOGLE_OAUTH_CLIENT_FILE must contain installed or web client_id and client_secret values.'
+      );
+    }
+    if (
+      credentials?.auth_uri !== undefined &&
+      credentials.auth_uri !== 'https://accounts.google.com/o/oauth2/auth'
+    ) {
+      throw new Error('GOOGLE_OAUTH_CLIENT_FILE has an unsupported OAuth authorization endpoint.');
+    }
+    if (
+      credentials?.token_uri !== undefined &&
+      credentials.token_uri !== 'https://oauth2.googleapis.com/token'
+    ) {
+      throw new Error('GOOGLE_OAUTH_CLIENT_FILE has an unsupported OAuth token endpoint.');
+    }
+    return {
+      clientId,
+      clientSecret,
+      redirectUri:
+        process.env.GOOGLE_OAUTH_REDIRECT_URI ?? 'http://127.0.0.1:3000/auth/google/callback',
+    };
+  }
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      'Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET before connecting Google accounts.'
+    );
+  }
+  return {
+    clientId,
+    clientSecret,
+    redirectUri:
+      process.env.GOOGLE_OAUTH_REDIRECT_URI ?? 'http://127.0.0.1:3000/auth/google/callback',
+  };
 }
 
 export function createGoogleOAuthClient(): OAuth2Client {
-	const config = oauthConfiguration();
-	return new OAuth2Client(config.clientId, config.clientSecret, config.redirectUri);
+  const config = oauthConfiguration();
+  return new OAuth2Client(config.clientId, config.clientSecret, config.redirectUri);
 }
 
-export async function createGoogleAuthorizationRequest(state: string): Promise<{ url: string; codeVerifier: string }> {
-	const client = createGoogleOAuthClient();
-	const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
-	return {
-		url: client.generateAuthUrl({
-			access_type: 'offline',
-			code_challenge: codeChallenge,
-			code_challenge_method: CodeChallengeMethod.S256,
-			include_granted_scopes: true,
-			prompt: 'consent',
-			scope: GOOGLE_OAUTH_SCOPES,
-			state
-		}),
-		codeVerifier
-	};
+export async function createGoogleAuthorizationRequest(
+  state: string
+): Promise<{ url: string; codeVerifier: string }> {
+  const client = createGoogleOAuthClient();
+  const { codeVerifier, codeChallenge } = await client.generateCodeVerifierAsync();
+  return {
+    url: client.generateAuthUrl({
+      access_type: 'offline',
+      code_challenge: codeChallenge,
+      code_challenge_method: CodeChallengeMethod.S256,
+      include_granted_scopes: true,
+      prompt: 'consent',
+      scope: GOOGLE_OAUTH_SCOPES,
+      state,
+    }),
+    codeVerifier,
+  };
 }
 
-export async function exchangeGoogleAuthorizationCode(code: string, codeVerifier?: string): Promise<{ email: string; refreshToken: string | null }> {
-	const client = createGoogleOAuthClient();
-	const { tokens } = await client.getToken({ code, codeVerifier });
-	client.setCredentials(tokens);
-	const response = await client.request<{ email?: string }>({ url: 'https://www.googleapis.com/oauth2/v2/userinfo' });
-	if (!response.data.email) throw new Error('Google did not return the account email address.');
-	return { email: response.data.email, refreshToken: tokens.refresh_token ?? null };
+export async function exchangeGoogleAuthorizationCode(
+  code: string,
+  codeVerifier?: string
+): Promise<{ email: string; refreshToken: string | null }> {
+  const client = createGoogleOAuthClient();
+  const { tokens } = await client.getToken({ code, codeVerifier });
+  client.setCredentials(tokens);
+  const response = await client.request<{ email?: string }>({
+    url: 'https://www.googleapis.com/oauth2/v2/userinfo',
+  });
+  if (!response.data.email) throw new Error('Google did not return the account email address.');
+  return { email: response.data.email, refreshToken: tokens.refresh_token ?? null };
 }
 
 function messageFromError(error: unknown): { message: string; status: number | undefined } {
-	if (!error || typeof error !== 'object') return { message: String(error), status: undefined };
-	const value = error as { message?: unknown; response?: { status?: unknown; data?: unknown } };
-	const status = typeof value.response?.status === 'number' ? value.response.status : undefined;
-	const data = value.response?.data;
-	let message = typeof value.message === 'string' ? value.message : 'Google API request failed.';
-	if (data && typeof data === 'object') {
-		const apiError = (data as { error?: { message?: unknown; errors?: Array<{ reason?: unknown }> } }).error;
-		const apiMessage = apiError?.message;
-		const reasons = apiError?.errors?.flatMap((item) => typeof item.reason === 'string' ? [item.reason] : []) ?? [];
-		if (typeof apiMessage === 'string') message = apiMessage;
-		if (reasons.length > 0) message += ` (${reasons.join(', ')})`;
-	}
-	return { message, status };
+  if (!error || typeof error !== 'object') return { message: String(error), status: undefined };
+  const value = error as { message?: unknown; response?: { status?: unknown; data?: unknown } };
+  const status = typeof value.response?.status === 'number' ? value.response.status : undefined;
+  const data = value.response?.data;
+  let message = typeof value.message === 'string' ? value.message : 'Google API request failed.';
+  if (data && typeof data === 'object') {
+    const apiError = (
+      data as { error?: { message?: unknown; errors?: Array<{ reason?: unknown }> } }
+    ).error;
+    const apiMessage = apiError?.message;
+    const reasons =
+      apiError?.errors?.flatMap((item) => (typeof item.reason === 'string' ? [item.reason] : [])) ??
+      [];
+    if (typeof apiMessage === 'string') message = apiMessage;
+    if (reasons.length > 0) message += ` (${reasons.join(', ')})`;
+  }
+  return { message, status };
 }
 
 export async function googleApiRequest<T>(
-	account: GoogleAccount,
-	url: string,
-	options: { method?: string; params?: Record<string, string | number | boolean | undefined>; data?: unknown; headers?: Record<string, string> } = {}
+  account: GoogleAccount,
+  url: string,
+  options: {
+    method?: string;
+    params?: Record<string, string | number | boolean | undefined>;
+    data?: unknown;
+    headers?: Record<string, string>;
+  } = {}
 ): Promise<T> {
-	if (!account.refreshToken) throw new Error(`${account.email} is not connected to Google OAuth.`);
-	const httpMethod = (options.method ?? 'GET').toUpperCase();
-	const apiMethod = gmailApiMethod(url, httpMethod);
-	const estimatedQuotaUnits = apiMethod ? recordGmailApiUsage(account.email, apiMethod) : undefined;
-	const client = createGoogleOAuthClient();
-	client.setCredentials({ refresh_token: account.refreshToken });
-	try {
-		const response = await client.request<T>({ url, method: httpMethod, params: options.params, data: options.data, headers: options.headers });
-		return response.data;
-	} catch (error) {
-		const details = messageFromError(error);
-		if (apiMethod && (isGoogleRateLimitError(error) || /quota|rate.?limit|too many requests/i.test(details.message))) {
-			console.warn('Gmail API request was rate limited.', {
-				account: account.email,
-				method: apiMethod,
-				httpMethod,
-				status: details.status,
-				estimatedQuotaUnits: estimatedQuotaUnits ?? null
-			});
-		}
-		const headers = (error as { response?: { headers?: { get?: (name: string) => string | null } } }).response?.headers;
-		const retryAfter = headers?.get?.('retry-after');
-		const retryAfterMs = retryAfter ? (/^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now())) : undefined;
-		throw new GoogleApiError(details.message, details.status, Number.isFinite(retryAfterMs) ? retryAfterMs : undefined);
-	}
+  if (!account.refreshToken) throw new Error(`${account.email} is not connected to Google OAuth.`);
+  const httpMethod = (options.method ?? 'GET').toUpperCase();
+  const apiMethod = gmailApiMethod(url, httpMethod);
+  const estimatedQuotaUnits = apiMethod ? recordGmailApiUsage(account.email, apiMethod) : undefined;
+  const client = createGoogleOAuthClient();
+  client.setCredentials({ refresh_token: account.refreshToken });
+  try {
+    const response = await client.request<T>({
+      url,
+      method: httpMethod,
+      params: options.params,
+      data: options.data,
+      headers: options.headers,
+    });
+    return response.data;
+  } catch (error) {
+    const details = messageFromError(error);
+    if (
+      apiMethod &&
+      (isGoogleRateLimitError(error) ||
+        /quota|rate.?limit|too many requests/i.test(details.message))
+    ) {
+      console.warn('Gmail API request was rate limited.', {
+        account: account.email,
+        method: apiMethod,
+        httpMethod,
+        status: details.status,
+        estimatedQuotaUnits: estimatedQuotaUnits ?? null,
+      });
+    }
+    const headers = (
+      error as { response?: { headers?: { get?: (name: string) => string | null } } }
+    ).response?.headers;
+    const retryAfter = headers?.get?.('retry-after');
+    const retryAfterMs = retryAfter
+      ? /^\d+(?:\.\d+)?$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Math.max(0, Date.parse(retryAfter) - Date.now())
+      : undefined;
+    throw new GoogleApiError(
+      details.message,
+      details.status,
+      Number.isFinite(retryAfterMs) ? retryAfterMs : undefined
+    );
+  }
 }
 
 type GmailPart = {
-	mimeType?: string;
-	headers?: Array<{ name?: string; value?: string }>;
-	body?: { data?: string };
-	parts?: GmailPart[];
+  mimeType?: string;
+  headers?: Array<{ name?: string; value?: string }>;
+  body?: { data?: string };
+  parts?: GmailPart[];
 };
 
 function header(part: GmailPart, name: string): string | undefined {
-	return part.headers?.find((item) => item.name?.toLowerCase() === name)?.value;
+  return part.headers?.find((item) => item.name?.toLowerCase() === name)?.value;
 }
 
 function isAttachment(part: GmailPart): boolean {
-	return /^attachment(?:;|$)/i.test(header(part, 'content-disposition')?.trim() ?? '');
+  return /^attachment(?:;|$)/i.test(header(part, 'content-disposition')?.trim() ?? '');
 }
 
 function mimeBody(part: GmailPart, type: 'text/plain' | 'text/html'): string | undefined {
-	if (isAttachment(part)) return undefined;
-	if (part.mimeType === type && part.body?.data) return Buffer.from(part.body.data, 'base64url').toString('utf8');
-	for (const child of part.parts ?? []) {
-		const body = mimeBody(child, type);
-		if (body !== undefined) return body;
-	}
+  if (isAttachment(part)) return undefined;
+  if (part.mimeType === type && part.body?.data)
+    return Buffer.from(part.body.data, 'base64url').toString('utf8');
+  for (const child of part.parts ?? []) {
+    const body = mimeBody(child, type);
+    if (body !== undefined) return body;
+  }
 }
 
 export function normalizeGmailMessage(value: unknown): IncomingEmail {
-	if (!value || typeof value !== 'object') throw new Error('Google returned an invalid Gmail message.');
-	const message = value as { id?: unknown; threadId?: unknown; labelIds?: unknown; snippet?: unknown; internalDate?: unknown; payload?: GmailPart };
-	if (typeof message.id !== 'string') throw new Error('A Gmail message did not include an id.');
-	const payload = message.payload ?? {};
-	return {
-		id: message.id,
-		threadId: typeof message.threadId === 'string' ? message.threadId : undefined,
-		from: header(payload, 'from'),
-		headers: Object.fromEntries((payload.headers ?? []).flatMap(item => item.name && item.value ? [[item.name.toLowerCase(), item.value]] : [])),
-		to: header(payload, 'to'),
-		subject: header(payload, 'subject'),
-		date: header(payload, 'date') ?? (typeof message.internalDate === 'string' ? message.internalDate : undefined),
-		snippet: typeof message.snippet === 'string' ? message.snippet : undefined,
-		bodyText: mimeBody(payload, 'text/plain'),
-		bodyHtml: mimeBody(payload, 'text/html'),
-		bodyTruncated: false,
-		labels: Array.isArray(message.labelIds) ? message.labelIds.filter((item): item is string => typeof item === 'string') : []
-	};
+  if (!value || typeof value !== 'object')
+    throw new Error('Google returned an invalid Gmail message.');
+  const message = value as {
+    id?: unknown;
+    threadId?: unknown;
+    labelIds?: unknown;
+    snippet?: unknown;
+    internalDate?: unknown;
+    payload?: GmailPart;
+  };
+  if (typeof message.id !== 'string') throw new Error('A Gmail message did not include an id.');
+  const payload = message.payload ?? {};
+  return {
+    id: message.id,
+    threadId: typeof message.threadId === 'string' ? message.threadId : undefined,
+    from: header(payload, 'from'),
+    headers: Object.fromEntries(
+      (payload.headers ?? []).flatMap((item) =>
+        item.name && item.value ? [[item.name.toLowerCase(), item.value]] : []
+      )
+    ),
+    to: header(payload, 'to'),
+    subject: header(payload, 'subject'),
+    date:
+      header(payload, 'date') ??
+      (typeof message.internalDate === 'string' ? message.internalDate : undefined),
+    snippet: typeof message.snippet === 'string' ? message.snippet : undefined,
+    bodyText: mimeBody(payload, 'text/plain'),
+    bodyHtml: mimeBody(payload, 'text/html'),
+    bodyTruncated: false,
+    labels: Array.isArray(message.labelIds)
+      ? message.labelIds.filter((item): item is string => typeof item === 'string')
+      : [],
+  };
 }
 
-export async function listGmailMessageIds(account: GoogleAccount, query: string, maxMessages?: number): Promise<string[]> {
-	const ids: string[] = [];
-	let pageToken: string | undefined;
-	do {
-		const result = await googleApiRequest<{ messages?: Array<{ id?: string }>; nextPageToken?: string }>(
-			account, 'https://gmail.googleapis.com/gmail/v1/users/me/messages',
-			{ params: { q: query, maxResults: 500, pageToken } }
-		);
-		ids.push(...(result.messages ?? []).flatMap((message) => message.id ? [message.id] : []));
-		if (maxMessages !== undefined && ids.length >= maxMessages) break;
-		pageToken = result.nextPageToken;
-	} while (pageToken);
-	return maxMessages === undefined ? ids : ids.slice(0, maxMessages);
+export async function listGmailMessageIds(
+  account: GoogleAccount,
+  query: string,
+  maxMessages?: number
+): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const result = await googleApiRequest<{
+      messages?: Array<{ id?: string }>;
+      nextPageToken?: string;
+    }>(account, 'https://gmail.googleapis.com/gmail/v1/users/me/messages', {
+      params: { q: query, maxResults: 500, pageToken },
+    });
+    ids.push(...(result.messages ?? []).flatMap((message) => (message.id ? [message.id] : [])));
+    if (maxMessages !== undefined && ids.length >= maxMessages) break;
+    pageToken = result.nextPageToken;
+  } while (pageToken);
+  return maxMessages === undefined ? ids : ids.slice(0, maxMessages);
 }
 
-export async function listGmailMessages(account: GoogleAccount, query: string, maxMessages?: number): Promise<IncomingEmail[]> {
-	const ids = await listGmailMessageIds(account, query, maxMessages);
-	const messages: IncomingEmail[] = [];
-	for (const id of ids) messages.push(await getGmailMessage(account, id));
-	return messages;
+export async function listGmailMessages(
+  account: GoogleAccount,
+  query: string,
+  maxMessages?: number
+): Promise<IncomingEmail[]> {
+  const ids = await listGmailMessageIds(account, query, maxMessages);
+  const messages: IncomingEmail[] = [];
+  for (const id of ids) messages.push(await getGmailMessage(account, id));
+  return messages;
 }
 
 export async function getGmailMessage(account: GoogleAccount, id: string): Promise<IncomingEmail> {
-	return normalizeGmailMessage(await googleApiRequest(account,
-		`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}`,
-		{ params: { format: 'full' } }));
+  return normalizeGmailMessage(
+    await googleApiRequest(
+      account,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}`,
+      { params: { format: 'full' } }
+    )
+  );
 }

@@ -7,80 +7,90 @@ import type { GoogleAccount } from './google-api';
 let database: DatabaseSync | undefined;
 
 afterEach(() => {
-	database?.close();
-	database = undefined;
+  database?.close();
+  database = undefined;
 });
 
 describe('Gmail message actions', () => {
-	it('archives a message with the Gmail modify endpoint', async () => {
-		let request: { url: string; options: unknown } | undefined;
-		await runGmailMessageAction(
-			{ email: 'one@example.com', refreshToken: 'token' },
-			'gmail-message',
-			'archive',
-			async <T>(_account: GoogleAccount, url: string, options?: { method?: string; params?: Record<string, string | number | boolean | undefined>; data?: unknown }) => {
-				request = { url, options };
-				return {} as T;
-			}
-		);
-		expect(request).toEqual({
-			url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/gmail-message/modify',
-			options: { method: 'POST', data: { removeLabelIds: ['INBOX'] } }
-		});
-	});
+  it('archives a message with the Gmail modify endpoint', async () => {
+    let request: { url: string; options: unknown } | undefined;
+    await runGmailMessageAction(
+      { email: 'one@example.com', refreshToken: 'token' },
+      'gmail-message',
+      'archive',
+      async <T>(
+        _account: GoogleAccount,
+        url: string,
+        options?: {
+          method?: string;
+          params?: Record<string, string | number | boolean | undefined>;
+          data?: unknown;
+        }
+      ) => {
+        request = { url, options };
+        return {} as T;
+      }
+    );
+    expect(request).toEqual({
+      url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/gmail-message/modify',
+      options: { method: 'POST', data: { removeLabelIds: ['INBOX'] } },
+    });
+  });
 
-	it('moves a message to Gmail Trash for delete', async () => {
-		let url = '';
-		await runGmailMessageAction(
-			{ email: 'one@example.com', refreshToken: 'token' },
-			'gmail-message',
-			'delete',
-			async <T>(_account: GoogleAccount, value: string) => {
-				url = value;
-				return {} as T;
-			}
-		);
-		expect(url).toEndWith('/messages/gmail-message/trash');
-	});
+  it('moves a message to Gmail Trash for delete', async () => {
+    let url = '';
+    await runGmailMessageAction(
+      { email: 'one@example.com', refreshToken: 'token' },
+      'gmail-message',
+      'delete',
+      async <T>(_account: GoogleAccount, value: string) => {
+        url = value;
+        return {} as T;
+      }
+    );
+    expect(url).toEndWith('/messages/gmail-message/trash');
+  });
 
-	it('updates local state only after Gmail succeeds and keeps archived mail recoverable', async () => {
-		database = createDatabase(':memory:');
-		upsertAccount(database, { email: 'one@example.com' });
-		const message = { id: 'gmail-message', subject: 'A message', labels: ['INBOX'] };
-		upsertEmails(database, 'one@example.com', [message]);
+  it('updates local state only after Gmail succeeds and keeps archived mail recoverable', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com' });
+    const message = { id: 'gmail-message', subject: 'A message', labels: ['INBOX'] };
+    upsertEmails(database, 'one@example.com', [message]);
 
-		await applyGmailMessageAction(
-			database,
-			{ email: 'one@example.com', refreshToken: 'token' },
-			message.id,
-			'archive',
-			async <T>() => ({} as T)
-		);
-		expect(listEmails(database)).toHaveLength(0);
-		expect(
-			database.prepare('SELECT archived_at, deleted_at FROM emails WHERE gmail_id = ?').get(message.id)
-		).toMatchObject({ archived_at: expect.any(String), deleted_at: null });
+    await applyGmailMessageAction(
+      database,
+      { email: 'one@example.com', refreshToken: 'token' },
+      message.id,
+      'archive',
+      async <T>() => ({}) as T
+    );
+    expect(listEmails(database)).toHaveLength(0);
+    expect(
+      database
+        .prepare('SELECT archived_at, deleted_at FROM emails WHERE gmail_id = ?')
+        .get(message.id)
+    ).toMatchObject({ archived_at: expect.any(String), deleted_at: null });
 
-		upsertEmails(database, 'one@example.com', [message]);
-		expect(listEmails(database)).toHaveLength(1);
-	});
+    upsertEmails(database, 'one@example.com', [message]);
+    expect(listEmails(database)).toHaveLength(1);
+  });
 
-	it('does not hide a message when Gmail rejects the action', async () => {
-		database = createDatabase(':memory:');
-		upsertAccount(database, { email: 'one@example.com' });
-		upsertEmails(database, 'one@example.com', [{ id: 'gmail-message', subject: 'A message' }]);
+  it('does not hide a message when Gmail rejects the action', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com' });
+    upsertEmails(database, 'one@example.com', [{ id: 'gmail-message', subject: 'A message' }]);
 
-		await expect(
-			applyGmailMessageAction(
-				database,
-				{ email: 'one@example.com', refreshToken: 'token' },
-				'gmail-message',
-				'delete',
-				async () => {
-					throw new Error('Gmail unavailable');
-				}
-			)
-		).rejects.toThrow('Gmail unavailable');
-		expect(listEmails(database)).toHaveLength(1);
-	});
+    await expect(
+      applyGmailMessageAction(
+        database,
+        { email: 'one@example.com', refreshToken: 'token' },
+        'gmail-message',
+        'delete',
+        async () => {
+          throw new Error('Gmail unavailable');
+        }
+      )
+    ).rejects.toThrow('Gmail unavailable');
+    expect(listEmails(database)).toHaveLength(1);
+  });
 });
