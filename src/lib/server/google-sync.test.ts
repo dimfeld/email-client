@@ -35,6 +35,7 @@ describe('Google contacts and calendar sync', () => {
 			if (url.includes('connections')) return (options?.params?.pageToken
 				? { connections: [{ resourceName: 'people/two', names: [{ displayName: 'Two' }] }], nextSyncToken: 'contacts-sync-1' }
 				: { connections: [{ resourceName: 'people/one', names: [{ displayName: 'One' }] }], nextPageToken: 'page-2' }) as T;
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync-1' } as T;
 			if (url.includes('calendarList')) return { items: [{ id: 'primary', summary: 'Main', selected: true }], nextSyncToken: 'calendar-list-sync-1' } as T;
 			return { items: [{ id: 'event', summary: 'Meeting', start: { dateTime: '2026-09-20T09:00:00-10:00' }, end: { dateTime: '2026-09-20T10:00:00-10:00' } }], nextSyncToken: 'events-sync-1' } as T;
 		};
@@ -54,6 +55,7 @@ describe('Google contacts and calendar sync', () => {
 		replaceContacts(database, 'owner@example.com', [{ resourceName: 'old', displayName: 'Existing', emails: [], phones: [], organization: null }]);
 		const request = async <T>(_account: GoogleAccount, url: string): Promise<T> => {
 			if (url.includes('connections')) return { connections: [], nextSyncToken: 'contacts-sync-1' } as T;
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync-1' } as T;
 			throw new Error('Calendar is unavailable');
 		};
 		await expect(syncGoogleAccount(database, { email: 'owner@example.com', refreshToken: 'token' }, request)).rejects.toThrow('Calendar is unavailable');
@@ -77,6 +79,7 @@ describe('Google contacts and calendar sync', () => {
 					? { connections: [{ resourceName: 'people/two', names: [{ displayName: 'Two' }] }], nextSyncToken: 'contacts-sync-1' }
 					: { connections: [{ resourceName: 'people/one', names: [{ displayName: 'One' }] }], nextPageToken: 'contacts-2' }) as T;
 			}
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync-1' } as T;
 			if (url.includes('calendarList')) return { items: [], nextSyncToken: 'calendar-list-sync-1' } as T;
 			return { items: [], nextSyncToken: 'events-sync-1' } as T;
 		};
@@ -100,6 +103,7 @@ describe('Google contacts and calendar sync', () => {
 			if (url.includes('connections')) return (options?.params?.pageToken
 				? { connections: [], nextSyncToken: 'contacts-sync-1' }
 				: { connections: [], nextPageToken: 'contacts-2' }) as T;
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync-1' } as T;
 			return { items: [], nextSyncToken: 'calendar-list-sync-1' } as T;
 		};
 
@@ -107,7 +111,7 @@ describe('Google contacts and calendar sync', () => {
 			pageDelayMs: 12,
 			sleep: async (delay) => { delays.push(delay); }
 		});
-		expect(delays).toEqual([12, 12]);
+		expect(delays).toEqual([12, 12, 12]);
 		database.close();
 	});
 
@@ -118,6 +122,7 @@ describe('Google contacts and calendar sync', () => {
 		let limited = true;
 		const request = async <T>(_account: GoogleAccount, url: string, options?: { params?: Record<string, unknown> }): Promise<T> => {
 			if (url.includes('connections')) return { connections: [], nextSyncToken: 'contacts-sync-1' } as T;
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync-1' } as T;
 			if (url.includes('calendarList')) return { items: [{ id: 'primary', summary: 'Main' }], nextSyncToken: 'calendar-list-sync-1' } as T;
 			eventCalls.push(options?.params?.pageToken);
 			if (options?.params?.pageToken === 'events-2' && limited) {
@@ -159,6 +164,7 @@ describe('Google contacts and calendar sync', () => {
 					],
 					nextSyncToken: 'contacts-sync-1'
 				}) as T;
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: incremental ? 'other-contacts-sync-2' : 'other-contacts-sync-1' } as T;
 			if (url.includes('calendarList')) return (incremental
 				? { items: [{ id: 'secondary', deleted: true }, { id: 'new', summary: 'New' }], nextSyncToken: 'calendar-list-sync-2' }
 				: { items: [{ id: 'primary', summary: 'Main' }, { id: 'secondary', summary: 'Secondary' }], nextSyncToken: 'calendar-list-sync-1' }) as T;
@@ -218,6 +224,7 @@ describe('Google contacts and calendar sync', () => {
 					nextSyncToken: expireNextContactSync ? 'contacts-sync-1' : 'contacts-sync-2'
 				} as T;
 			}
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync-1' } as T;
 			if (url.includes('calendarList')) return { items: [], nextSyncToken: expireNextContactSync ? 'calendar-list-sync-1' : 'calendar-list-sync-2' } as T;
 			return { items: [], nextSyncToken: 'events-sync' } as T;
 		};
@@ -239,6 +246,7 @@ describe('Google contacts and calendar sync', () => {
 			calls += 1;
 			if (calls === 1) await gate;
 			if (url.includes('connections')) return { connections: [], nextSyncToken: 'contacts-sync' } as T;
+			if (url.includes('/otherContacts')) return { otherContacts: [], nextSyncToken: 'other-contacts-sync' } as T;
 			return { items: [], nextSyncToken: 'calendar-list-sync' } as T;
 		};
 		const first = syncGoogleAccount(database, { email: 'owner@example.com', refreshToken: 'token' }, request, { pageDelayMs: 0 });
@@ -246,7 +254,7 @@ describe('Google contacts and calendar sync', () => {
 		expect(second).toBe(first);
 		release();
 		await first;
-		expect(calls).toBe(2);
+		expect(calls).toBe(3);
 		database.close();
 	});
 });
