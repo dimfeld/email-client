@@ -436,7 +436,11 @@
     <form method="GET" class="account-picker">
       <label for="account">Account</label>
       {#if data.query}<input type="hidden" name="q" value={data.query} />{/if}
-      <select id="account" name="account" onchange={(event) => event.currentTarget.form?.submit()}>
+      <select
+        id="account"
+        name="account"
+        onchange={(event) => event.currentTarget.form?.requestSubmit()}
+      >
         <option value="">All accounts</option>
         {#each data.accounts as account}
           <option value={account.email} selected={data.selectedAccount === account.email}
