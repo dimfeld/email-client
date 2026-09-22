@@ -7,7 +7,7 @@
 	import {
 		addDays, calendarKey, calendarSelectionStorageKey, calendarViews, dateKeyFromDate, daysBetween,
 		eventCalendarKey, eventInterval, eventKey, eventsOnDay, isCalendarVisible, layoutTimedEvents,
-		localTime, parseCalendarSelection, setCalendarVisible, shiftView,
+		loadCalendarSelection, localTime, saveCalendarSelection, setCalendarVisible, shiftView,
 		type CalendarSelection, type CalendarView, type DateKey
 	} from '$lib/calendar';
 	import type { ActionData, PageData } from './$types';
@@ -46,11 +46,7 @@
 	let hours = Array.from({ length: 24 }, (_, hour) => hour);
 
 	onMount(() => {
-		try {
-			selection = parseCalendarSelection(localStorage.getItem(calendarSelectionStorageKey));
-		} catch {
-			selection = {};
-		}
+		selection = loadCalendarSelection(calendarSelectionStorageKey);
 		const tick = setInterval(() => {
 			now = Date.now();
 			today = dateKeyFromDate(new Date());
@@ -72,11 +68,7 @@
 
 	function persistSelection(next: CalendarSelection) {
 		selection = next;
-		try {
-			localStorage.setItem(calendarSelectionStorageKey, JSON.stringify(next));
-		} catch (error) {
-			console.error(error);
-		}
+		saveCalendarSelection(calendarSelectionStorageKey, next);
 	}
 
 	function setAccountVisible(accountEmail: string, visible: boolean) {

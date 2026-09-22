@@ -341,7 +341,7 @@
 				<div class="detail-empty"><span aria-hidden="true">@</span><h2>No message selected</h2><p>Choose a category and a message to read it here.</p></div>
 			{/if}
 		</section>
-		<CalendarRail events={data.calendarEvents} day={data.calendarDay} />
+		<CalendarRail calendars={data.calendars} events={data.calendarEvents} day={data.calendarDay} />
 	</div>
 	{#if showChat}{#key data.selectedAccount}<EmailChat account={data.selectedAccount} close={() => showChat = false} />{/key}{/if}
 	{#if showShortcuts}

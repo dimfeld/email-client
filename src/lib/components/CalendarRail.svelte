@@ -2,10 +2,17 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { addDays, dateKeyFromDate, eventsOnDay, layoutTimedEvents } from '$lib/calendar';
-	import type { SyncedCalendarEvent } from '$lib/server/types';
+	import {
+		addDays, calendarKey, dateKeyFromDate, eventCalendarKey, eventsOnDay, isCalendarVisible, layoutTimedEvents,
+		loadCalendarSelection, railCalendarSelectionStorageKey, type CalendarSelection
+	} from '$lib/calendar';
+	import type { SyncedCalendar, SyncedCalendarEvent } from '$lib/server/types';
 
-	let { events, day }: { events: SyncedCalendarEvent[]; day: string } = $props();
+	let { calendars, events, day }: { calendars: SyncedCalendar[]; events: SyncedCalendarEvent[]; day: string } = $props();
+	let selection = $state<CalendarSelection>({});
+	let visibleKeys = $derived(new Set(calendars.filter((calendar) => isCalendarVisible(calendar, selection))
+		.map((calendar) => calendarKey(calendar.accountEmail, calendar.calendarId))));
+	let visibleEvents = $derived(events.filter((event) => visibleKeys.has(eventCalendarKey(event))));
 	function changeDay(day: string) {
 		const url = new URL(page.url);
 		url.searchParams.set('day', day);
@@ -13,9 +20,12 @@
 	}
 	let scroller: HTMLDivElement;
 	const hours = Array.from({ length: 24 }, (_, hour) => hour);
-	let placements = $derived(layoutTimedEvents(events, day));
-	let allDay = $derived(eventsOnDay(events, day).filter((event) => event.allDay));
-	onMount(() => { scroller.scrollTop = new Date().getHours() * 52; });
+	let placements = $derived(layoutTimedEvents(visibleEvents, day));
+	let allDay = $derived(eventsOnDay(visibleEvents, day).filter((event) => event.allDay));
+	onMount(() => {
+		selection = loadCalendarSelection(railCalendarSelectionStorageKey);
+		scroller.scrollTop = new Date().getHours() * 52;
+	});
 </script>
 
 <aside aria-label="Daily calendar">

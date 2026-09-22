@@ -1,6 +1,6 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
 import { applyGmailMessageAction } from '$lib/server/gmail-actions';
-import { getDatabase, getEmail, getEmailActionTarget, listAccounts, listCategories, listEmails, listCalendarEventsBetween } from '$lib/server/db';
+import { getDatabase, getEmail, getEmailActionTarget, listAccounts, listCategories, listEmails, listCalendars, listCalendarEventsBetween } from '$lib/server/db';
 import type { GmailMessageAction } from '$lib/server/gmail-actions';
 import { addDays, dateKeyFromDate, isDateKey } from '$lib/calendar';
 import { searchEmails, SearchQueryError } from '$lib/server/email-search';
@@ -30,6 +30,7 @@ export const load: PageServerLoad = ({ url, depends }) => {
 		selectedMessage: getEmail(database, Number(url.searchParams.get('message')), selectedAccount ?? undefined),
 		accounts: accounts.map(({ refreshToken, ...account }) => ({ ...account, connected: Boolean(refreshToken) })),
 		categories: listCategories(database),
+		calendars: listCalendars(database),
 		calendarEvents: listCalendarEventsBetween(database, calendarDay, addDays(calendarDay, 1)).filter((event) => !selectedAccount || event.accountEmail === selectedAccount),
 		selectedAccount,
 		emails

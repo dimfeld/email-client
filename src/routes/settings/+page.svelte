@@ -1,6 +1,11 @@
 <script lang="ts">
 	import HistoricalBackfillPanel from '$lib/components/HistoricalBackfillPanel.svelte';
 	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
+	import {
+		isCalendarVisible, loadCalendarSelection, railCalendarSelectionStorageKey, saveCalendarSelection, setCalendarVisible,
+		type CalendarSelection
+	} from '$lib/calendar';
 	import type { Category } from '$lib/categories';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { ActionData, PageData } from './$types';
@@ -20,6 +25,15 @@
 			drafts = remaining;
 		}
 	};
+
+	let railSelection = $state<CalendarSelection>({});
+	let calendarAccounts = $derived([...new Set(data.calendars.map((calendar) => calendar.accountEmail))]);
+	onMount(() => { railSelection = loadCalendarSelection(railCalendarSelectionStorageKey); });
+
+	function setRailVisible(calendar: (typeof data.calendars)[number], visible: boolean) {
+		railSelection = setCalendarVisible(railSelection, calendar, visible);
+		saveCalendarSelection(railCalendarSelectionStorageKey, railSelection);
+	}
 
 	function preserveDraft(category: Category) {
 		if (!drafts[category.id]) drafts = { ...drafts, [category.id]: category };
@@ -49,6 +63,23 @@
 				</form>
 			{:else}<p class="help">Connect a Google account before you sync Google data.</p>{/each}
 		</div>
+	</section>
+	<section aria-labelledby="rail-calendars-heading">
+		<h2 id="rail-calendars-heading">Mail sidebar calendars</h2>
+		<p class="help">Select the calendars that the daily calendar on the mail page shows. This browser keeps the selection. The Calendar page has a separate selection.</p>
+		{#each calendarAccounts as accountEmail (accountEmail)}
+			<fieldset class="calendar-group">
+				<legend>{accountEmail}</legend>
+				{#each data.calendars.filter((calendar) => calendar.accountEmail === accountEmail) as calendar (calendar.calendarId)}
+					<label class="calendar-toggle">
+						<input type="checkbox" checked={isCalendarVisible(calendar, railSelection)}
+							onchange={(event) => setRailVisible(calendar, event.currentTarget.checked)} />
+						<span class="swatch" style:--color={calendar.backgroundColor ?? '#6edff3'}></span>
+						<span>{calendar.summary}</span>
+					</label>
+				{/each}
+			</fieldset>
+		{:else}<p class="help">Sync a Google account before you select calendars.</p>{/each}
 	</section>
 	<HistoricalBackfillPanel accounts={data.accounts} jobs={data.historicalBackfills} delayMs={data.historicalDelayMs} />
 	<section aria-labelledby="categories-heading">
@@ -101,6 +132,11 @@
 	.connect a, .sync-card a { display: inline-block; color: #07131c; background: #6edff3; padding: 10px 16px; border-radius: 4px; text-decoration: none; font-size: .85rem; font-weight: 600; }
 	.sync-card { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px; border: 1px solid #23404e; border-radius: 6px; background: #0b1c26; }
 	.sync-card p { margin-top: 6px; color: #8eabb8; font-size: .75rem; line-height: 1.6; }
+	.calendar-group { margin: 12px 0 0; padding: 12px 16px; border: 1px solid #23404e; border-radius: 6px; background: #0b1c26; }
+	.calendar-group legend { padding: 0 6px; color: #8eabb8; font-size: .8rem; overflow-wrap: anywhere; }
+	label.calendar-toggle { display: flex; align-items: center; gap: 10px; margin: 6px 0; cursor: pointer; }
+	.calendar-toggle input[type="checkbox"] { width: auto; margin: 0; padding: 0; accent-color: #6edff3; }
+	.swatch { width: 10px; height: 10px; flex: none; border-radius: 3px; background: var(--color); }
 	.category-card { padding: 24px; margin-top: 20px; background: #0d202b; border: 1px solid #23404e; border-radius: 8px; }
 	.card-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
 	.badge { background: #ffde5920; color: #ffde59; padding: 4px 8px; border-radius: 4px; font-size: .7rem; }

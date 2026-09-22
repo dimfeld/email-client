@@ -1,6 +1,6 @@
 import { createHistoricalBackfill, defaultHistoricalDelayMs, historicalBackfillWorker, listHistoricalBackfills, setHistoricalBackfillPaused } from '$lib/server/historical-backfill';
 import { fail } from '@sveltejs/kit';
-import { CategoryValidationError, deleteCategory, getDatabase, listAccounts, listCategories, saveCategory } from '$lib/server/db';
+import { CategoryValidationError, deleteCategory, getDatabase, listAccounts, listCalendars, listCategories, saveCategory } from '$lib/server/db';
 import { syncConfiguredGoogleAccounts } from '$lib/server/google-sync';
 import type { CategoryLevel } from '$lib/server/types';
 import type { Actions, PageServerLoad } from './$types';
@@ -11,6 +11,7 @@ export const load: PageServerLoad = ({ setHeaders, depends }) => {
 	const database = getDatabase();
 	return {
 		categories: listCategories(database),
+		calendars: listCalendars(database),
 		historicalBackfills: listHistoricalBackfills(database),
 		historicalDelayMs: defaultHistoricalDelayMs,
 		accounts: listAccounts(database).map(({ refreshToken, ...account }) => ({ ...account, connected: Boolean(refreshToken) }))

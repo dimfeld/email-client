@@ -179,8 +179,11 @@ export function layoutTimedEvents(events: SyncedCalendarEvent[], key: DateKey): 
 	return placements;
 }
 
-/** Local storage key for per-calendar visibility overrides. */
+/** Local storage key for per-calendar visibility overrides on the calendar page. */
 export const calendarSelectionStorageKey = 'calendar:visible-calendars';
+
+/** Local storage key for per-calendar visibility overrides in the mail page calendar rail. */
+export const railCalendarSelectionStorageKey = 'calendar:rail-visible-calendars';
 
 /** Visibility overrides keyed by `calendarKey`. Calendars without an entry use the Google `selected` flag. */
 export type CalendarSelection = Record<string, boolean>;
@@ -193,6 +196,24 @@ export function parseCalendarSelection(raw: string | null): CalendarSelection {
 		return Object.fromEntries(Object.entries(parsed).filter(([, value]) => typeof value === 'boolean')) as CalendarSelection;
 	} catch {
 		return {};
+	}
+}
+
+/** Reads a selection from local storage. Browser only. */
+export function loadCalendarSelection(storageKey: string): CalendarSelection {
+	try {
+		return parseCalendarSelection(localStorage.getItem(storageKey));
+	} catch {
+		return {};
+	}
+}
+
+/** Writes a selection to local storage. Browser only. */
+export function saveCalendarSelection(storageKey: string, selection: CalendarSelection) {
+	try {
+		localStorage.setItem(storageKey, JSON.stringify(selection));
+	} catch (error) {
+		console.error(error);
 	}
 }
 
