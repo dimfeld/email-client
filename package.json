@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"start": "bun scripts/start.ts",
 		"app": "bun run build && bun run start",
+		"pubsub:setup": "bun scripts/pubsub-setup.ts",
 		"account:configure": "bun scripts/account-configure.ts",
 		"watch:start": "bun scripts/watch-start.ts",
 		"watch:renew": "bun scripts/watch-renew.ts",

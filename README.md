@@ -29,9 +29,19 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_FILE` to the downloaded JSON path, and set the API keys that you use. The client ID and secret variables remain available when you do not use a client file. Keep `GOOGLE_OAUTH_REDIRECT_URI` equal to the registered URI. Set `GOOGLE_PROJECT_ID` to select the Pub/Sub project explicitly; if it is empty, the Pub/Sub client uses its normal project discovery.
 
-4. Start the development server with `bun run dev`. Open **Settings** and select **Connect Google account** for each account. Google returns you to Settings after you grant access. Reconnect existing accounts if they need the new Google Contacts and Other contacts access.
+4. Install and sign in to the Google Cloud CLI with an identity that can create Pub/Sub resources and change their IAM policies. Create the topic and pull subscription. The command enables the Pub/Sub API, creates either resource if it is missing, and grants Gmail and the app access. Use the identity that the app uses for Application Default Credentials or `GOOGLE_APPLICATION_CREDENTIALS`.
 
-5. After you create a Pub/Sub topic and pull subscription, configure each connected account.
+   ```sh
+   bun run pubsub:setup -- \
+     --project YOUR_PROJECT_ID \
+     --app-identity user:you@example.com
+   ```
+
+   Set `--app-identity` to `user:you@example.com` or `serviceAccount:name@YOUR_PROJECT_ID.iam.gserviceaccount.com`. The default topic and subscription names are both `gmail-notifications`. You can set different names with `--topic` and `--subscription`. Set `GOOGLE_PROJECT_ID` in `.env` to the project ID above.
+
+5. Start the development server with `bun run dev`. Open **Settings** and select **Connect Google account** for each account. Google returns you to Settings after you grant access. Reconnect existing accounts if they need the new Google Contacts and Other contacts access.
+
+6. Configure each connected account with the full topic and subscription names.
 
    ```sh
    bun run account:configure -- \
@@ -40,7 +50,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
      --subscription projects/PROJECT/subscriptions/SUBSCRIPTION
    ```
 
-6. Register the Gmail watch for each account.
+7. Register the Gmail watch for each account.
 
    ```sh
    bun run watch:start -- --account you@example.com
@@ -52,9 +62,9 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run watch:renew
    ```
 
-7. Optional: import existing email from **Settings → Historical email import**. Choose an account and, if needed, enter a Gmail query or date range. Leave these fields empty to import all mail from before the task starts. The import runs in the background and resumes after a server restart.
+8. Optional: import existing email from **Settings → Historical email import**. Choose an account and, if needed, enter a Gmail query or date range. Leave these fields empty to import all mail from before the task starts. The import runs in the background and resumes after a server restart.
 
-8. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
+9. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
