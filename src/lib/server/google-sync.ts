@@ -311,7 +311,28 @@ export function syncGoogleAccount(
 	}
 	const active = databaseSyncs.get(account.email);
 	if (active) return active;
+	const startedAt = Date.now();
+	console.info('Google data sync started.', { account: account.email });
 	const running = syncGoogleAccountOnce(database, account, request, options)
+		.then((result) => {
+			const details = {
+				account: account.email,
+				contacts: result.contacts,
+				calendars: result.calendars,
+				events: result.events,
+				durationMs: Date.now() - startedAt
+			};
+			if (result.deferred) console.warn('Google data sync deferred.', details);
+			else console.info('Google data sync completed.', details);
+			return result;
+		}, (error: unknown) => {
+			console.error('Google data sync failed.', {
+				account: account.email,
+				durationMs: Date.now() - startedAt,
+				error
+			});
+			throw error;
+		})
 		.finally(() => databaseSyncs?.delete(account.email));
 	databaseSyncs.set(account.email, running);
 	return running;

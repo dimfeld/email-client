@@ -29,10 +29,8 @@ export async function syncGoogleData({
 	const results = await Promise.all(accounts.map(async (account) => {
 		try {
 			const result = await syncGoogleAccount(database, account, request, syncOptions);
-			if (result.deferred) console.warn(`Google data sync deferred for ${account.email} because of a rate limit.`);
 			return { ok: true, deferred: Boolean(result.deferred) };
-		} catch (error) {
-			console.error(`Google data sync failed for ${account.email}.`, error);
+		} catch {
 			return { ok: false, deferred: false };
 		}
 	}));
