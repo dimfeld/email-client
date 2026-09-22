@@ -151,7 +151,19 @@
 		if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
 		if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
 		const key = event.key.toLowerCase();
-		if (key === 'j') {
+		if (key === 'c') {
+			event.preventDefault();
+			openComposer({ mode: 'new', account: data.selectedAccount ?? undefined });
+		} else if (key === 'r' && selectedEmail) {
+			event.preventDefault();
+			openComposer({ mode: 'reply', sourceEmailId: selectedEmail.id });
+		} else if (key === 'a' && selectedEmail) {
+			event.preventDefault();
+			openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail.id });
+		} else if (key === 'f' && selectedEmail) {
+			event.preventDefault();
+			openComposer({ mode: 'forward', sourceEmailId: selectedEmail.id });
+		} else if (key === 'j') {
 			event.preventDefault();
 			moveSelection(1);
 		} else if (key === 'k') {
@@ -349,6 +361,10 @@
 			<dialog open class="shortcut-dialog" aria-labelledby="shortcut-heading">
 				<div class="shortcut-heading"><h2 id="shortcut-heading">Keyboard shortcuts</h2><button type="button" aria-label="Close keyboard shortcuts" onclick={() => { showShortcuts = false; }}>×</button></div>
 				<dl>
+					<div><dt><kbd>C</kbd></dt><dd>Compose a new message</dd></div>
+					<div><dt><kbd>R</kbd></dt><dd>Reply to the selected message</dd></div>
+					<div><dt><kbd>A</kbd></dt><dd>Reply all to the selected message</dd></div>
+					<div><dt><kbd>F</kbd></dt><dd>Forward the selected message</dd></div>
 					<div><dt><kbd>J</kbd></dt><dd>Next message</dd></div>
 					<div><dt><kbd>K</kbd></dt><dd>Previous message</dd></div>
 					<div><dt><kbd>E</kbd></dt><dd>Archive selected message</dd></div>
