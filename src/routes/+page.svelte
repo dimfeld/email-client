@@ -133,7 +133,7 @@
     filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail'
   );
 
-  function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
+  function mailboxHref(changes: { category?: Filter; message?: number | null }): string {
     const url = new URL(currentUrl);
     if (changes.category !== undefined) {
       if (changes.category === 'all') url.searchParams.delete('category');
@@ -143,8 +143,13 @@
       if (changes.message === null) url.searchParams.delete('message');
       else url.searchParams.set('message', String(changes.message));
     }
-    if (url.href !== currentUrl)
-      void goto(`${url.pathname}${url.search}${url.hash}`, { keepFocus: true, noScroll: true });
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
+    const href = mailboxHref(changes);
+    if (new URL(href, currentUrl).href !== currentUrl)
+      void goto(href, { keepFocus: true, noScroll: true });
   }
 
   function selectFilter(filter: Filter) {
@@ -231,7 +236,7 @@
     return (
       element.isContentEditable ||
       ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName) ||
-      !!element.closest('a[href]')
+      !!element.closest('a[href]:not(.message)')
     );
   }
 
@@ -296,6 +301,8 @@
       event.preventDefault();
       deleteForm.requestSubmit();
     } else if (key === 'o' || event.key === 'Enter') {
+      // Enter on a focused message row follows that row's link.
+      if (event.key === 'Enter' && (event.target as Element | null)?.closest?.('.message')) return;
       if (selectedEmail || visibleEmails[0]) {
         event.preventDefault();
         updateMailboxUrl({ message: (selectedEmail ?? visibleEmails[0]).id });
@@ -345,9 +352,10 @@
   // Keep the selected row visible when J and K move the selection.
   $effect(() => {
     if (selectedId === null || !messageList) return;
-    messageList
-      .querySelector(`[data-email-id="${selectedId}"]`)
-      ?.scrollIntoView({ block: 'nearest' });
+    const row = messageList.querySelector<HTMLElement>(`[data-email-id="${selectedId}"]`);
+    row?.scrollIntoView({ block: 'nearest' });
+    // When a row has focus, focus follows the selection.
+    if (row && document.activeElement?.closest('.message')) row.focus({ preventScroll: true });
   });
 
   $effect(() => {
@@ -465,30 +473,44 @@
           Search results · Best match first · Includes archived mail
         </p>{/if}
       <div class="message-list" bind:this={messageList}>
-        {#each visibleEmails as email (email.id)}
-          <button
-            class="message"
-            data-email-id={email.id}
-            class:unread={email.labels.includes('UNREAD')}
-            class:selected={selectedEmail?.id === email.id}
-            aria-pressed={selectedEmail?.id === email.id}
-            onclick={() => updateMailboxUrl({ message: email.id })}
-          >
-            <span class="sender-avatar" aria-hidden="true"
-              >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
-            >
-            <strong class="sender" title={email.fromAddress}>{senderName(email.fromAddress)}</strong
-            >
-            <span class="message-line"
-              ><span class="subject">{email.subject || '(No subject)'}</span><span class="preview">
-                — {email.snippet || 'No preview text.'}</span
-              ></span
-            >
-            <span class="category-tag">{email.category ? labels[email.category] : 'Pending'}</span>
-            {#if importance(email) === 'important'}<span class="star" aria-label="Important">★</span
-              >{:else}<span></span>{/if}
-            <time title={email.accountEmail}>{formatDate(email.messageDate)}</time>
-          </button>
+        {#if visibleEmails.length > 0}
+          <ul aria-label="Messages">
+            {#each visibleEmails as email (email.id)}
+              <li>
+                <a
+                  class="message"
+                  href={mailboxHref({ message: email.id })}
+                  data-sveltekit-keepfocus
+                  data-sveltekit-noscroll
+                  data-email-id={email.id}
+                  class:unread={email.labels.includes('UNREAD')}
+                  class:selected={selectedEmail?.id === email.id}
+                  aria-current={selectedEmail?.id === email.id ? 'true' : undefined}
+                >
+                  <span class="sender-avatar" aria-hidden="true"
+                    >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
+                  >
+                  <strong class="sender" title={email.fromAddress}
+                    >{senderName(email.fromAddress)}</strong
+                  >
+                  <span class="message-line"
+                    ><span class="subject">{email.subject || '(No subject)'}</span><span
+                      class="preview"
+                    >
+                      — {email.snippet || 'No preview text.'}</span
+                    ></span
+                  >
+                  <span class="category-tag"
+                    >{email.category ? labels[email.category] : 'Pending'}</span
+                  >
+                  {#if importance(email) === 'important'}<span class="star" aria-label="Important"
+                      >★</span
+                    >{:else}<span></span>{/if}
+                  <time title={email.accountEmail}>{formatDate(email.messageDate)}</time>
+                </a>
+              </li>
+            {/each}
+          </ul>
         {:else}
           <div class="empty-state">
             <h3>
@@ -506,7 +528,7 @@
                   : 'Try another search or category.'}
             </p>
           </div>
-        {/each}
+        {/if}
       </div>
     </section>
 
@@ -816,6 +838,7 @@
     color: inherit;
   }
   button:focus-visible,
+  .message:focus-visible,
   select:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: -3px;
@@ -987,6 +1010,11 @@
     overflow-y: auto;
     flex: 1;
   }
+  .message-list ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
   .message {
     display: grid;
     grid-template-columns: 24px minmax(120px, 19%) minmax(0, 1fr) auto 14px 72px;
@@ -1000,6 +1028,7 @@
     border-left: 2px solid transparent;
     background: transparent;
     color: var(--color-text-muted);
+    text-decoration: none;
     font-size: var(--text-sm);
   }
   .message:hover {
