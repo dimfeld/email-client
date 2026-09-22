@@ -72,7 +72,7 @@ export const actions: Actions = {
 			return {
 				message: result.deferred
 					? `Google rate limit reached. Saved progress for ${account}; the next sync will resume from the last completed page.`
-					: `Synced ${result.contacts} contacts, ${result.calendars} calendars, and ${result.events} events for ${account}.`
+					: `Fetched ${result.contacts} contacts, ${result.calendars} calendars, and ${result.events} events for ${account}.`
 			};
 		} catch (error) {
 			return fail(502, { error: error instanceof Error ? error.message : String(error) });

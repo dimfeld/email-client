@@ -5,7 +5,6 @@ import {
 	applyContactsIncrementalSync,
 	applyGoogleOtherContactsIncrementalSync,
 	finalizeGoogleSync,
-	getGoogleSyncCounts,
 	getGoogleOtherContactsSyncProgress,
 	getGoogleSyncProgress,
 	getGoogleSyncState,
@@ -124,6 +123,7 @@ async function syncGoogleAccountOnce(
 	{ pageDelayMs = GOOGLE_SYNC_PAGE_DELAY_MS, sleep: wait = sleep }: GoogleSyncOptions = {}
 ): Promise<GoogleSyncResult> {
 	let requestedPage = false;
+	const fetched = { contacts: 0, calendars: 0, events: 0 };
 	const requestPage = async <T>(url: string, params: Record<string, string | number | boolean | undefined>): Promise<T> => {
 		if (requestedPage && pageDelayMs > 0) await wait(pageDelayMs);
 		requestedPage = true;
@@ -148,6 +148,7 @@ async function syncGoogleAccountOnce(
 			saveContactsSyncPage(database, contactsProgress,
 				(result.connections ?? []).filter((contact) => !isDeleted(contact)).map(normalizeContact),
 				result.nextPageToken, result.nextSyncToken);
+			fetched.contacts += result.connections?.length ?? 0;
 			contactsProgress = getGoogleSyncProgress(database, account.email, 'contacts')!;
 		}
 
@@ -168,6 +169,7 @@ async function syncGoogleAccountOnce(
 				saveGoogleOtherContactsSyncPage(database, otherContactsProgress,
 					(result.otherContacts ?? []).filter((contact) => !isDeleted(contact)).map(normalizeContact),
 					result.nextPageToken, result.nextSyncToken);
+				fetched.contacts += result.otherContacts?.length ?? 0;
 				otherContactsProgress = getGoogleOtherContactsSyncProgress(database, account.email)!;
 			}
 		}
@@ -188,6 +190,7 @@ async function syncGoogleAccountOnce(
 				const next = saveCalendarListSyncPage(database, calendarProgress,
 					(result.items ?? []).filter((calendar) => !isDeleted(calendar)).map(normalizeCalendar),
 					result.nextPageToken, result.nextSyncToken);
+				fetched.calendars += result.items?.length ?? 0;
 				calendarProgress = next ?? getGoogleSyncProgress(database, account.email, 'calendar')!;
 			}
 
@@ -207,6 +210,7 @@ async function syncGoogleAccountOnce(
 					(result.items ?? []).filter((event) => !isDeleted(event) && event.status !== 'cancelled')
 						.map((event) => normalizeCalendarEvent(event, calendarProgress.calendarId!)),
 					result.nextPageToken, result.nextSyncToken);
+				fetched.events += result.items?.length ?? 0;
 				calendarProgress = next ?? getGoogleSyncProgress(database, account.email, 'calendar')!;
 			}
 		}
@@ -218,8 +222,7 @@ async function syncGoogleAccountOnce(
 			if (contactsProgress?.phase === 'complete' && otherContactsProgress?.phase === 'complete'
 				&& calendarProgress?.phase === 'complete') finalizeGoogleSync(database, account.email);
 		}
-		const counts = getGoogleSyncCounts(database, account.email);
-		return deferred ? { ...counts, deferred: true } : counts;
+		return deferred ? { ...fetched, deferred: true } : fetched;
 	};
 
 	const contactsProgress = getGoogleSyncProgress(database, account.email, 'contacts');
@@ -247,6 +250,7 @@ async function syncGoogleAccountOnce(
 				personFields: 'names,emailAddresses,phoneNumbers,organizations,metadata', pageSize: 1000,
 				requestSyncToken: true, syncToken: state.contactsSyncToken, pageToken: contactsPageToken
 			});
+			fetched.contacts += result.connections?.length ?? 0;
 			for (const contact of result.connections ?? []) {
 				for (const oldName of previousResourceNames(contact)) deletedContacts.add(oldName);
 				if (isDeleted(contact)) {
@@ -268,6 +272,7 @@ async function syncGoogleAccountOnce(
 				readMask: 'names,emailAddresses,phoneNumbers,metadata', pageSize: 1000,
 				requestSyncToken: true, syncToken: state.otherContactsSyncToken, pageToken: otherContactsPageToken
 			});
+			fetched.contacts += result.otherContacts?.length ?? 0;
 			for (const contact of result.otherContacts ?? []) {
 				for (const oldName of previousResourceNames(contact)) deletedOtherContacts.add(oldName);
 				if (isDeleted(contact)) {
@@ -288,6 +293,7 @@ async function syncGoogleAccountOnce(
 			const result = await requestPage<CalendarPage>('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
 				showDeleted: true, showHidden: true, syncToken: state.calendarListSyncToken, pageToken: calendarPageToken
 			});
+			fetched.calendars += result.items?.length ?? 0;
 			for (const calendar of result.items ?? []) {
 				if (isDeleted(calendar)) {
 					if (typeof calendar.id === 'string') deletedCalendars.push(calendar.id);
@@ -311,6 +317,7 @@ async function syncGoogleAccountOnce(
 						`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
 						{ singleEvents: true, showDeleted: true, syncToken: savedSyncToken ?? undefined, pageToken: eventPageToken }
 					);
+					fetched.events += result.items?.length ?? 0;
 					for (const event of result.items ?? []) {
 						if (isDeleted(event) || event.status === 'cancelled') {
 							if (typeof event.id === 'string') deletedEvents.push(event.id);
@@ -330,6 +337,7 @@ async function syncGoogleAccountOnce(
 						`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
 						{ singleEvents: true, showDeleted: true, pageToken: eventPageToken }
 					);
+					fetched.events += result.items?.length ?? 0;
 					changedEvents.push(...(result.items ?? []).filter((event) => !isDeleted(event) && event.status !== 'cancelled')
 						.map((event) => normalizeCalendarEvent(event, calendarId)));
 					eventPageToken = result.nextPageToken;
@@ -339,9 +347,9 @@ async function syncGoogleAccountOnce(
 			applyCalendarEventsIncrementalSync(database, account.email, calendarId, changedEvents, deletedEvents,
 				requireSyncToken(eventNextSyncToken, `Google Calendar ${calendarId}`), replace);
 		}
-		return getGoogleSyncCounts(database, account.email);
+		return fetched;
 	} catch (error) {
-		if (isGoogleRateLimitError(error)) return { ...getGoogleSyncCounts(database, account.email), deferred: true };
+		if (isGoogleRateLimitError(error)) return { ...fetched, deferred: true };
 		if (!isExpiredSyncToken(error)) throw error;
 		resetGoogleSyncState(database, account.email);
 		return fullSync();
@@ -369,9 +377,9 @@ export function syncGoogleAccount(
 		.then((result) => {
 			const details = {
 				account: account.email,
-				contacts: result.contacts,
-				calendars: result.calendars,
-				events: result.events,
+				fetchedContacts: result.contacts,
+				fetchedCalendars: result.calendars,
+				fetchedEvents: result.events,
 				durationMs: Date.now() - startedAt
 			};
 			if (result.deferred) console.warn('Google data sync deferred.', details);

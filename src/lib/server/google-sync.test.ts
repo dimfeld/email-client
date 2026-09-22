@@ -84,7 +84,7 @@ describe('Google contacts and calendar sync', () => {
 		await expect(syncGoogleAccount(database, { email: 'owner@example.com', refreshToken: 'token' }, request, { pageDelayMs: 0 }))
 			.resolves.toMatchObject({ contacts: 1, deferred: true });
 		await expect(syncGoogleAccount(database, { email: 'owner@example.com', refreshToken: 'token' }, request, { pageDelayMs: 0 }))
-			.resolves.toEqual({ contacts: 2, calendars: 0, events: 0 });
+			.resolves.toEqual({ contacts: 1, calendars: 0, events: 0 });
 		expect(calls.filter((call) => call.url.includes('connections')).map((call) => call.pageToken)).toEqual([
 			undefined, 'contacts-2', 'contacts-2'
 		]);
@@ -132,7 +132,7 @@ describe('Google contacts and calendar sync', () => {
 		await expect(syncGoogleAccount(database, { email: 'owner@example.com', refreshToken: 'token' }, request, { pageDelayMs: 0 }))
 			.resolves.toMatchObject({ calendars: 1, events: 1, deferred: true });
 		await expect(syncGoogleAccount(database, { email: 'owner@example.com', refreshToken: 'token' }, request, { pageDelayMs: 0 }))
-			.resolves.toEqual({ contacts: 0, calendars: 1, events: 2 });
+			.resolves.toEqual({ contacts: 0, calendars: 0, events: 1 });
 		expect(eventCalls).toEqual([undefined, 'events-2', 'events-2']);
 		expect(listCalendarEvents(database).map((event) => event.eventId)).toEqual(['event-1', 'event-2']);
 		database.close();

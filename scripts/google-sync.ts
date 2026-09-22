@@ -6,6 +6,6 @@ const results = await syncConfiguredGoogleAccounts(getDatabase(), readFlag('--ac
 for (const { account, result } of results) {
 	console.log(result.deferred
 		? `Google rate limit reached for ${account}; the next sync will resume from the last completed page.`
-		: `Synced ${result.contacts} contact(s), ${result.calendars} calendar(s), and ${result.events} event(s) for ${account}.`);
+		: `Fetched ${result.contacts} contact(s), ${result.calendars} calendar(s), and ${result.events} event(s) for ${account}.`);
 }
 if (results.length === 0) console.log('No enabled Google OAuth accounts are configured.');
