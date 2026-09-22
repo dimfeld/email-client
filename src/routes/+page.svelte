@@ -144,7 +144,14 @@
 	}
 
 	function isTypingTarget(target: EventTarget | null): boolean {
-		return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName));
+		if (!target || typeof target !== 'object' || !('tagName' in target)) return false;
+		const element = target as HTMLElement;
+		return element.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName);
+	}
+
+	function handleMessageFrameLoad(event: Event) {
+		resizeHtmlMessage(event);
+		(event.currentTarget as HTMLIFrameElement).contentDocument?.addEventListener('keydown', handleKeydown);
 	}
 
 	async function handleKeydown(event: KeyboardEvent) {
@@ -342,7 +349,7 @@
 							{/if}
 						</div>
 						{#if selectedEmail.bodyHtml}
-							<iframe class="html-message" title="Email message content" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesFor === selectedEmail.id)} onload={resizeHtmlMessage}></iframe>
+							<iframe class="html-message" title="Email message content" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesFor === selectedEmail.id)} onload={handleMessageFrameLoad}></iframe>
 						{:else}
 							<div class="message-body">{selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}</div>
 						{/if}
