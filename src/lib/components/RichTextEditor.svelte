@@ -185,31 +185,31 @@
     flex-wrap: wrap;
     gap: 4px;
     padding: 8px;
-    border-bottom: 1px solid #36363a;
+    border-bottom: 1px solid var(--color-border-strong);
   }
   button,
   select,
   .image-button {
-    background: #262629;
-    color: #ccc;
-    border: 1px solid #3a3a3e;
-    border-radius: 4px;
+    background: var(--color-surface-raised);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
     padding: 5px 7px;
     font: inherit;
     font-size: 0.72rem;
     cursor: pointer;
   }
   button[aria-pressed='true'] {
-    color: #72d2f5;
-    border-color: #72d2f5;
+    color: var(--color-accent-text);
+    border-color: var(--color-accent-text);
   }
   .image-button input {
     display: none;
   }
   .editor-content {
     padding: 14px;
-    background: #fff;
-    color: #171717;
+    background: var(--color-paper);
+    color: var(--color-paper-text);
     min-height: 180px;
   }
   .editor-content :global(.tiptap) {
@@ -225,24 +225,24 @@
     height: auto;
   }
   .editor-content :global(blockquote) {
-    border-left: 3px solid #aaa;
+    border-left: 3px solid var(--color-paper-border);
     padding-left: 12px;
     margin-inline: 0;
-    color: #555;
+    color: var(--color-paper-muted);
   }
   .editor-content :global(pre) {
     white-space: pre-wrap;
-    background: #f1f1f1;
+    background: var(--color-paper-code);
     padding: 10px;
   }
   .editor-content :global(a) {
-    color: #116caa;
+    color: var(--color-paper-link);
   }
   .hint {
     margin: 0;
     padding: 8px 12px;
     font-size: 0.68rem;
-    color: #999;
+    color: var(--color-text-muted);
   }
   .insert {
     padding: 10px;
@@ -254,16 +254,16 @@
   .insert textarea {
     width: 100%;
     font: inherit;
-    background: #101013;
-    color: #ddd;
-    border: 1px solid #444;
+    background: var(--color-surface-sunken);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-hover);
     padding: 8px;
   }
   .insert input {
     font: inherit;
-    background: #101013;
-    color: #ddd;
-    border: 1px solid #444;
+    background: var(--color-surface-sunken);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-hover);
     padding: 5px;
   }
 </style>

@@ -103,17 +103,17 @@
     bottom: 0;
     z-index: 8;
     width: min(520px, 100vw);
-    background: #171719;
-    border-left: 1px solid #36363a;
-    box-shadow: -16px 0 50px #0006;
-    color: #ddd;
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-border-strong);
+    box-shadow: -16px 0 50px var(--color-shadow);
+    color: var(--color-text);
   }
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 18px;
-    border-bottom: 1px solid #303033;
+    border-bottom: 1px solid var(--color-border-strong);
   }
   h2 {
     margin: 0 0 4px;
@@ -121,15 +121,15 @@
   }
   small {
     display: block;
-    color: #999;
+    color: var(--color-text-muted);
     font-size: 0.7rem;
     overflow-wrap: anywhere;
   }
   button {
-    border: 1px solid #404045;
-    border-radius: 5px;
-    background: #252529;
-    color: #ddd;
+    border: 1px solid var(--color-border-hover);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
     padding: 8px 12px;
     cursor: pointer;
     font: inherit;
@@ -146,16 +146,16 @@
   article {
     margin-bottom: 20px;
     padding: 14px;
-    border: 1px solid #303033;
-    border-radius: 8px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
     font-size: 0.85rem;
   }
   article.user {
-    background: #163b4c;
+    background: var(--color-accent-bg);
   }
   article strong {
     font-size: 0.72rem;
-    color: #aaa;
+    color: var(--color-text-secondary);
   }
   p {
     white-space: pre-wrap;
@@ -163,7 +163,7 @@
     line-height: 1.6;
   }
   .help {
-    color: #999;
+    color: var(--color-text-muted);
     font-size: 0.8rem;
   }
   ul {
@@ -173,14 +173,14 @@
     margin-block: 10px;
   }
   a {
-    color: #67c7ee;
+    color: var(--color-accent-text);
   }
   .error {
-    color: #ffabb7;
+    color: var(--color-danger);
   }
   form {
     padding: 18px;
-    border-top: 1px solid #303033;
+    border-top: 1px solid var(--color-border-strong);
   }
   label {
     display: block;
@@ -191,10 +191,10 @@
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
-    background: #0e0e10;
-    color: #ddd;
-    border: 1px solid #404045;
-    border-radius: 6px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-hover);
+    border-radius: var(--radius-md);
     padding: 10px;
     font: inherit;
   }

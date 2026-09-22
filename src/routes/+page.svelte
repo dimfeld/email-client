@@ -771,30 +771,13 @@
 </main>
 
 <style>
-  :global(*) {
-    box-sizing: border-box;
-  }
-  :global(html) {
-    background: #0b0b0d;
-    color-scheme: dark;
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  }
-  :global(body) {
-    margin: 0;
-    min-width: 320px;
-    color: #dededf;
-  }
-  :global(button),
-  :global(select) {
-    font: inherit;
-  }
   button {
     cursor: pointer;
     color: inherit;
   }
   button:focus-visible,
   select:focus-visible {
-    outline: 2px solid #35b6ee;
+    outline: 2px solid var(--color-accent);
     outline-offset: -3px;
   }
   h1,
@@ -814,7 +797,7 @@
     justify-content: space-between;
     gap: 16px;
     padding: 10px 16px;
-    border-bottom: 1px solid #2a2a2d;
+    border-bottom: 1px solid var(--color-border);
   }
   .brand {
     display: flex;
@@ -825,7 +808,7 @@
     background: none;
     border: 0;
     font-size: 1.1rem;
-    color: #999;
+    color: var(--color-text-muted);
   }
   h1 {
     font-size: 0.95rem;
@@ -838,7 +821,7 @@
     gap: 16px;
   }
   .app-links a {
-    color: #35b6ee;
+    color: var(--color-accent);
     font-size: 0.85rem;
     text-decoration: none;
   }
@@ -849,19 +832,19 @@
     min-width: 0;
   }
   .account-picker label {
-    color: #939398;
+    color: var(--color-text-muted);
     font-size: 0.8rem;
   }
   .drafts-button {
     background: none;
     border: 0;
-    color: #35b6ee;
+    color: var(--color-accent);
     font-size: 0.8rem;
   }
   .shortcuts-button {
     border: 0;
     background: transparent;
-    color: #35b6ee;
+    color: var(--color-accent);
     font-size: 0.8rem;
     cursor: pointer;
   }
@@ -869,25 +852,21 @@
     display: inline-block;
     min-width: 1.5em;
     padding: 2px 5px;
-    border: 1px solid #36363a;
-    border-radius: 3px;
-    background: #242427;
-    color: #ceced2;
-    font:
-      0.75rem ui-monospace,
-      SFMono-Regular,
-      Menlo,
-      monospace;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font: 0.75rem var(--font-mono);
     text-align: center;
   }
   select {
     min-width: 0;
     max-width: 100%;
-    border: 1px solid #36363a;
-    border-radius: 6px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
     padding: 8px 12px;
-    background: #161618;
-    color: #dededf;
+    background: var(--color-surface);
+    color: var(--color-text);
   }
   .mailbox {
     flex: 1;
@@ -899,11 +878,11 @@
     display: none;
     padding: 24px 12px;
     overflow-y: auto;
-    border-right: 1px solid #2a2a2d;
+    border-right: 1px solid var(--color-border);
   }
   .eyebrow {
     padding: 0 12px 16px;
-    color: #85858b;
+    color: var(--color-text-faint);
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 0.14em;
@@ -916,21 +895,21 @@
     width: 100%;
     text-align: left;
     border: 0;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     padding: 12px;
     background: transparent;
-    color: #aaaab0;
+    color: var(--color-text-secondary);
     font-size: 0.85rem;
   }
   .filter:nth-of-type(3) {
     margin-bottom: 20px;
   }
   .filter:hover {
-    background: #242427;
+    background: var(--color-surface-raised);
   }
   .filter.active {
-    background: #173e50;
-    color: #79cbed;
+    background: var(--color-accent-bg);
+    color: var(--color-accent-text);
     font-weight: 650;
   }
   .filter-label {
@@ -948,8 +927,8 @@
     flex-direction: column;
   }
   .list-pane {
-    border-right: 1px solid #2a2a2d;
-    background: #161618;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
   .pane-heading {
     min-height: 48px;
@@ -958,10 +937,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    border-bottom: 1px solid #2a2a2d;
+    border-bottom: 1px solid var(--color-border);
   }
   .pane-heading > span {
-    color: #99999e;
+    color: var(--color-text-muted);
     font-size: 0.75rem;
   }
   .message-list {
@@ -980,24 +959,24 @@
     border: 0;
     border-left: 2px solid transparent;
     background: transparent;
-    color: #99999e;
+    color: var(--color-text-muted);
     font-size: 0.75rem;
   }
   .message:hover {
-    background: #222225;
+    background: var(--color-surface-hover);
   }
   .message.selected {
-    background: #173e50;
-    border-left-color: #35b6ee;
+    background: var(--color-accent-bg);
+    border-left-color: var(--color-accent);
   }
   .sender-avatar {
     display: grid;
     place-items: center;
     width: 21px;
     height: 21px;
-    border-radius: 5px;
-    background: #354555;
-    color: #cfdeee;
+    border-radius: var(--radius-md);
+    background: var(--color-avatar-bg);
+    color: var(--color-avatar-text);
     font-size: 0.7rem;
   }
   .sender,
@@ -1013,21 +992,21 @@
   .unread .sender,
   .unread .subject,
   .unread time {
-    color: #ddd;
+    color: var(--color-text);
     font-weight: 650;
   }
   .preview {
-    color: #707075;
+    color: var(--color-text-faint);
   }
   .category-tag {
     padding: 2px 5px;
-    border-radius: 3px;
-    background: #242426;
-    color: #96969a;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
     font-size: 0.6rem;
   }
   .star {
-    color: #dcad32;
+    color: var(--color-star);
   }
   time {
     text-align: right;
@@ -1039,18 +1018,18 @@
   }
   .mail-tabs button {
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-md);
     padding: 5px 8px;
-    color: #888;
+    color: var(--color-text-muted);
     background: none;
     font-size: 0.8rem;
   }
   .mail-tabs .tab-active {
-    color: #ddd;
-    background: #2c2c2e;
+    color: var(--color-text);
+    background: var(--color-surface-raised);
   }
   .mail-tabs small {
-    color: #888;
+    color: var(--color-text-muted);
   }
   .mailbox.show-detail {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 210px;
@@ -1077,24 +1056,24 @@
   details {
     margin-top: 12px;
     font-size: 0.7rem;
-    color: #888;
+    color: var(--color-text-muted);
   }
 
   .useful-tag {
     display: inline-block;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 3px 6px;
     font-size: 0.65rem;
     font-weight: 700;
   }
   .useful-tag {
-    background: #ffde5920;
-    color: #ffde59;
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
   }
   .detail-pane {
     display: none;
-    border-right: 1px solid #2a2a2d;
-    background: #161618;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
   }
   .reading-content {
     padding: 24px;
@@ -1117,22 +1096,22 @@
     margin-top: 4px;
   }
   dt {
-    color: #85858b;
+    color: var(--color-text-faint);
   }
   dd {
     margin: 0;
-    color: #b6b6bb;
+    color: var(--color-text-secondary);
   }
   .classification-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 16px;
     margin-top: 16px;
-    color: #85858b;
+    color: var(--color-text-faint);
     font-size: 0.75rem;
   }
   .classification-summary strong {
-    color: #ceced2;
+    color: var(--color-text);
     font-weight: 600;
   }
   .extraction-panel {
@@ -1141,15 +1120,15 @@
     gap: 16px;
     margin-top: 24px;
     padding: 16px;
-    border: 1px solid #2a2a2d;
-    border-radius: 6px;
-    background: #161618;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
   }
   .extraction-group {
     min-width: 0;
   }
   .extraction-group h3 {
-    color: #79cbed;
+    color: var(--color-accent-text);
     font-size: 0.78rem;
     letter-spacing: 0.02em;
   }
@@ -1164,7 +1143,7 @@
     display: grid;
     gap: 4px;
     padding-top: 12px;
-    border-top: 1px solid #2a2a2d;
+    border-top: 1px solid var(--color-border);
     font-size: 0.82rem;
     line-height: 1.45;
   }
@@ -1173,24 +1152,24 @@
     border-top: 0;
   }
   .extraction-group li strong {
-    color: #dededf;
+    color: var(--color-text);
     font-weight: 650;
   }
   .extraction-group li span {
-    color: #b6b6bb;
+    color: var(--color-text-secondary);
   }
   .extraction-group li small {
-    color: #939398;
+    color: var(--color-text-muted);
     font-size: 0.72rem;
   }
   .message-body {
     margin-top: 28px;
     padding-top: 28px;
-    border-top: 1px solid #2a2a2d;
+    border-top: 1px solid var(--color-border);
     white-space: pre-wrap;
     line-height: 1.75;
     font-size: 0.92rem;
-    color: #ceced2;
+    color: var(--color-text);
   }
   .html-message {
     display: block;
@@ -1203,11 +1182,11 @@
   }
   .notice {
     margin-top: 20px;
-    color: #ffde59;
+    color: var(--color-warning);
     font-size: 0.8rem;
   }
   .action-error {
-    color: #ff9fb2;
+    color: var(--color-danger);
   }
   .extraction-error {
     grid-column: 1 / -1;
@@ -1220,28 +1199,28 @@
     margin-top: 20px;
   }
   .message-actions button {
-    border: 1px solid #35b6ee;
-    border-radius: 4px;
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
     padding: 8px 14px;
-    background: #35b6ee;
-    color: #0b0b0d;
+    background: var(--color-accent);
+    color: var(--color-bg);
     font-size: 0.8rem;
     font-weight: 650;
   }
   .message-actions .delete-button {
-    border-color: #a84c63;
+    border-color: var(--color-danger-border);
     background: transparent;
-    color: #ff9fb2;
+    color: var(--color-danger);
   }
   .remote-images-control {
     display: flex;
     position: relative;
   }
   .message-actions .remote-images-button {
-    border-color: #36363a;
+    border-color: var(--color-border-strong);
     border-radius: 4px 0 0 4px;
     background: transparent;
-    color: #79cbed;
+    color: var(--color-accent-text);
   }
   .message-actions .remote-images-menu {
     display: inline-flex;
@@ -1249,14 +1228,14 @@
     justify-content: center;
     align-self: stretch;
     padding: 8px 9px;
-    border-color: #36363a;
+    border-color: var(--color-border-strong);
     border-left: 0;
     border-radius: 0 4px 4px 0;
     background: transparent;
-    color: #79cbed;
+    color: var(--color-accent-text);
   }
   .remote-images-menu:focus-visible {
-    outline: 2px solid #35b6ee;
+    outline: 2px solid var(--color-accent);
   }
   .remote-images-options[popover] {
     position-area: block-end span-inline-end;
@@ -1265,27 +1244,27 @@
     min-width: 230px;
     max-width: min(350px, 80vw);
     padding: 4px;
-    border: 1px solid #36363a;
-    border-radius: 4px;
-    background: #242427;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-raised);
     color: inherit;
-    box-shadow: 0 8px 24px #0008;
+    box-shadow: 0 8px 24px var(--color-shadow);
   }
   .message-actions .remote-images-options button {
     width: 100%;
     padding: 9px 10px;
     border: 0;
     background: transparent;
-    color: #dededf;
+    color: var(--color-text);
     text-align: left;
     overflow-wrap: anywhere;
   }
   .message-actions .remote-images-options button:hover {
-    background: #36363a;
+    background: var(--color-border-strong);
   }
   .remote-images-options p {
     padding: 8px;
-    color: #939398;
+    color: var(--color-text-muted);
     font-size: 0.8rem;
   }
   .shortcut-backdrop {
@@ -1295,15 +1274,15 @@
     display: grid;
     place-items: center;
     padding: 20px;
-    background: #0009;
+    background: var(--color-backdrop);
   }
   .shortcut-dialog {
     width: min(420px, 100%);
     padding: 24px;
-    border: 1px solid #36363a;
-    border-radius: 8px;
-    background: #161618;
-    box-shadow: 0 20px 60px #0008;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: 0 20px 60px var(--color-shadow);
   }
   .shortcut-heading {
     display: flex;
@@ -1317,7 +1296,7 @@
   .shortcut-heading button {
     border: 0;
     background: transparent;
-    color: #939398;
+    color: var(--color-text-muted);
     font-size: 1.5rem;
     cursor: pointer;
   }
@@ -1330,7 +1309,7 @@
     align-items: center;
     gap: 12px;
     padding: 8px 0;
-    border-top: 1px solid #2a2a2d;
+    border-top: 1px solid var(--color-border);
   }
   .shortcut-dialog dt {
     display: flex;
@@ -1338,7 +1317,7 @@
   }
   .shortcut-dialog dd {
     margin: 0;
-    color: #ceced2;
+    color: var(--color-text);
     font-size: 0.85rem;
   }
   .empty-state {
@@ -1350,7 +1329,7 @@
   .empty-state p,
   .detail-empty p {
     margin-top: 10px;
-    color: #939398;
+    color: var(--color-text-muted);
     font-size: 0.85rem;
     line-height: 1.6;
   }
@@ -1363,7 +1342,7 @@
     display: block;
     margin-bottom: 20px;
     font-size: 3rem;
-    color: #36363a;
+    color: var(--color-border-strong);
   }
   .detail-empty h2 {
     font-size: 1.2rem;
@@ -1373,14 +1352,14 @@
     background: transparent;
     border: 0;
     padding: 8px 0;
-    color: #35b6ee;
+    color: var(--color-accent);
     font-size: 0.8rem;
   }
   .chat-button {
-    background: #143444;
-    color: #51c1ee;
+    background: var(--color-accent-bg-subtle);
+    color: var(--color-accent-text);
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-md);
     padding: 8px;
     font-size: 0.75rem;
     white-space: nowrap;
@@ -1391,8 +1370,8 @@
     flex: 1;
     max-width: 560px;
     margin-left: auto;
-    border: 1px solid #303034;
-    border-radius: 6px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
   }
   .search-form input {
     width: 100%;
@@ -1400,7 +1379,7 @@
     padding: 8px 10px;
     background: transparent;
     border: 0;
-    color: #ddd;
+    color: var(--color-text);
     font: inherit;
     font-size: 0.75rem;
   }
@@ -1409,22 +1388,22 @@
     background: none;
     padding: 4px 10px;
     font-size: 1.2rem;
-    color: #aaa;
+    color: var(--color-text-secondary);
   }
   .search-form a {
     padding: 0 10px;
-    color: #aaa;
+    color: var(--color-text-secondary);
     text-decoration: none;
   }
   .search-summary,
   .search-error {
     padding: 8px 16px;
     font-size: 0.7rem;
-    color: #999;
-    border-bottom: 1px solid #28282b;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
   }
   .search-error {
-    color: #ff9fb2;
+    color: var(--color-danger);
   }
   @media (max-width: 760px) {
     .search-form {

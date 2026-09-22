@@ -206,19 +206,6 @@
 </main>
 
 <style>
-  :global(*) {
-    box-sizing: border-box;
-  }
-  :global(html) {
-    background: #07131c;
-    color-scheme: dark;
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  }
-  :global(body) {
-    margin: 0;
-    min-width: 320px;
-    color: #edf7fb;
-  }
   main {
     max-width: 860px;
     margin: auto;
@@ -226,7 +213,7 @@
   }
   header {
     padding-bottom: 28px;
-    border-bottom: 1px solid #23404e;
+    border-bottom: 1px solid var(--color-border);
     margin-bottom: 28px;
   }
   nav {
@@ -234,7 +221,7 @@
     gap: 18px;
   }
   nav a {
-    color: #6edff3;
+    color: var(--color-accent);
     text-decoration: none;
     font-size: 0.9rem;
   }
@@ -252,7 +239,7 @@
     overflow-wrap: anywhere;
   }
   p {
-    color: #9bb4bf;
+    color: var(--color-text-muted);
     line-height: 1.6;
     margin: 0;
   }
@@ -274,10 +261,10 @@
   .connect a,
   .sync-card a {
     display: inline-block;
-    color: #07131c;
-    background: #6edff3;
+    color: var(--color-bg);
+    background: var(--color-accent);
     padding: 10px 16px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     text-decoration: none;
     font-size: 0.85rem;
     font-weight: 600;
@@ -288,26 +275,26 @@
     justify-content: space-between;
     gap: 20px;
     padding: 16px;
-    border: 1px solid #23404e;
-    border-radius: 6px;
-    background: #0b1c26;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
   }
   .sync-card p {
     margin-top: 6px;
-    color: #8eabb8;
+    color: var(--color-text-muted);
     font-size: 0.75rem;
     line-height: 1.6;
   }
   .calendar-group {
     margin: 12px 0 0;
     padding: 12px 16px;
-    border: 1px solid #23404e;
-    border-radius: 6px;
-    background: #0b1c26;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
   }
   .calendar-group legend {
     padding: 0 6px;
-    color: #8eabb8;
+    color: var(--color-text-muted);
     font-size: 0.8rem;
     overflow-wrap: anywhere;
   }
@@ -322,21 +309,21 @@
     width: auto;
     margin: 0;
     padding: 0;
-    accent-color: #6edff3;
+    accent-color: var(--color-accent);
   }
   .swatch {
     width: 10px;
     height: 10px;
     flex: none;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: var(--color);
   }
   .category-card {
     padding: 24px;
     margin-top: 20px;
-    background: #0d202b;
-    border: 1px solid #23404e;
-    border-radius: 8px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
   }
   .card-heading {
     display: flex;
@@ -345,17 +332,17 @@
     margin-bottom: 20px;
   }
   .badge {
-    background: #ffde5920;
-    color: #ffde59;
+    background: var(--color-warning-bg);
+    color: var(--color-warning);
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font-size: 0.7rem;
   }
   label {
     display: block;
     font-size: 0.85rem;
     margin: 16px 0 8px;
-    color: #bfd1d8;
+    color: var(--color-text-secondary);
   }
   input,
   textarea,
@@ -368,10 +355,10 @@
   select {
     width: 100%;
     padding: 10px 12px;
-    background: #07131c;
-    color: #edf7fb;
-    border: 1px solid #365869;
-    border-radius: 4px;
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
   }
   textarea {
     resize: vertical;
@@ -385,18 +372,18 @@
   }
   button {
     cursor: pointer;
-    border: 1px solid #6edff3;
-    background: #6edff3;
-    color: #07131c;
+    border: 1px solid var(--color-accent);
+    background: var(--color-accent);
+    color: var(--color-bg);
     padding: 10px 16px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font-size: 0.85rem;
     font-weight: 600;
   }
   button.remove {
-    border-color: #365869;
+    border-color: var(--color-border-strong);
     background: transparent;
-    color: #ffa3b5;
+    color: var(--color-danger);
   }
   .remove-help {
     margin-top: 14px;
@@ -404,16 +391,16 @@
   }
   .feedback {
     padding: 14px 16px;
-    border: 1px solid #365869;
-    color: #a3effb;
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-accent-text);
     margin-top: 20px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
   }
   .error {
-    color: #ffa3b5;
+    color: var(--color-danger);
   }
   :focus-visible {
-    outline: 2px solid #6edff3;
+    outline: 2px solid var(--color-accent);
     outline-offset: 3px;
   }
   @media (max-width: 760px) {

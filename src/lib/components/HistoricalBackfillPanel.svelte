@@ -122,7 +122,7 @@
     margin: 0 0 12px;
   }
   p {
-    color: #9bb4bf;
+    color: var(--color-text-muted);
     line-height: 1.6;
     margin: 8px 0;
     font-size: 0.85rem;
@@ -132,7 +132,7 @@
   }
   label {
     display: block;
-    color: #bfd1d8;
+    color: var(--color-text-secondary);
     font-size: 0.85rem;
     margin: 14px 0 8px;
   }
@@ -141,10 +141,10 @@
     width: 100%;
     box-sizing: border-box;
     padding: 10px;
-    border: 1px solid #365869;
-    border-radius: 5px;
-    color: #edf7fb;
-    background: #0d202b;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    background: var(--color-surface);
     font: inherit;
   }
   .dates {
@@ -166,9 +166,9 @@
   button {
     padding: 10px 16px;
     border: 0;
-    border-radius: 5px;
-    color: #07131c;
-    background: #6edff3;
+    border-radius: var(--radius-md);
+    color: var(--color-bg);
+    background: var(--color-accent);
     font: inherit;
     font-size: 0.85rem;
     cursor: pointer;
@@ -183,8 +183,8 @@
   }
   article {
     padding: 16px;
-    border: 1px solid #365869;
-    border-radius: 6px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
   }
   header {
     display: flex;
@@ -194,19 +194,19 @@
     overflow-wrap: anywhere;
   }
   header span {
-    color: #6edff3;
+    color: var(--color-accent);
     text-transform: capitalize;
   }
   code {
     display: block;
     margin-top: 12px;
-    color: #9bb4bf;
+    color: var(--color-text-muted);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-size: 0.75rem;
   }
   .error {
-    color: #ff9fb2;
+    color: var(--color-danger);
   }
   @media (max-width: 560px) {
     .dates {

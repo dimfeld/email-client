@@ -91,7 +91,7 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: #0c0c0e;
+    background: var(--color-bg);
     font-size: 0.72rem;
     overflow: hidden;
   }
@@ -101,7 +101,7 @@
     padding: 16px 12px;
   }
   a {
-    color: #33b4eb;
+    color: var(--color-accent);
     text-decoration: none;
   }
   .day-heading {
@@ -109,7 +109,7 @@
     align-items: center;
     gap: 6px;
     padding: 12px;
-    color: #949499;
+    color: var(--color-text-muted);
   }
   strong {
     margin-right: auto;
@@ -119,7 +119,7 @@
   button {
     background: none;
     border: 0;
-    color: #aaa;
+    color: var(--color-text-secondary);
     cursor: pointer;
   }
   .scroll {
@@ -132,28 +132,28 @@
   }
   .hour {
     height: 52px;
-    border-top: 1px solid #252528;
+    border-top: 1px solid var(--color-surface-raised);
     margin-right: 10px;
   }
   .hour span {
     position: absolute;
     left: 6px;
-    color: #777;
+    color: var(--color-text-faint);
     font-size: 0.6rem;
   }
   .event {
     position: absolute;
     min-height: 16px;
     padding: 2px 5px;
-    border-radius: 4px;
-    color: #ead9dc;
-    background: #553739;
+    border-radius: var(--radius-sm);
+    color: var(--color-event-text);
+    background: var(--color-event-bg);
     overflow: hidden;
   }
   .all-day {
     margin: 2px 10px 8px;
     padding: 4px;
-    background: #163d4c;
-    border-radius: 4px;
+    background: var(--color-accent-bg);
+    border-radius: var(--radius-sm);
   }
 </style>

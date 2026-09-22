@@ -76,12 +76,12 @@
     align-items: center;
     gap: 10px;
     padding: 8px 14px;
-    border-bottom: 1px solid #303033;
+    border-bottom: 1px solid var(--color-border-strong);
   }
   label {
     width: 42px;
     font-size: 0.78rem;
-    color: #999;
+    color: var(--color-text-muted);
     flex: none;
   }
   input {
@@ -90,7 +90,7 @@
     border: 0;
     outline: none;
     background: transparent;
-    color: #ddd;
+    color: var(--color-text);
     font: inherit;
     font-size: 0.82rem;
   }
@@ -102,23 +102,23 @@
     right: 12px;
     max-height: 220px;
     overflow-y: auto;
-    background: #26262a;
-    border: 1px solid #4a4a50;
-    box-shadow: 0 8px 20px #0005;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border-hover);
+    box-shadow: 0 8px 20px var(--color-shadow);
   }
   button {
     display: block;
     width: 100%;
     text-align: left;
     padding: 9px 12px;
-    color: #ddd;
+    color: var(--color-text);
     background: none;
     border: 0;
     cursor: pointer;
   }
   button:hover,
   button:focus {
-    background: #173e50;
+    background: var(--color-accent-bg);
   }
   strong {
     font-size: 0.8rem;
@@ -127,6 +127,6 @@
     display: block;
     margin-top: 2px;
     font-size: 0.7rem;
-    color: #aaa;
+    color: var(--color-text-secondary);
   }
 </style>

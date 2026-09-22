@@ -1,0 +1,80 @@
+/* Design tokens. Components use these instead of literal colors. */
+:root {
+  color-scheme: dark;
+
+  --color-bg: #0b0b0d;
+  --color-surface: #161618;
+  --color-surface-sunken: #101013;
+  --color-surface-raised: #242427;
+  --color-surface-hover: #222225;
+  --color-border: #2a2a2d;
+  --color-border-strong: #36363a;
+  --color-border-hover: #4a4a50;
+
+  --color-text: #dededf;
+  --color-text-secondary: #b6b6bb;
+  --color-text-muted: #939398;
+  --color-text-faint: #85858b;
+
+  --color-accent: #35b6ee;
+  --color-accent-hover: #25a7d9;
+  --color-accent-text: #79cbed;
+  --color-accent-bg: #173e50;
+  --color-accent-bg-subtle: #143444;
+  --color-on-accent: #0b0b0d;
+
+  --color-danger: #ff9fb2;
+  --color-danger-border: #a84c63;
+  --color-danger-strong: #ff7a7a;
+  --color-warning: #ffde59;
+  --color-warning-bg: #ffde5920;
+  --color-caution: #e4c27a;
+  --color-star: #dcad32;
+  --color-avatar-bg: #354555;
+  --color-avatar-text: #cfdeee;
+  --color-event-bg: #553739;
+  --color-event-text: #ead9dc;
+
+  /* Light "paper" surfaces for message HTML and the composer editor. */
+  --color-paper: #fff;
+  --color-paper-text: #171717;
+  --color-paper-muted: #555;
+  --color-paper-border: #aaa;
+  --color-paper-code: #f1f1f1;
+  --color-paper-link: #116caa;
+
+  --color-shadow: #0008;
+  --color-backdrop: #0009;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+button,
+select,
+input,
+textarea {
+  font: inherit;
+}
