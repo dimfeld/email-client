@@ -41,14 +41,14 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 5. Start the development server with `bun run dev`. Open **Settings** and select **Connect Google account** for each account. Google returns you to Settings after you grant access. Reconnect existing accounts if they need the new Google Contacts and Other contacts access.
 
-6. Configure each connected account with the full topic and subscription names.
+6. Configure each connected account. The default topic and subscription use `GOOGLE_PROJECT_ID` from `.env`, or `dimfeld-gog-project` if it is not set. The defaults are `gmail-events` and `gmail-agent`.
 
    ```sh
    bun run account:configure -- \
-     --account you@example.com \
-     --topic projects/PROJECT/topics/TOPIC \
-     --subscription projects/PROJECT/subscriptions/SUBSCRIPTION
+     --account you@example.com
    ```
+
+   You can pass `--topic` and `--subscription` with full resource names to use different resources.
 
 7. Register the Gmail watch for each account.
 
