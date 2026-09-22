@@ -485,17 +485,20 @@
 
     <section class="list-pane" aria-label="Message list">
       <header class="pane-heading">
-        <div class="mail-tabs">
-          <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
-            >All mail <small>{data.emails.length}</small></button
-          ><button
-            class:tab-active={activeFilter === 'important'}
-            onclick={() => selectFilter('important')}>Important</button
-          ><button
-            class:tab-active={activeFilter === 'useful'}
-            onclick={() => selectFilter('useful')}>Useful</button
-          >
-        </div>
+        <!-- The sidebar has the same filters, so the tabs show only when it is closed. -->
+        {#if !showCategories}
+          <div class="mail-tabs">
+            <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
+              >All mail <small>{data.emails.length}</small></button
+            ><button
+              class:tab-active={activeFilter === 'important'}
+              onclick={() => selectFilter('important')}>Important</button
+            ><button
+              class:tab-active={activeFilter === 'useful'}
+              onclick={() => selectFilter('useful')}>Useful</button
+            >
+          </div>
+        {/if}
         <span>{filterLabel} · {visibleEmails.length}</span>
       </header>
       {#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
