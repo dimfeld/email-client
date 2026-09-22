@@ -37,7 +37,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
      --app-identity user:you@example.com
    ```
 
-   Set `--app-identity` to `user:you@example.com` or `serviceAccount:name@YOUR_PROJECT_ID.iam.gserviceaccount.com`. The default topic and subscription names are both `gmail-notifications`. You can set different names with `--topic` and `--subscription`. Set `GOOGLE_PROJECT_ID` in `.env` to the project ID above.
+   Set `--app-identity` to `user:you@example.com` or `serviceAccount:name@YOUR_PROJECT_ID.iam.gserviceaccount.com`. The default topic and subscription names are both `gmail-agent`. You can set different names with `--topic` and `--subscription`. Set `GOOGLE_PROJECT_ID` in `.env` to the project ID above.
 
 5. Start the development server with `bun run dev`. Open **Settings** and select **Connect Google account** for each account. Google returns you to Settings after you grant access. Reconnect existing accounts if they need the new Google Contacts and Other contacts access.
 
@@ -54,6 +54,12 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
    ```sh
    bun run watch:start -- --account you@example.com
+   ```
+
+   To use a refresh token from an OAuth JSON file instead, pass its path with `--oauth-file`. The file must include `refresh_token`; it can also include `client_id` and `client_secret` (or those values can come from the app's OAuth environment settings).
+
+   ```sh
+   bun run watch:start -- --account you@example.com --oauth-file ./oauth.json
    ```
 
    To renew all configured watches manually:

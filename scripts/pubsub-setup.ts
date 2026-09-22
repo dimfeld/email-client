@@ -1,8 +1,8 @@
 import { readFlag, requireFlag } from './shared';
 
 const project = requireFlag('--project');
-const topic = readFlag('--topic') ?? 'gmail-notifications';
-const subscription = readFlag('--subscription') ?? 'gmail-notifications';
+const topic = readFlag('--topic') ?? 'gmail-agent';
+const subscription = readFlag('--subscription') ?? 'gmail-agent';
 const appIdentity = requireFlag('--app-identity');
 
 if (!/^(user|serviceAccount):[^\s]+$/.test(appIdentity)) {
