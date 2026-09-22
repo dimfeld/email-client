@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDatabase, getGoogleSyncState, listAccounts, listEmails, upsertAccount, upsertEmails } from './db';
+import { applyCalendarEventsIncrementalSync, applyCalendarListIncrementalSync, createDatabase, getGoogleSyncState, listAccounts, listCalendarEventsBetween, listEmails, upsertAccount, upsertEmails } from './db';
 
 let database: DatabaseSync | undefined;
 let directory: string | undefined;
@@ -114,5 +114,25 @@ describe('Google OAuth account migration', () => {
 			contactsSyncToken: null,
 			calendarListSyncToken: null
 		});
+	});
+});
+
+describe('calendar event range listing', () => {
+	it('returns events that may touch the requested days', () => {
+		database = createDatabase(':memory:');
+		upsertAccount(database, { email: 'owner@example.com', refreshToken: 'token' });
+		applyCalendarListIncrementalSync(database, 'owner@example.com',
+			[{ calendarId: 'primary', summary: 'Main', timeZone: null, backgroundColor: null, selected: true }], [], 'list-token');
+		const base = { calendarId: 'primary', summary: '', description: null, location: null, status: 'confirmed', htmlLink: null, organizer: null, attendees: [] };
+		applyCalendarEventsIncrementalSync(database, 'owner@example.com', 'primary', [
+			{ ...base, eventId: 'before', startAt: '2026-09-10T09:00:00-07:00', endAt: '2026-09-10T10:00:00-07:00', allDay: false },
+			{ ...base, eventId: 'edge', startAt: '2026-09-19T23:00:00-07:00', endAt: '2026-09-20T00:30:00-07:00', allDay: false },
+			{ ...base, eventId: 'inside', startAt: '2026-09-21T09:00:00-07:00', endAt: '2026-09-21T10:00:00-07:00', allDay: false },
+			{ ...base, eventId: 'spanning', startAt: '2026-09-01', endAt: '2026-10-01', allDay: true },
+			{ ...base, eventId: 'after', startAt: '2026-09-28T09:00:00-07:00', endAt: '2026-09-28T10:00:00-07:00', allDay: false }
+		], [], 'events-token', true);
+
+		expect(listCalendarEventsBetween(database, '2026-09-20', '2026-09-27').map((event) => event.eventId))
+			.toEqual(['spanning', 'edge', 'inside']);
 	});
 });

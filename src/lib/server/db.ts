@@ -806,12 +806,8 @@ export function listCalendars(database: DatabaseSync, account?: string): SyncedC
 	}));
 }
 
-export function listCalendarEvents(database: DatabaseSync, account?: string): SyncedCalendarEvent[] {
-	const rows = (account
-		? database.prepare('SELECT * FROM calendar_events WHERE account_email = ? ORDER BY start_at, summary COLLATE NOCASE').all(account)
-		: database.prepare('SELECT * FROM calendar_events ORDER BY start_at, summary COLLATE NOCASE').all()
-	) as Array<Record<string, unknown>>;
-	return rows.map((row) => ({
+function calendarEventFromRow(row: Record<string, unknown>): SyncedCalendarEvent {
+	return {
 		accountEmail: String(row.account_email), calendarId: String(row.calendar_id), eventId: String(row.event_id),
 		summary: String(row.summary), description: row.description === null ? null : String(row.description),
 		location: row.location === null ? null : String(row.location), startAt: String(row.start_at), endAt: String(row.end_at),
@@ -819,7 +815,31 @@ export function listCalendarEvents(database: DatabaseSync, account?: string): Sy
 		htmlLink: row.html_link === null ? null : String(row.html_link),
 		organizer: row.organizer === null ? null : String(row.organizer),
 		attendees: JSON.parse(String(row.attendees_json)) as string[]
-	}));
+	};
+}
+export function listCalendarEvents(database: DatabaseSync, account?: string): SyncedCalendarEvent[] {
+	const rows = (account
+		? database.prepare('SELECT * FROM calendar_events WHERE account_email = ? ORDER BY start_at, summary COLLATE NOCASE').all(account)
+		: database.prepare('SELECT * FROM calendar_events ORDER BY start_at, summary COLLATE NOCASE').all()
+	) as Array<Record<string, unknown>>;
+	return rows.map(calendarEventFromRow);
+}
+/**
+ * Lists events that may touch the days from `start` (inclusive) to `end` (exclusive), given as YYYY-MM-DD.
+ * Stored times keep their original UTC offset, so the comparison pads the range by one day on each side
+ * and the caller does the exact overlap check in local time.
+ */
+export function listCalendarEventsBetween(database: DatabaseSync, start: string, end: string): SyncedCalendarEvent[] {
+	const paddedStart = shiftDateKey(start, -1);
+	const paddedEnd = shiftDateKey(end, 1);
+	const rows = database.prepare(`SELECT * FROM calendar_events
+		WHERE start_at < ? AND end_at >= ? ORDER BY start_at, summary COLLATE NOCASE`)
+		.all(paddedEnd, paddedStart) as Array<Record<string, unknown>>;
+	return rows.map(calendarEventFromRow);
+}
+function shiftDateKey(key: string, days: number): string {
+	const [year, month, day] = key.split('-').map(Number);
+	return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }
 
 export function setAccountHistoryId(
