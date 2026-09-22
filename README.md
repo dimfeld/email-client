@@ -29,7 +29,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_FILE` to the downloaded JSON path, and set the API keys that you use. The client ID and secret variables remain available when you do not use a client file. Keep `GOOGLE_OAUTH_REDIRECT_URI` equal to the registered URI. Set `GOOGLE_PROJECT_ID` to select the Pub/Sub project explicitly; if it is empty, the Pub/Sub client uses its normal project discovery.
 
-4. Start the app, open **Settings**, and select **Connect Google account** for each account. Restart the server after you connect or reconnect an account so the background Gmail listener reloads its credentials.
+4. Start the development server with `bun run dev`. Open **Settings** and select **Connect Google account** for each account. Google returns you to Settings after you grant access. Reconnect existing accounts if they need the new Google Contacts and Other contacts access.
 
 5. After you create a Pub/Sub topic and pull subscription, configure each connected account.
 
@@ -65,7 +65,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run sync:google -- --account you@example.com
    ```
 
-9. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
+9. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
