@@ -119,4 +119,5 @@ export type SyncedCalendarEvent = {
 	htmlLink: string | null;
 	organizer: string | null;
 	attendees: string[];
+	responseStatus?: string | null;
 };

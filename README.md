@@ -140,3 +140,9 @@ Select **Chat with email** in the inbox. Ask a question, then ask follow-up ques
 Set `OPENAI_API_KEY` to enable chat. It uses the existing GPT-5.6 Luna model by default; set `EMAIL_CHAT_MODEL` to use another Responses model that supports tools and structured output. When `TYPESAFE_API_KEY` is set, the model can ask Jev to check candidate relevance. Chat sends the question, conversation, and retrieved email content to these providers. Conversations remain in browser memory while the panel is open.
 
 Chat can only search and read downloaded mail. Answers include links to messages read during the request. It cannot change messages or send calendar replies. Check the linked messages when you need to confirm a detail.
+
+## Calendar invitation replies
+
+Open an invitation in **Calendar**, choose **Accept**, **Tentative**, or **Decline**, then review the event and account and select **Send response**. Google sends the response notification to the guests. The app shows the confirmed response and keeps it current during Calendar sync.
+
+Existing accounts must reconnect through Settings and grant the new Calendar event write permission. Replies are available for invitations on the connected account's own calendar. The server checks the current attendee and event version before sending. A changed event or failed request leaves the prior local response intact.

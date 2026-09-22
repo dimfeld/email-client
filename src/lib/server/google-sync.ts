@@ -71,6 +71,7 @@ export function normalizeCalendarEvent(event: Record<string, unknown>, calendarI
 		status: typeof event.status === 'string' ? event.status : '',
 		htmlLink: typeof event.htmlLink === 'string' ? event.htmlLink : null,
 		organizer: emailFrom(event.organizer),
+		responseStatus: (Array.isArray(event.attendees) ? event.attendees : []).find((item) => item.self === true)?.responseStatus ?? null,
 		attendees: (Array.isArray(event.attendees) ? event.attendees : []).flatMap((item) => {
 			const email = emailFrom(item); return email ? [email] : [];
 		})

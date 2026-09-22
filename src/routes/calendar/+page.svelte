@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import { canRespondToEvent, calendarResponses, type CalendarResponse } from '$lib/calendar-response';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import type { SyncedCalendarEvent } from '$lib/server/types';
@@ -8,9 +10,13 @@
 		localTime, parseCalendarSelection, setCalendarVisible, shiftView,
 		type CalendarSelection, type CalendarView, type DateKey
 	} from '$lib/calendar';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
+	let reply = $state<CalendarResponse | null>(null);
+	let sending = $state(false);
+	let replyError = $state('');
+	let replyMessage = $state('');
 
 	let selection = $state<CalendarSelection>({});
 	let today = $state(dateKeyFromDate(new Date()));
@@ -124,7 +130,7 @@
 	}
 
 	function openEvent(event: SyncedCalendarEvent) {
-		selectedEvent = event;
+		selectedEvent = event; reply = null; replyError = ''; replyMessage = '';
 		dialog?.showModal();
 	}
 
@@ -136,6 +142,8 @@
 <svelte:head><title>{title} — Calendar — Email Check</title></svelte:head>
 
 <main>
+	{#if form?.error && !selectedEvent}<p role="alert">{form.error}</p>{/if}
+	{#if form?.message && !selectedEvent}<p role="status">{form.message}</p>{/if}
 	<header class="masthead"><a class="brand" href="/"><span aria-hidden="true">@</span><strong>Email Check</strong></a><nav aria-label="Application"><a href="/">Mail</a><a href="/contacts">Contacts</a><a class="active" href="/calendar">Calendar</a><a href="/settings">Settings</a></nav></header>
 	<section class="content">
 		<div class="toolbar">
@@ -255,6 +263,20 @@
 			{#if selectedEvent.organizer}<p><strong>Organizer</strong> {selectedEvent.organizer}</p>{/if}
 			{#if selectedEvent.attendees.length}<p><strong>Attendees</strong> {selectedEvent.attendees.join(', ')}</p>{/if}
 			{#if selectedEvent.description}<pre class="description">{selectedEvent.description}</pre>{/if}
+			{#if canRespondToEvent(selectedEvent)}
+				<section class="invite-response" aria-label="Invitation response">
+					<p>Your response: <strong>{selectedEvent.responseStatus ?? 'Not yet available'}</strong></p>
+					<div class="response-options">{#each Object.entries(calendarResponses) as [value, label]}<button type="button" disabled={sending} aria-pressed={reply === value} onclick={() => { reply = value as CalendarResponse; replyError = ''; replyMessage = ''; }}>{label}</button>{/each}</div>
+					{#if reply}
+						<form method="POST" action="?/respond" use:enhance={() => { sending = true; return async ({ result, update }) => { sending = false; await update({ reset: false }); if (result.type === 'success' && selectedEvent) { selectedEvent = { ...selectedEvent, responseStatus: String(result.data?.responseStatus) }; reply = null; replyMessage = 'Calendar response sent.'; } else if (result.type === 'failure') replyError = String(result.data?.error ?? 'Calendar response failed.'); }; }}>
+							<input type="hidden" name="account" value={selectedEvent.accountEmail} /><input type="hidden" name="calendar" value={selectedEvent.calendarId} /><input type="hidden" name="event" value={selectedEvent.eventId} /><input type="hidden" name="response" value={reply} /><input type="hidden" name="confirmed" value="yes" />
+							<p>Send “{calendarResponses[reply]}” for “{selectedEvent.summary}” as {selectedEvent.accountEmail}? Google will notify the guests.</p>
+							<button type="submit" disabled={sending}>{sending ? 'Sending…' : 'Send response'}</button><button type="button" disabled={sending} onclick={() => reply = null}>Cancel</button>
+						</form>
+					{/if}
+					{#if replyError}<p role="alert">{replyError}</p>{/if}{#if replyMessage}<p role="status">{replyMessage}</p>{/if}
+				</section>
+			{/if}
 			<div class="details-actions">
 				{#if selectedEvent.htmlLink}<a href={selectedEvent.htmlLink} target="_blank" rel="noreferrer">Open in Google Calendar</a>{/if}
 				<button type="button" onclick={() => dialog?.close()}>Close</button>
@@ -310,5 +332,6 @@
 	.description { margin:14px 0 0; padding:12px; border-radius:6px; background:#07131c; color:#c9dde5; font:inherit; font-size:.8rem; white-space:pre-wrap; overflow-wrap:anywhere; max-height:260px; overflow:auto; }
 	.details-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:18px; font-size:.82rem; } .details-actions button { font:inherit; font-size:.82rem; padding:7px 14px; border:1px solid #365869; border-radius:6px; background:#0d202b; color:#c9dde5; cursor:pointer; margin-left:auto; } .details-actions button:hover { border-color:#6edff3; color:#edf7fb; }
 
+	.invite-response { margin-top: 18px; border-top: 1px solid #365869; padding-top: 10px; } .invite-response button { margin: 8px 8px 0 0; padding: 8px 12px; background: #193a49; border: 1px solid #365869; border-radius: 5px; color: #edf7fb; cursor: pointer; } .invite-response button[aria-pressed="true"] { border-color: #6edff3; } .invite-response button:disabled { opacity: .5; }
 	@media (max-width:900px) { .masthead { flex-wrap:wrap; } nav { width:100%; margin:0; overflow-x:auto; } .content { padding:16px; } .body { grid-template-columns:1fr; } .calendars { position:static; flex-direction:row; flex-wrap:wrap; gap:16px 28px; } .month { grid-template-rows:auto repeat(var(--weeks),minmax(72px,1fr)); } .chip time { display:none; } .timegrid { --gutter:44px; } .scroll { max-height:60vh; } }
 </style>

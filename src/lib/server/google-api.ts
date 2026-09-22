@@ -6,6 +6,7 @@ export const GOOGLE_OAUTH_SCOPES = [
 	'https://www.googleapis.com/auth/gmail.modify',
 	'https://www.googleapis.com/auth/contacts.readonly',
 	'https://www.googleapis.com/auth/calendar.readonly',
+	'https://www.googleapis.com/auth/calendar.events',
 	'https://www.googleapis.com/auth/userinfo.email'
 ];
 
@@ -120,13 +121,13 @@ function messageFromError(error: unknown): { message: string; status: number | u
 export async function googleApiRequest<T>(
 	account: GoogleAccount,
 	url: string,
-	options: { method?: string; params?: Record<string, string | number | boolean | undefined>; data?: unknown } = {}
+	options: { method?: string; params?: Record<string, string | number | boolean | undefined>; data?: unknown; headers?: Record<string, string> } = {}
 ): Promise<T> {
 	if (!account.refreshToken) throw new Error(`${account.email} is not connected to Google OAuth.`);
 	const client = createGoogleOAuthClient();
 	client.setCredentials({ refresh_token: account.refreshToken });
 	try {
-		const response = await client.request<T>({ url, method: options.method, params: options.params, data: options.data });
+		const response = await client.request<T>({ url, method: options.method, params: options.params, data: options.data, headers: options.headers });
 		return response.data;
 	} catch (error) {
 		const details = messageFromError(error);

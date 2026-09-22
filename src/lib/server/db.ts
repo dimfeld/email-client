@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   html_link TEXT,
   organizer TEXT,
   attendees_json TEXT NOT NULL DEFAULT '[]',
+  response_status TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (account_email, calendar_id, event_id),
   FOREIGN KEY (account_email, calendar_id) REFERENCES calendars(account_email, calendar_id) ON DELETE CASCADE
@@ -185,6 +186,7 @@ CREATE TABLE IF NOT EXISTS google_sync_calendar_events (
   html_link TEXT,
   organizer TEXT,
   attendees_json TEXT NOT NULL DEFAULT '[]',
+  response_status TEXT,
   PRIMARY KEY (account_email, sync_id, calendar_id, event_id)
 );
 `;
@@ -229,6 +231,10 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	const stagedCalendarColumns = database.prepare('PRAGMA table_info(google_sync_calendars)').all() as Array<{ name: string }>;
 	if (!stagedCalendarColumns.some((column) => column.name === 'sync_token')) {
 		database.exec('ALTER TABLE google_sync_calendars ADD COLUMN sync_token TEXT');
+	}
+	for (const table of ['calendar_events', 'google_sync_calendar_events']) {
+		const columns = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+		if (!columns.some(column => column.name === 'response_status')) database.exec(`ALTER TABLE ${table} ADD COLUMN response_status TEXT`);
 	}
 	withTransaction(database, () => {
 		const exists = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'categories'").get();
@@ -549,16 +555,16 @@ export function applyCalendarEventsIncrementalSync(
 		if (replace) database.prepare('DELETE FROM calendar_events WHERE account_email = ? AND calendar_id = ?').run(accountEmail, calendarId);
 		const upsert = database.prepare(`INSERT INTO calendar_events
 			(account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
-			 all_day, status, html_link, organizer, attendees_json, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 all_day, status, html_link, organizer, attendees_json, response_status, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(account_email, calendar_id, event_id) DO UPDATE SET summary = excluded.summary,
 				description = excluded.description, location = excluded.location, start_at = excluded.start_at,
 				end_at = excluded.end_at, all_day = excluded.all_day, status = excluded.status,
 				html_link = excluded.html_link, organizer = excluded.organizer,
-				attendees_json = excluded.attendees_json, updated_at = excluded.updated_at`);
+				attendees_json = excluded.attendees_json, response_status = excluded.response_status, updated_at = excluded.updated_at`);
 		for (const event of events) upsert.run(accountEmail, calendarId, event.eventId, event.summary,
 			event.description, event.location, event.startAt, event.endAt, event.allDay ? 1 : 0,
-			event.status, event.htmlLink, event.organizer, JSON.stringify(event.attendees), syncedAt);
+			event.status, event.htmlLink, event.organizer, JSON.stringify(event.attendees), event.responseStatus ?? null, syncedAt);
 		const remove = database.prepare(`DELETE FROM calendar_events
 			WHERE account_email = ? AND calendar_id = ? AND event_id = ?`);
 		for (const eventId of deletedEventIds) remove.run(accountEmail, calendarId, eventId);
@@ -628,9 +634,9 @@ export function finalizeGoogleSync(database: DatabaseSync, accountEmail: string)
 			FROM google_sync_calendars WHERE account_email = ? AND sync_id = ?`).run(syncedAt, accountEmail, calendar.syncId);
 		database.prepare(`INSERT INTO calendar_events
 			(account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
-			 all_day, status, html_link, organizer, attendees_json, updated_at)
+			 all_day, status, html_link, organizer, attendees_json, response_status, updated_at)
 			SELECT account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
-			 all_day, status, html_link, organizer, attendees_json, ?
+			 all_day, status, html_link, organizer, attendees_json, response_status, ?
 			FROM google_sync_calendar_events WHERE account_email = ? AND sync_id = ?`).run(syncedAt, accountEmail, calendar.syncId);
 		database.prepare(`UPDATE accounts SET contacts_synced_at = ?, calendar_synced_at = ?,
 			contacts_sync_token = ?, calendar_list_sync_token = ?, updated_at = ? WHERE email = ?`)
@@ -697,17 +703,17 @@ export function saveCalendarEventsSyncPage(
 	withTransaction(database, () => {
 		const insert = database.prepare(`INSERT INTO google_sync_calendar_events
 			(account_email, sync_id, calendar_id, event_id, summary, description, location, start_at, end_at,
-			 all_day, status, html_link, organizer, attendees_json)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 all_day, status, html_link, organizer, attendees_json, response_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(account_email, sync_id, calendar_id, event_id) DO UPDATE SET
 				summary = excluded.summary, description = excluded.description, location = excluded.location,
 				start_at = excluded.start_at, end_at = excluded.end_at, all_day = excluded.all_day,
 				status = excluded.status, html_link = excluded.html_link, organizer = excluded.organizer,
-				attendees_json = excluded.attendees_json`);
+				attendees_json = excluded.attendees_json, response_status = excluded.response_status`);
 		for (const event of events) {
 			insert.run(progress.accountEmail, progress.syncId, event.calendarId, event.eventId, event.summary,
 				event.description, event.location, event.startAt, event.endAt, event.allDay ? 1 : 0,
-				event.status, event.htmlLink, event.organizer, JSON.stringify(event.attendees));
+				event.status, event.htmlLink, event.organizer, JSON.stringify(event.attendees), event.responseStatus ?? null);
 		}
 		if (nextPageToken) {
 			database.prepare('UPDATE google_sync_progress SET page_token = ?, updated_at = ? WHERE account_email = ? AND sync_type = ?')
@@ -779,8 +785,8 @@ export function replaceCalendars(
 		VALUES (?, ?, ?, ?, ?, ?, ?)`);
 	const insertEvent = database.prepare(`INSERT INTO calendar_events
 		(account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
-		 all_day, status, html_link, organizer, attendees_json, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+		 all_day, status, html_link, organizer, attendees_json, response_status, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 	withTransaction(database, () => {
 		database.prepare('DELETE FROM calendars WHERE account_email = ?').run(accountEmail);
 		for (const calendar of calendars) {
@@ -790,7 +796,7 @@ export function replaceCalendars(
 		for (const event of events) {
 			insertEvent.run(accountEmail, event.calendarId, event.eventId, event.summary, event.description,
 				event.location, event.startAt, event.endAt, event.allDay ? 1 : 0, event.status,
-				event.htmlLink, event.organizer, JSON.stringify(event.attendees), syncedAt);
+				event.htmlLink, event.organizer, JSON.stringify(event.attendees), event.responseStatus ?? null, syncedAt);
 		}
 		database.prepare('UPDATE accounts SET calendar_synced_at = ?, updated_at = ? WHERE email = ?')
 			.run(syncedAt, syncedAt, accountEmail);
@@ -817,9 +823,21 @@ function calendarEventFromRow(row: Record<string, unknown>): SyncedCalendarEvent
 		allDay: Boolean(row.all_day), status: String(row.status),
 		htmlLink: row.html_link === null ? null : String(row.html_link),
 		organizer: row.organizer === null ? null : String(row.organizer),
-		attendees: JSON.parse(String(row.attendees_json)) as string[]
+		attendees: JSON.parse(String(row.attendees_json)) as string[],
+		responseStatus: row.response_status == null ? null : String(row.response_status)
 	};
 }
+export function getCalendarEvent(database: DatabaseSync, account: string, calendarId: string, eventId: string): SyncedCalendarEvent | null {
+	const row = database.prepare('SELECT * FROM calendar_events WHERE account_email = ? AND calendar_id = ? AND event_id = ?').get(account, calendarId, eventId);
+	return row ? calendarEventFromRow(row) : null;
+}
+
+export function saveCalendarResponse(database: DatabaseSync, account: string, calendarId: string, eventId: string, responseStatus: string): void {
+	database.prepare('UPDATE calendar_events SET response_status = ?, updated_at = ? WHERE account_email = ? AND calendar_id = ? AND event_id = ?')
+		.run(responseStatus, new Date().toISOString(), account, calendarId, eventId);
+	publishStateChange();
+}
+
 export function listCalendarEvents(database: DatabaseSync, account?: string): SyncedCalendarEvent[] {
 	const rows = (account
 		? database.prepare('SELECT * FROM calendar_events WHERE account_email = ? ORDER BY start_at, summary COLLATE NOCASE').all(account)
