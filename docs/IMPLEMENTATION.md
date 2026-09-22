@@ -12,7 +12,7 @@ The application must:
 - route a shared subscription notification to its configured Gmail account;
 - classify each stored message with Jev;
 - use a fixed category level or ask Jev to classify message importance for Auto categories;
-- show useful messages first and group all messages by category;
+- show messages in date order and let the mailbox filters select useful messages or categories;
 - include setup commands for accounts, an initial Gmail import, watch registration, and watch consumption;
 - provide account-scoped Google API sync and read-only Contacts and Calendar views;
 - have automated tests for the database, Pub/Sub routing, ingestion, and classification boundary.
@@ -144,7 +144,7 @@ The Settings page can connect or reconnect Google accounts. Search and UI pagina
 - [x] Add archive and delete actions for stored messages.
 - [x] Add account-scoped Google Contacts and Calendar API sync.
 - [x] Add read-only Contacts and Calendar views.
-- [x] Add the category UI with useful messages raised first and account filtering.
+- [x] Add the category UI with mailbox filters and account filtering.
 - [x] Add setup documentation and environment examples.
 - [x] Add automated tests and run type checks, tests, and the production build.
 

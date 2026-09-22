@@ -1186,8 +1186,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
       action_items_json, reminders_json, extraction_model, extraction_error,
       category_confidence, importance_confidence, classification_error, deleted_at, headers_json
      FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
-     ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
-       WHEN 'important' THEN 0 WHEN 'useful' THEN 1 ELSE 2 END, message_date DESC, first_seen_at DESC`
+     ORDER BY message_date DESC, first_seen_at DESC`
 	);
 	const rows = (account ? statement.all({ $account: account }) : statement.all()) as Array<
 		Record<string, unknown>

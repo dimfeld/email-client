@@ -118,14 +118,15 @@ describe('effective message importance', () => {
 		expect(effectiveImportance(undefined, 'important')).toBeNull();
 	});
 
-	it('sorts messages by effective importance and reclassifies fixed messages changed to Auto', () => {
+	it('orders messages by date without sorting by effective importance', () => {
 		database = createDatabase(':memory:');
-		upsertEmails(database, 'test@example.com', [{ id: 'fixed' }, { id: 'auto' }]);
-		saveClassification(database, 'test@example.com', 'fixed', { ...classification, importance: null });
-		saveClassification(database, 'test@example.com', 'auto', { ...classification, category: 'newsletter', importance: 'useful' });
-		expect(listEmails(database).map((email) => email.gmailId)).toEqual(['fixed', 'auto']);
-		saveCategory(database, { id: 'action', name: 'Action needed', description: 'Tasks.', level: 'auto' });
-		expect(upsertEmails(database, 'test@example.com', [{ id: 'fixed' }])).toEqual([{ id: 'fixed' }]);
-		expect(listEmails(database).map((email) => email.gmailId)).toEqual(['auto', 'fixed']);
+		upsertEmails(database, 'test@example.com', [
+			{ id: 'older-important', date: '2026-01-01T00:00:00.000Z' },
+			{ id: 'newer-other', date: '2026-01-02T00:00:00.000Z' }
+		]);
+		saveClassification(database, 'test@example.com', 'older-important', { ...classification, importance: null });
+		saveClassification(database, 'test@example.com', 'newer-other', { ...classification, category: 'newsletter', importance: 'other' });
+
+		expect(listEmails(database).map((email) => email.gmailId)).toEqual(['newer-other', 'older-important']);
 	});
 });
