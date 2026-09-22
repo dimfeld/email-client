@@ -5,11 +5,12 @@ export function createStateRefresh(
 	let running = false;
 	let pending = false;
 	let stopped = false;
+	let paused = false;
 
 	async function drain() {
 		running = true;
 		try {
-			while (pending && !stopped) {
+			while (pending && !stopped && !paused) {
 				pending = false;
 				try {
 					await refresh();
@@ -26,7 +27,12 @@ export function createStateRefresh(
 		request() {
 			if (stopped) return;
 			pending = true;
-			if (!running) void drain();
+			if (!running && !paused) void drain();
+		},
+		pause() { paused = true; },
+		resume() {
+			paused = false;
+			if (pending && !running && !stopped) void drain();
 		},
 		stop() { stopped = true; }
 	};

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { openComposer } from '$lib/composer';
 	import EmailChat from '$lib/components/EmailChat.svelte';
 	import CalendarRail from '$lib/components/CalendarRail.svelte';
 	import { enhance } from '$app/forms';
@@ -205,6 +206,8 @@
 			<button type="submit" aria-label="Search">⌕</button>
 			{#if data.query}<a href={data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'} aria-label="Clear search">×</a>{/if}
 		</form>
+		<button class="chat-button" onclick={() => openComposer({ mode: 'new', account: data.selectedAccount ?? undefined })}>Compose</button>
+		<button class="drafts-button" onclick={() => window.dispatchEvent(new Event('email:drafts'))}>Drafts</button>
 		<button class="chat-button" onclick={() => showChat = !showChat}>Chat with email</button>
 		<nav class="app-links" aria-label="Application"><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a><a href="/settings">Settings</a></nav>
 		<button class="shortcuts-button" type="button" onclick={() => { showShortcuts = true; }}>Shortcuts <kbd>?</kbd></button>
@@ -311,6 +314,9 @@
 						{/if}
 						{#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
 						<div class="message-actions">
+							<button onclick={() => openComposer({ mode: 'reply', sourceEmailId: selectedEmail!.id })}>Reply</button>
+							<button onclick={() => openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail!.id })}>Reply all</button>
+							<button onclick={() => openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}>Forward</button>
 							<form bind:this={archiveForm} method="POST" action="?/archive" use:enhance={submitMessageAction}>
 								<input type="hidden" name="id" value={selectedEmail.id} />
 								<button type="submit">Archive</button>
@@ -373,6 +379,7 @@
 	.app-links a { color: #35b6ee; font-size: .85rem; text-decoration: none; }
 	.account-picker { display: flex; align-items: center; gap: 12px; min-width: 0; }
 	.account-picker label { color: #939398; font-size: .8rem; }
+	.drafts-button { background: none; border: 0; color: #35b6ee; font-size: .8rem; }
 	.shortcuts-button { border: 0; background: transparent; color: #35b6ee; font-size: .8rem; cursor: pointer; }
 	kbd { display: inline-block; min-width: 1.5em; padding: 2px 5px; border: 1px solid #36363a; border-radius: 3px; background: #242427; color: #ceced2; font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 	select { min-width: 0; max-width: 100%; border: 1px solid #36363a; border-radius: 6px; padding: 8px 12px; background: #161618; color: #dededf; }
@@ -438,7 +445,7 @@
 	.notice { margin-top: 20px; color: #ffde59; font-size: .8rem; }
 	.action-error { color: #ff9fb2; }
 	.extraction-error { grid-column: 1 / -1; margin-top: 0; }
-	.message-actions { display: flex; gap: 10px; margin-top: 20px; }
+	.message-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 	.message-actions button { border: 1px solid #35b6ee; border-radius: 4px; padding: 8px 14px; background: #35b6ee; color: #0b0b0d; font-size: .8rem; font-weight: 650; }
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
 	.message-actions .remote-images-button { border-color: #36363a; background: transparent; color: #79cbed; }

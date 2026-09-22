@@ -13,6 +13,7 @@ import type {
 	SyncedContact
 } from './types';
 
+import { composerSchema } from './composer-schema';
 import { historicalBackfillSchema } from './historical-backfill-schema';
 import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
@@ -198,6 +199,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	registerSearchFunctions(database);
 	database.exec(schema);
 	database.exec(historicalBackfillSchema);
+	database.exec(composerSchema);
 	const accountColumns = database.prepare('PRAGMA table_info(accounts)').all() as Array<{
 		name: string;
 	}>;
@@ -307,6 +309,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 				ALTER TABLE emails ADD COLUMN extraction_error TEXT;
 				ALTER TABLE emails ADD COLUMN extracted_at TEXT;`);
 		}
+		if (!emailColumns.some(column => column.name === 'headers_json')) database.exec("ALTER TABLE emails ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}'");
 		installEmailSearch(database);
 	});
 	database.exec('PRAGMA optimize');
@@ -930,13 +933,14 @@ export function upsertEmails(
     INSERT INTO emails (
       account_email, gmail_id, thread_id, from_address, to_addresses, subject,
       message_date, snippet, body_text, body_html, body_truncated, labels_json, content_hash,
-      first_seen_at, updated_at, deleted_at
+      first_seen_at, updated_at, deleted_at, headers_json
     ) VALUES (
       $account, $gmailId, $threadId, $from, $to, $subject,
       $messageDate, $snippet, $bodyText, $bodyHtml, $bodyTruncated, $labels, $contentHash,
-      $now, $now, NULL
+      $now, $now, NULL, $headers
     )
     ON CONFLICT(account_email, gmail_id) DO UPDATE SET
+      headers_json = excluded.headers_json,
       thread_id = excluded.thread_id,
       from_address = excluded.from_address,
       to_addresses = excluded.to_addresses,
@@ -979,6 +983,7 @@ export function upsertEmails(
 			insert.run({
 				$account: accountEmail,
 				$gmailId: email.id,
+				$headers: JSON.stringify(email.headers ?? {}),
 				$threadId: email.threadId ?? null,
 				$from: email.from ?? '',
 				$to: email.to ?? '',
@@ -1179,7 +1184,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
       subject, message_date, snippet, body_text, body_html, body_truncated, labels_json, category,
       importance, has_action_item, action_item_probability, has_reminder, reminder_probability,
       action_items_json, reminders_json, extraction_model, extraction_error,
-      category_confidence, importance_confidence, classification_error, deleted_at
+      category_confidence, importance_confidence, classification_error, deleted_at, headers_json
      FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
      ORDER BY CASE (CASE WHEN categories.level = 'auto' THEN emails.importance ELSE categories.level END)
        WHEN 'important' THEN 0 WHEN 'useful' THEN 1 ELSE 2 END, message_date DESC, first_seen_at DESC`
@@ -1211,6 +1216,7 @@ export function emailFromRow(row: Record<string, unknown>): StoredEmail {
 		bodyHtml: row.body_html === null ? null : String(row.body_html),
 		bodyTruncated: Boolean(row.body_truncated),
 		labels: JSON.parse(String(row.labels_json)) as string[],
+		headers: JSON.parse(String(row.headers_json ?? '{}')),
 		category: row.category as StoredEmail['category'],
 		importance: row.importance as StoredEmail['importance'],
 		hasActionItem: row.has_action_item === null ? null : Boolean(row.has_action_item),

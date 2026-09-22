@@ -171,6 +171,7 @@ export function normalizeGmailMessage(value: unknown): IncomingEmail {
 		id: message.id,
 		threadId: typeof message.threadId === 'string' ? message.threadId : undefined,
 		from: header(payload, 'from'),
+		headers: Object.fromEntries((payload.headers ?? []).flatMap(item => item.name && item.value ? [[item.name.toLowerCase(), item.value]] : [])),
 		to: header(payload, 'to'),
 		subject: header(payload, 'subject'),
 		date: header(payload, 'date') ?? (typeof message.internalDate === 'string' ? message.internalDate : undefined),

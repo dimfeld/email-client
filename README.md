@@ -156,3 +156,15 @@ The import runs on the server and saves each message and page position. Closing 
 The initial request delay uses the existing Google sync delay of 0.25 seconds. You can increase it. Rate limits and temporary provider failures add an exponential wait, starting at Google's required minimum of one second, and honor `Retry-After` when supplied. There is no total message limit. An expired page token restarts the query and skips messages already processed by the task.
 
 Select **Classify imported messages with Jev** to classify mail during the import. This uses your TypeSafe API account. Otherwise, mail is downloaded and indexed without model calls. Archived mail stays outside the inbox and appears in search. A connection or classification error keeps the task and its progress for review and resume.
+
+## Compose and send email
+
+Select **Compose** in the inbox, select a contact email address, or use **Reply**, **Reply all**, or **Forward** in the reader. The popup stays open when you use other parts of the app. You can minimize or expand it.
+
+The Tiptap editor supports rich text, links, lists, quotes, code, inline images, and file attachments. Type Markdown shortcuts such as `## ` for a heading or use **Insert Markdown** to convert a block of Markdown. Contact suggestions come from the selected account's downloaded address book. Reply all removes duplicate recipients and your connected account addresses. Forward includes the original attachments.
+
+Draft changes save automatically in the local database. **Drafts** opens saved drafts and the outbox. Closing the popup keeps the draft; **Discard** removes it and its attachments. Drafts are local to this app and do not sync to Gmail Drafts.
+
+**Send** queues the message for 10 seconds. Select **Undo Send** during that time to return it to a draft. The server sends queued mail even if you close the browser. Queued mail survives a server restart. Once sending starts, the app cannot recall the message. If the connection fails during sending, use **Check sent status** and check Gmail Sent mail before you return it to a draft. The app does not automatically repeat an uncertain send.
+
+Use `bun run start` to run an existing build, or `bun run app` to build and start. The start script permits attachment requests through the server; the composer checks Gmail's 35 MiB encoded message limit before queueing. An explicit `BODY_SIZE_LIMIT` environment setting still applies if your deployment needs a smaller request limit.

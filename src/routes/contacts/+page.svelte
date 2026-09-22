@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { openComposer } from '$lib/composer';
 	import type { SyncedContact } from '$lib/server/types';
 	import { contactInitials, contactIsUnnamed, contactKey, contactLabel, contactMatches, groupContacts } from '$lib/contacts';
 	import type { PageData } from './$types';
@@ -73,7 +74,7 @@
 					{#if selected.emails.length}
 						<section class="fields">
 							<h2>Email</h2>
-							{#each selected.emails as email (email)}<div class="field"><a href={`mailto:${email}`}>{email}</a></div>{/each}
+							{#each selected.emails as email (email)}<div class="field"><a href={`mailto:${email}`} onclick={(event) => { event.preventDefault(); openComposer({ mode: 'new', account: selected!.accountEmail, to: email }); }}>{email}</a></div>{/each}
 						</section>
 					{/if}
 					{#if selected.phones.length}

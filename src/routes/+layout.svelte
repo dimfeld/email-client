@@ -1,24 +1,32 @@
 <script lang="ts">
+	import ComposerHost from '$lib/components/ComposerHost.svelte';
+	import type { LayoutData } from './$types';
+	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
-	import { invalidate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, invalidate } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { createStateRefresh } from '$lib/state-refresh';
 
+	const refresh = createStateRefresh(() => invalidate('app:state'));
+	// A refresh of the old URL can cancel an active SvelteKit navigation.
+	beforeNavigate(() => refresh.pause());
+	afterNavigate(() => refresh.resume());
 	onMount(() => {
-		const refresh = createStateRefresh(() => invalidate('app:state'));
 		const events = new EventSource(resolve('/api/events'));
 		events.addEventListener('message', refresh.request);
 		window.addEventListener('focus', refresh.request);
 		window.addEventListener('online', refresh.request);
+		window.addEventListener('email:state', refresh.request);
 		return () => {
 			refresh.stop();
 			events.close();
 			window.removeEventListener('focus', refresh.request);
 			window.removeEventListener('online', refresh.request);
+			window.removeEventListener('email:state', refresh.request);
 		};
 	});
 
-	let { children } = $props();
+	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 </script>
 
 <svelte:head>
@@ -37,3 +45,4 @@
 </svelte:head>
 
 {@render children()}
+<ComposerHost data={data.composer} />

@@ -43,3 +43,25 @@ it('accepts a later refresh after a failed fetch', async () => {
 	expect(calls).toBe(2);
 	refresh.stop();
 });
+
+it('holds changes during navigation and refreshes them after navigation ends', async () => {
+	const first = Promise.withResolvers<void>();
+	const finished = Promise.withResolvers<void>();
+	let calls = 0;
+	const refresh = createStateRefresh(async () => {
+		calls++;
+		if (calls === 1) await first.promise;
+		else finished.resolve();
+	});
+	refresh.request();
+	refresh.pause();
+	refresh.request();
+	first.resolve();
+	await first.promise;
+	await Promise.resolve();
+	expect(calls).toBe(1);
+	refresh.resume();
+	await finished.promise;
+	expect(calls).toBe(2);
+	refresh.stop();
+});

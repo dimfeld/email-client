@@ -1,3 +1,4 @@
+import { outboxWorker } from '$lib/server/outbox';
 import { historicalBackfillWorker } from '$lib/server/historical-backfill';
 import { startGmailSubscribers } from '$lib/server/gmail-subscriber';
 import { startGmailBackfill } from '$lib/server/gmail-backfill';
@@ -16,3 +17,5 @@ globalSubscribers[watchRenewalKey] ??= startGmailWatchRenewal();
 globalSubscribers[googleDataSyncKey] ??= startGoogleDataSync();
 
 historicalBackfillWorker();
+
+outboxWorker();

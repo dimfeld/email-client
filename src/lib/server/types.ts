@@ -15,6 +15,7 @@ export type IncomingEmail = {
 	bodyHtml?: string;
 	bodyTruncated?: boolean;
 	labels?: string[];
+	headers?: Record<string, string>;
 };
 
 export type GmailWatchPayload = {
@@ -71,6 +72,7 @@ export type StoredEmail = {
 	bodyHtml: string | null;
 	bodyTruncated: boolean;
 	labels: string[];
+	headers?: Record<string, string>;
 	category: EmailCategory | null;
 	importance: Importance | null;
 	hasActionItem: boolean | null;
