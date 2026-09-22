@@ -56,7 +56,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run watch:start -- --account you@example.com
    ```
 
-   To use a refresh token from an OAuth JSON file instead, pass its path with `--oauth-file`. The file must include `refresh_token`; it can also include `client_id` and `client_secret` (or those values can come from the app's OAuth environment settings).
+   To use an OAuth JSON file, pass its path with `--oauth-file`. The script uses `refresh_token` from the file when present, or the account's saved refresh token. The file can include `client_id` and `client_secret`; if it does not, the app's OAuth environment settings supply them.
 
    ```sh
    bun run watch:start -- --account you@example.com --oauth-file ./oauth.json

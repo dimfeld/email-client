@@ -27,9 +27,9 @@ if (oauthFile) {
 		throw new Error('OAuth JSON file must contain OAuth client credentials or a refresh_token.');
 	}
 	const credentials = credentialsValue as Record<string, unknown>;
-	const refreshToken = root.refresh_token ?? credentials.refresh_token;
+	const refreshToken = root.refresh_token ?? credentials.refresh_token ?? account.refreshToken;
 	if (typeof refreshToken !== 'string' || !refreshToken) {
-		throw new Error('OAuth JSON file must contain a refresh_token.');
+		throw new Error(`OAuth JSON file has no refresh_token and ${email} has no saved refresh token. Connect this account through Settings or add refresh_token to the JSON file.`);
 	}
 	const clientId = credentials.client_id;
 	const clientSecret = credentials.client_secret;
