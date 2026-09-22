@@ -120,3 +120,15 @@ bun run build
 ```
 
 The implementation design is in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Future ideas are in [docs/FUTURE_WORK.md](docs/FUTURE_WORK.md).
+
+## Search stored mail
+
+Use the search field in the inbox. Results use BM25 relevance order and include archived mail. Deleted mail is excluded. Search uses the selected account and only messages downloaded to this app.
+
+- `budget approval` requires both words.
+- `"to be confirmed"` matches the full phrase, including common words.
+- `from:alice@example.com` matches an address; `from:example.com` also matches its subdomains.
+- `to:example.com` filters recipients.
+- `after:2026-01-01 before:2027-01-01` selects a UTC date range. The start is included; the end is excluded.
+
+The index is created for existing mail when the app opens the database. Message changes update the index in the same database transaction.

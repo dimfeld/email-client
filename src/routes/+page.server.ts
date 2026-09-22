@@ -1,8 +1,9 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
 import { applyGmailMessageAction } from '$lib/server/gmail-actions';
-import { getDatabase, getEmailActionTarget, listAccounts, listCategories, listEmails, listCalendarEventsBetween } from '$lib/server/db';
+import { getDatabase, getEmail, getEmailActionTarget, listAccounts, listCategories, listEmails, listCalendarEventsBetween } from '$lib/server/db';
 import type { GmailMessageAction } from '$lib/server/gmail-actions';
 import { addDays, dateKeyFromDate, isDateKey } from '$lib/calendar';
+import { searchEmails, SearchQueryError } from '$lib/server/email-search';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ url, depends }) => {
@@ -13,15 +14,25 @@ export const load: PageServerLoad = ({ url, depends }) => {
 	const selectedAccount = accounts.some((account) => account.email === requestedAccount)
 		? requestedAccount
 		: null;
+	const query = url.searchParams.get('q')?.trim() ?? '';
+	let searchError: string | null = null;
+	let emails: ReturnType<typeof listEmails>;
+	try { emails = query ? searchEmails(database, query, selectedAccount ?? undefined) : listEmails(database, selectedAccount ?? undefined); }
+	catch (error) {
+		if (!(error instanceof SearchQueryError)) throw error;
+		searchError = error.message; emails = [];
+	}
 	const requestedDay = url.searchParams.get('day');
 	const calendarDay = isDateKey(requestedDay) ? requestedDay : dateKeyFromDate(new Date());
 	return {
 		calendarDay,
+		query, searchError,
+		selectedMessage: getEmail(database, Number(url.searchParams.get('message')), selectedAccount ?? undefined),
 		accounts: accounts.map(({ refreshToken, ...account }) => ({ ...account, connected: Boolean(refreshToken) })),
 		categories: listCategories(database),
 		calendarEvents: listCalendarEventsBetween(database, calendarDay, addDays(calendarDay, 1)).filter((event) => !selectedAccount || event.accountEmail === selectedAccount),
 		selectedAccount,
-		emails: listEmails(database, selectedAccount ?? undefined)
+		emails
 	};
 };
 

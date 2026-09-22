@@ -35,7 +35,8 @@ describe('email body storage', () => {
 		const path = join(directory, 'test.sqlite');
 		database = createDatabase(path);
 		upsertEmails(database, 'one@example.com', [{ id: 'message' }]);
-		database.exec(`ALTER TABLE emails ADD COLUMN body TEXT NOT NULL DEFAULT '';
+		database.exec(`DROP TRIGGER email_fts_insert; DROP TRIGGER email_fts_update; DROP TRIGGER email_fts_delete; DROP TABLE email_fts;
+			ALTER TABLE emails ADD COLUMN body TEXT NOT NULL DEFAULT '';
 			UPDATE emails SET body = '<html><body><p style="color:red">Legacy</p></body></html>';
 			ALTER TABLE emails DROP COLUMN body_text;
 			ALTER TABLE emails DROP COLUMN body_html;`);

@@ -13,6 +13,7 @@ import type {
 	SyncedContact
 } from './types';
 
+import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
 import { defaultCategories } from './default-categories';
 
@@ -191,6 +192,7 @@ CREATE TABLE IF NOT EXISTS google_sync_calendar_events (
 export function createDatabase(path = defaultPath): DatabaseSync {
 	if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
 	const database = new DatabaseSync(path);
+	registerSearchFunctions(database);
 	database.exec(schema);
 	const accountColumns = database.prepare('PRAGMA table_info(accounts)').all() as Array<{
 		name: string;
@@ -297,6 +299,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 				ALTER TABLE emails ADD COLUMN extraction_error TEXT;
 				ALTER TABLE emails ADD COLUMN extracted_at TEXT;`);
 		}
+		installEmailSearch(database);
 	});
 	database.exec('PRAGMA optimize');
 	return database;
@@ -1165,7 +1168,16 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		Record<string, unknown>
 	>;
 
-	return rows.map((row) => ({
+	return rows.map(emailFromRow);
+}
+
+export function getEmail(database: DatabaseSync, id: number, account?: string): StoredEmail | null {
+	const row = database.prepare(`SELECT * FROM emails WHERE id = ? AND deleted_at IS NULL${account ? ' AND account_email = ?' : ''}`).get(...(account ? [id, account] : [id]));
+	return row ? emailFromRow(row) : null;
+}
+
+export function emailFromRow(row: Record<string, unknown>): StoredEmail {
+	return {
 		id: Number(row.id),
 		accountEmail: String(row.account_email),
 		gmailId: String(row.gmail_id),
@@ -1201,7 +1213,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
 		classificationError:
 			row.classification_error === null ? null : String(row.classification_error),
 		deletedAt: row.deleted_at === null ? null : String(row.deleted_at)
-	}));
+	};
 }
 
 function withTransaction(database: DatabaseSync, operation: () => void): void {

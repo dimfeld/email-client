@@ -55,7 +55,7 @@
 	}));
 	let selectedEmail = $derived(selectedId === null
 		? null
-		: visibleEmails.find((email) => email.id === selectedId) ?? null);
+		: data.selectedMessage ?? null);
 	let filterLabel = $derived(filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail');
 
 	function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
@@ -197,10 +197,17 @@
 <main>
 	<header class="masthead">
 		<div class="brand"><button class="menu-button" aria-label="Toggle mail categories" aria-expanded={showCategories} onclick={() => showCategories = !showCategories}>☰</button><h1>Inbox</h1></div>
+		<form method="GET" class="search-form">
+			{#if data.selectedAccount}<input type="hidden" name="account" value={data.selectedAccount} />{/if}
+			<input name="q" aria-label="Search email" placeholder='Search email · "exact phrase" · from:example.com' value={data.query} />
+			<button type="submit" aria-label="Search">⌕</button>
+			{#if data.query}<a href={data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'} aria-label="Clear search">×</a>{/if}
+		</form>
 		<nav class="app-links" aria-label="Application"><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a><a href="/settings">Settings</a></nav>
 		<button class="shortcuts-button" type="button" onclick={() => { showShortcuts = true; }}>Shortcuts <kbd>?</kbd></button>
 		<form method="GET" class="account-picker">
 			<label for="account">Account</label>
+			{#if data.query}<input type="hidden" name="q" value={data.query} />{/if}
 			<select id="account" name="account" onchange={(event) => event.currentTarget.form?.submit()}>
 				<option value="">All accounts</option>
 				{#each data.accounts as account}
@@ -222,6 +229,8 @@
 
 		<section class="list-pane" aria-label="Message list">
 			<header class="pane-heading"><div class="mail-tabs"><button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}>All mail <small>{data.emails.length}</small></button><button class:tab-active={activeFilter === 'important'} onclick={() => selectFilter('important')}>Important</button><button class:tab-active={activeFilter === 'useful'} onclick={() => selectFilter('useful')}>Useful</button></div><span>{filterLabel} · {visibleEmails.length}</span></header>
+			{#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
+			{#if data.query}<p class="search-summary">Search results · Best match first · Includes archived mail</p>{/if}
 			<div class="message-list">
 				{#each visibleEmails as email (email.id)}
 					<button class="message" class:unread={email.labels.includes('UNREAD')} class:selected={selectedEmail?.id === email.id} aria-pressed={selectedEmail?.id === email.id} onclick={() => updateMailboxUrl({ message: email.id })}>
@@ -444,6 +453,13 @@
 	.detail-empty > span { display: block; margin-bottom: 20px; font-size: 3rem; color: #36363a; }
 	.detail-empty h2 { font-size: 1.2rem; }
 	.back-button { display: block; background: transparent; border: 0; padding: 8px 0; color: #35b6ee; font-size: .8rem; }
+	.search-form { display: flex; align-items: center; flex: 1; max-width: 560px; margin-left: auto; border: 1px solid #303034; border-radius: 6px; }
+	.search-form input { width: 100%; min-width: 0; padding: 8px 10px; background: transparent; border: 0; color: #ddd; font: inherit; font-size: .75rem; }
+	.search-form button { border: 0; background: none; padding: 4px 10px; font-size: 1.2rem; color: #aaa; }
+	.search-form a { padding: 0 10px; color: #aaa; text-decoration: none; }
+	.search-summary, .search-error { padding: 8px 16px; font-size: .7rem; color: #999; border-bottom: 1px solid #28282b; }
+	.search-error { color: #ff9fb2; }
+	@media (max-width: 760px) { .search-form { order: 5; flex-basis: 100%; max-width: none; } }
 	@media (max-width: 1100px) {
 		.mailbox > :global(aside) { display: none; }
 		.mailbox { grid-template-columns: minmax(0, 1fr); }

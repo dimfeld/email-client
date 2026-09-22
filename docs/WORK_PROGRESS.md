@@ -18,7 +18,7 @@ Use the existing project structure. Add tests that prove search correctness, cha
 
 - [x] Read the future work list, inspect the screenshots, and record the contract.
 - [x] Update the main mail UI and check desktop and small-screen layouts.
-- [ ] Add and test BM25 search, index migration, and filters.
+- [x] Add and test BM25 search, index migration, and filters.
 - [ ] Add and test email chat and source links.
 - [ ] Add and test calendar invitation replies.
 - [ ] Add and test persistent historical email backfill and Settings controls.
@@ -32,3 +32,5 @@ Use the existing project structure. Add tests that prove search correctness, cha
 - Tests must never use the production database (user instruction). Browser checks use `/tmp/email-client-check/mail.sqlite`, made with SQLite backup from a read-only source connection. Accounts are disabled and tokens removed in the copy.
 
 - UI: Svelte check passed with no errors or warnings. Playwright checked a 1600 × 1000 inbox and reader, plus a 390 × 844 mobile view. No page errors or horizontal overflow. Screenshots are in `/tmp/email-client-check/`. The calendar uses overlap columns so long events do not cover other events.
+
+- Search: 11 search and database tests passed, including old-database migration, reopen, rank order, exact phrases, HTML-only mail, address/date filters, account scope, archive, update, delete, and restore. Svelte check passed.
