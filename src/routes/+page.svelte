@@ -1,4 +1,5 @@
 <script lang="ts">
+	import EmailChat from '$lib/components/EmailChat.svelte';
 	import CalendarRail from '$lib/components/CalendarRail.svelte';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
@@ -29,6 +30,7 @@
 		return Number.isInteger(id) && id > 0 ? id : null;
 	});
 	let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
+	let showChat = $state(false);
 	let showCategories = $state(false);
 	let showShortcuts = $state(false);
 	let archiveForm = $state<HTMLFormElement | null>(null);
@@ -203,6 +205,7 @@
 			<button type="submit" aria-label="Search">⌕</button>
 			{#if data.query}<a href={data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'} aria-label="Clear search">×</a>{/if}
 		</form>
+		<button class="chat-button" onclick={() => showChat = !showChat}>Chat with email</button>
 		<nav class="app-links" aria-label="Application"><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a><a href="/settings">Settings</a></nav>
 		<button class="shortcuts-button" type="button" onclick={() => { showShortcuts = true; }}>Shortcuts <kbd>?</kbd></button>
 		<form method="GET" class="account-picker">
@@ -334,6 +337,7 @@
 		</section>
 		<CalendarRail events={data.calendarEvents} day={data.calendarDay} />
 	</div>
+	{#if showChat}{#key data.selectedAccount}<EmailChat account={data.selectedAccount} close={() => showChat = false} />{/key}{/if}
 	{#if showShortcuts}
 		<div class="shortcut-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) showShortcuts = false; }}>
 			<dialog open class="shortcut-dialog" aria-labelledby="shortcut-heading">
@@ -453,6 +457,7 @@
 	.detail-empty > span { display: block; margin-bottom: 20px; font-size: 3rem; color: #36363a; }
 	.detail-empty h2 { font-size: 1.2rem; }
 	.back-button { display: block; background: transparent; border: 0; padding: 8px 0; color: #35b6ee; font-size: .8rem; }
+	.chat-button { background: #143444; color: #51c1ee; border: 0; border-radius: 5px; padding: 8px; font-size: .75rem; white-space: nowrap; }
 	.search-form { display: flex; align-items: center; flex: 1; max-width: 560px; margin-left: auto; border: 1px solid #303034; border-radius: 6px; }
 	.search-form input { width: 100%; min-width: 0; padding: 8px 10px; background: transparent; border: 0; color: #ddd; font: inherit; font-size: .75rem; }
 	.search-form button { border: 0; background: none; padding: 4px 10px; font-size: 1.2rem; color: #aaa; }

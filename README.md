@@ -132,3 +132,11 @@ Use the search field in the inbox. Results use BM25 relevance order and include 
 - `after:2026-01-01 before:2027-01-01` selects a UTC date range. The start is included; the end is excluded.
 
 The index is created for existing mail when the app opens the database. Message changes update the index in the same database transaction.
+
+## Chat with email
+
+Select **Chat with email** in the inbox. Ask a question, then ask follow-up questions in the same panel. The selected account sets the search scope. Changing accounts starts a new conversation. **Stop** cancels a request; **New chat** clears the conversation.
+
+Set `OPENAI_API_KEY` to enable chat. It uses the existing GPT-5.6 Luna model by default; set `EMAIL_CHAT_MODEL` to use another Responses model that supports tools and structured output. When `TYPESAFE_API_KEY` is set, the model can ask Jev to check candidate relevance. Chat sends the question, conversation, and retrieved email content to these providers. Conversations remain in browser memory while the panel is open.
+
+Chat can only search and read downloaded mail. Answers include links to messages read during the request. It cannot change messages or send calendar replies. Check the linked messages when you need to confirm a detail.
