@@ -1,4 +1,5 @@
 <script lang="ts">
+	import HistoricalBackfillPanel from '$lib/components/HistoricalBackfillPanel.svelte';
 	import { enhance } from '$app/forms';
 	import type { Category } from '$lib/categories';
 	import type { SubmitFunction } from '@sveltejs/kit';
@@ -33,6 +34,8 @@
 		<h1>Settings</h1>
 		<p>Set the categories that Jev uses to sort mail across all accounts.</p>
 	</header>
+	{#if form?.error}<p class="feedback error" role="alert">{form.error}</p>{/if}
+	{#if form?.message}<p class="feedback" role="status">{form.message}</p>{/if}
 	<section aria-labelledby="google-sync-heading">
 		<h2 id="google-sync-heading">Google data sync</h2>
 		<p class="help">Connect a Google account with OAuth. Email Check uses the Gmail, Google Contacts, and Google Calendar APIs. Restart the server after you connect or reconnect an account so the background Gmail listener reloads it. A failed download keeps the last complete local copy.</p>
@@ -47,13 +50,13 @@
 			{:else}<p class="help">Connect a Google account before you sync Google data.</p>{/each}
 		</div>
 	</section>
+	<HistoricalBackfillPanel accounts={data.accounts} jobs={data.historicalBackfills} delayMs={data.historicalDelayMs} />
 	<section aria-labelledby="categories-heading">
 		<h2 id="categories-heading">Categories</h2>
 		<p class="help">Jev uses each category name and description when it classifies a message. Changes apply to future classifications. Existing messages keep their category.</p>
 		<p class="help"><strong>All important</strong> shows Important messages. <strong>Useful now</strong> shows Important and Useful messages. Fixed levels apply to all messages in the category.</p>
 		<p class="help">With Auto, Jev chooses Important, Useful, or Other for each message. Existing messages without a result need another sync.</p>
-		{#if form?.error}<p class="feedback error" role="alert">{form.error}</p>{/if}
-		{#if form?.message}<p class="feedback" role="status">{form.message}</p>{/if}
+
 		{#each rows as category (category)}
 			<form method="POST" action="?/save" use:enhance={submitCategory} oninput={() => preserveDraft(category)} class="category-card" aria-label={category.id ? `Edit ${category.name}` : 'Add category'}>
 				<input type="hidden" name="id" value={category.id} />

@@ -12,6 +12,8 @@ Add accept, tentative, and decline responses for Google Calendar invitations. Sh
 
 Add a persistent background task for historical Gmail backfill. Accept a Gmail query or date range, show progress, support pause and resume, and resume after restart. Save page progress and handle rate limits without losing the task. Do not run a real backfill as part of testing.
 
+Add a full email composer in a nonmodal popup so the rest of the app remains available. Include durable drafts, rich HTML editing, Markdown-to-HTML shortcuts, contact suggestions, recipients (To/Cc/Bcc), attachments, new mail, reply, reply all, and forward. Compare existing rich text editors before choosing one. Queue sends durably and support Undo Send before the actual send. The send delay is an owner choice; a question is pending. Test MIME output, draft storage, delayed-send state, and the popup workflow without sending real mail.
+
 Use the existing project structure. Add tests that prove search correctness, chat tool scope and source handling, and calendar response safety. Run the project checks, tests, and build. Check the UI in a browser if browser tools are available. Commit each completed part with `jj`.
 
 ## Progress
@@ -21,7 +23,8 @@ Use the existing project structure. Add tests that prove search correctness, cha
 - [x] Add and test BM25 search, index migration, and filters.
 - [x] Add and test email chat and source links.
 - [x] Add and test calendar invitation replies.
-- [ ] Add and test persistent historical email backfill and Settings controls.
+- [x] Add and test persistent historical email backfill and Settings controls.
+- [ ] Add and test the popup composer, drafts, contacts, reply/forward, and Undo Send.
 - [ ] Update user documentation, run final checks, and commit all task changes.
 
 ## Evidence and open items
@@ -39,3 +42,6 @@ Use the existing project structure. Add tests that prove search correctness, cha
 
 - Calendar replies: 19 calendar/API tests passed, including all response values, attendee-only writes, conditional event versions, failed writes, and sync persistence. Svelte check passed. Browser checks confirmed the review step and reconnect error on the isolated fixture; no reply was sent to Google.
 - Chat browser check passed: the panel opens, accepts a question, and shows the missing-key error without page errors.
+
+- Historical backfill: five tests passed for durable cursors, database reopen, archive handling, Retry-After, pause during a request, expired page tokens, duplicate suppression, missing messages, concurrent calls, and input errors. Svelte check passed. Request pacing reuses `GOOGLE_SYNC_PAGE_DELAY_MS`; retry waits follow the [Gmail error guide](https://developers.google.com/workspace/gmail/api/guides/handle-errors).
+- Composer editor decision: use Tiptap with StarterKit. Its [Svelte integration](https://tiptap.dev/docs/editor/getting-started/install/svelte) and [formatting extensions](https://tiptap.dev/docs/editor/extensions/functionality/starterkit) fit the existing app. Lexical supports HTML and Markdown but needs more integration code for this UI.

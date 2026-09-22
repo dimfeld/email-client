@@ -13,7 +13,7 @@ export const GOOGLE_OAUTH_SCOPES = [
 export type GoogleAccount = { email: string; refreshToken: string | null };
 
 export class GoogleApiError extends Error {
-	constructor(message: string, readonly status: number | undefined) {
+	constructor(message: string, readonly status: number | undefined, readonly retryAfterMs?: number) {
 		super(message);
 	}
 }
@@ -131,7 +131,10 @@ export async function googleApiRequest<T>(
 		return response.data;
 	} catch (error) {
 		const details = messageFromError(error);
-		throw new GoogleApiError(details.message, details.status);
+		const headers = (error as { response?: { headers?: { get?: (name: string) => string | null } } }).response?.headers;
+		const retryAfter = headers?.get?.('retry-after');
+		const retryAfterMs = retryAfter ? (/^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now())) : undefined;
+		throw new GoogleApiError(details.message, details.status, Number.isFinite(retryAfterMs) ? retryAfterMs : undefined);
 	}
 }
 

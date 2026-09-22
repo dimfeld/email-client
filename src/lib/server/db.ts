@@ -13,6 +13,7 @@ import type {
 	SyncedContact
 } from './types';
 
+import { historicalBackfillSchema } from './historical-backfill-schema';
 import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
 import { defaultCategories } from './default-categories';
@@ -196,6 +197,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 	const database = new DatabaseSync(path);
 	registerSearchFunctions(database);
 	database.exec(schema);
+	database.exec(historicalBackfillSchema);
 	const accountColumns = database.prepare('PRAGMA table_info(accounts)').all() as Array<{
 		name: string;
 	}>;

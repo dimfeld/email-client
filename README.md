@@ -146,3 +146,13 @@ Chat can only search and read downloaded mail. Answers include links to messages
 Open an invitation in **Calendar**, choose **Accept**, **Tentative**, or **Decline**, then review the event and account and select **Send response**. Google sends the response notification to the guests. The app shows the confirmed response and keeps it current during Calendar sync.
 
 Existing accounts must reconnect through Settings and grant the new Calendar event write permission. Replies are available for invitations on the connected account's own calendar. The server checks the current attendee and event version before sending. A changed event or failed request leaves the prior local response intact.
+
+## Historical email import
+
+In **Settings → Historical email import**, choose an account, an optional Gmail query, and an optional date range. Empty query and date fields import mail from before the task starts. The end date is excluded. New mail continues through the normal sync process.
+
+The import runs on the server and saves each message and page position. Closing the browser does not stop it. **Pause import** stops after any request in progress. **Resume import** continues from saved progress, including after a server restart. Settings shows downloaded and missing-message counts and any error.
+
+The initial request delay uses the existing Google sync delay of 0.25 seconds. You can increase it. Rate limits and temporary provider failures add an exponential wait, starting at Google's required minimum of one second, and honor `Retry-After` when supplied. There is no total message limit. An expired page token restarts the query and skips messages already processed by the task.
+
+Select **Classify imported messages with Jev** to classify mail during the import. This uses your TypeSafe API account. Otherwise, mail is downloaded and indexed without model calls. Archived mail stays outside the inbox and appears in search. A connection or classification error keeps the task and its progress for review and resume.
