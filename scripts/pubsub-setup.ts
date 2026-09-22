@@ -1,7 +1,7 @@
 import { readFlag, requireFlag } from './shared';
 
 const project = requireFlag('--project');
-const topic = readFlag('--topic') ?? 'gmail-agent';
+const topic = readFlag('--topic') ?? 'gmail-events';
 const subscription = readFlag('--subscription') ?? 'gmail-agent';
 const appIdentity = requireFlag('--app-identity');
 
