@@ -1,10 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
-import { getDatabase, listAccounts, setAccountLastBackfillAt } from './db';
+import { getDatabase, getIncomingEmail, listAccounts, setAccountLastBackfillAt } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
-import { listGmailMessages } from './google-api';
+import { getGmailMessage, listGmailMessageIds, listGmailMessages } from './google-api';
 import { ingestGmailPayload } from './ingest';
 import { gmailMessageArrivalStats } from './message-arrival-stats';
+import type { IncomingEmail } from './types';
 
 export const GMAIL_BACKFILL_INTERVAL_MS = 5 * 60 * 1000;
 export const GMAIL_BACKFILL_OVERLAP_MS = 5 * 60 * 1000;
@@ -15,6 +16,8 @@ type GmailBackfillDependencies = {
 	classify: EmailClassifier;
 	extract?: EmailExtractor | null;
 	listMessages?: typeof listGmailMessages;
+	listMessageIds?: typeof listGmailMessageIds;
+	getMessage?: typeof getGmailMessage;
 	now?: () => Date;
 	intervalMs?: number;
 };
@@ -47,9 +50,19 @@ async function backfillAccount(
 	dependencies: GmailBackfillDependencies,
 	now: Date
 ): Promise<{ stored: number; classified: number }> {
-	const listMessages = dependencies.listMessages ?? listGmailMessages;
 	const query = buildGmailBackfillQuery(account.lastBackfillAt, now);
-	const messages = await listMessages(account, query);
+	let messages: IncomingEmail[];
+	if (dependencies.listMessages) {
+		messages = await dependencies.listMessages(account, query);
+	} else {
+		const ids = await (dependencies.listMessageIds ?? listGmailMessageIds)(account, query);
+		const getMessage = dependencies.getMessage ?? getGmailMessage;
+		messages = [];
+		for (const id of ids) {
+			const stored = getIncomingEmail(dependencies.database, account.email, id);
+			messages.push(stored ?? await getMessage(account, id));
+		}
+	}
 	const ingested = await ingestGmailPayload(
 		dependencies.database,
 		{
@@ -102,7 +115,9 @@ export type GmailBackfill = {
 export function startGmailBackfill(
 	{
 		database,
-		listMessages = listGmailMessages,
+		listMessages,
+		listMessageIds,
+		getMessage,
 		classify,
 		extract,
 		intervalMs = GMAIL_BACKFILL_INTERVAL_MS
@@ -120,6 +135,8 @@ export function startGmailBackfill(
 			await backfillGmail({
 				database: activeDatabase,
 				listMessages,
+				listMessageIds,
+				getMessage,
 				classify: classify ?? createJevClassifier(),
 				extract: extract === undefined ? createOpenAIEmailExtractor() : extract
 			});

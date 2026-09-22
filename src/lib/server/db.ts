@@ -1090,6 +1090,33 @@ function hashEmail(email: IncomingEmail): string {
 		.digest('hex');
 }
 
+export function getIncomingEmail(
+	database: DatabaseSync,
+	accountEmail: string,
+	gmailId: string
+): IncomingEmail | null {
+	const row = database.prepare(`SELECT gmail_id, thread_id, from_address, to_addresses, subject,
+		message_date, snippet, body_text, body_html, body_truncated, labels_json, headers_json
+		FROM emails WHERE account_email = ? AND gmail_id = ?`).get(accountEmail, gmailId) as
+		| Record<string, unknown>
+		| undefined;
+	if (!row) return null;
+	return {
+		id: String(row.gmail_id),
+		threadId: row.thread_id === null ? undefined : String(row.thread_id),
+		from: String(row.from_address),
+		to: String(row.to_addresses),
+		subject: String(row.subject),
+		date: row.message_date === null ? undefined : String(row.message_date),
+		snippet: String(row.snippet),
+		bodyText: String(row.body_text),
+		bodyHtml: row.body_html === null ? undefined : String(row.body_html),
+		bodyTruncated: Boolean(row.body_truncated),
+		labels: JSON.parse(String(row.labels_json)) as string[],
+		headers: JSON.parse(String(row.headers_json ?? '{}')) as Record<string, string>
+	};
+}
+
 export function upsertEmails(
 	database: DatabaseSync,
 	accountEmail: string,

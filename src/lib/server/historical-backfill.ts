@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { isDateKey } from '$lib/calendar';
 import { createJevClassifier, type EmailClassifier } from './classifier';
-import { getDatabase, listAccounts, markArchived, markDeleted, saveClassification, saveClassificationError, upsertEmails } from './db';
+import { getDatabase, getIncomingEmail, listAccounts, markArchived, markDeleted, saveClassification, saveClassificationError, upsertEmails } from './db';
 import { getGmailMessage, googleApiRequest, GoogleApiError, isGoogleRateLimitError } from './google-api';
 import { GOOGLE_SYNC_PAGE_DELAY_MS } from './google-sync';
 import { GMAIL_BACKFILL_INTERVAL_MS } from './gmail-backfill';
@@ -93,7 +93,7 @@ async function runStep({ database, request = googleApiRequest, getMessage = getG
 		let missing = false;
 		if (!alreadyDone) {
 			try {
-				const email = await getMessage(account, id);
+				const email = getIncomingEmail(database, account.email, id) ?? await getMessage(account, id);
 				if (email.id !== id) throw new Error('Gmail returned a different message ID.');
 				const pending = upsertEmails(database, account.email, [email]);
 				if (email.labels?.includes('TRASH')) markDeleted(database, account.email, [id]);

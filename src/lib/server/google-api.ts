@@ -275,7 +275,7 @@ export function normalizeGmailMessage(value: unknown): IncomingEmail {
 	};
 }
 
-export async function listGmailMessages(account: GoogleAccount, query: string, maxMessages?: number): Promise<IncomingEmail[]> {
+export async function listGmailMessageIds(account: GoogleAccount, query: string, maxMessages?: number): Promise<string[]> {
 	const ids: string[] = [];
 	let pageToken: string | undefined;
 	do {
@@ -287,8 +287,13 @@ export async function listGmailMessages(account: GoogleAccount, query: string, m
 		if (maxMessages !== undefined && ids.length >= maxMessages) break;
 		pageToken = result.nextPageToken;
 	} while (pageToken);
+	return maxMessages === undefined ? ids : ids.slice(0, maxMessages);
+}
+
+export async function listGmailMessages(account: GoogleAccount, query: string, maxMessages?: number): Promise<IncomingEmail[]> {
+	const ids = await listGmailMessageIds(account, query, maxMessages);
 	const messages: IncomingEmail[] = [];
-	for (const id of maxMessages === undefined ? ids : ids.slice(0, maxMessages)) messages.push(await getGmailMessage(account, id));
+	for (const id of ids) messages.push(await getGmailMessage(account, id));
 	return messages;
 }
 
