@@ -25,7 +25,7 @@ Use the existing project structure. Add tests that prove search correctness, cha
 - [x] Add and test calendar invitation replies.
 - [x] Add and test persistent historical email backfill and Settings controls.
 - [x] Add and test the popup composer, drafts, contacts, reply/forward, and Undo Send.
-- [ ] Update user documentation, run final checks, and commit all task changes.
+- [x] Update user documentation, run final checks, and commit all task changes.
 
 ## Evidence and open items
 
@@ -49,3 +49,24 @@ Use the existing project structure. Add tests that prove search correctness, cha
 - Composer: seven tests passed for durable drafts, stale saves, safe HTML, MIME headers and bodies, attachments and inline images, reply-all recipients, forward attachments, the 10-second queue, Undo Send, restart, concurrent send claims, and uncertain send recovery. All providers were mocked. The browser check passed for contact suggestions, Markdown headings and conversion, inline images, attachments, draft reopen, reading mail while composing, mobile layout, and disconnected-account errors. A mocked queue check confirmed Undo Send and popup state across navigation to Settings.
 - Draft autosave exposed a navigation race in background refresh. Refresh now waits until navigation ends. A regression test and the composer browser check passed.
 - Historical import browser check passed: saved progress appears, and resume reports the missing account connection without starting a remote import.
+
+## Final checks
+
+- `DATABASE_PATH=/tmp/email-client-check/tests.sqlite bun run test`: 115 tests passed, 0 failed, 396 assertions. Tests use memory or temporary databases.
+- `DATABASE_PATH=/tmp/email-client-check/tests.sqlite bun run check`: no errors or warnings.
+- `DATABASE_PATH=/tmp/email-client-check/build.sqlite bun run build`: passed. The isolated production build also served the composer browser checks.
+- The Undo Send browser check displayed 10 seconds and returned the queued message to an editable draft. Queue responses were mocked; no mail was sent.
+- README now covers search, chat setup, Calendar permission, historical import, the editor, local drafts, sending, and recovery after an uncertain send.
+- No live AI request, email send, calendar response, or remote historical import was used as a test. The production database was not used for tests. Temporary test servers were stopped.
+- The original user changes in `docs/FUTURE_WORK.md` and `vite.config.ts` remain outside these commits.
+
+## Feature commits
+
+| Item | Commit |
+| --- | --- |
+| Mail UI | `5661b170` |
+| BM25 search | `9901a12a` |
+| Email chat | `88a820f9` |
+| Calendar invitation replies | `6a34f9b3` |
+| Historical email import | `88bdc374` |
+| Popup composer and 10-second Undo Send | `ed0d9292` |
