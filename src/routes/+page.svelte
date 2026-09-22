@@ -969,6 +969,10 @@
     background: var(--color-accent-bg);
     border-left-color: var(--color-accent);
   }
+  .message.selected,
+  .message.selected .preview {
+    color: var(--color-text-secondary);
+  }
   .sender-avatar {
     display: grid;
     place-items: center;
