@@ -80,6 +80,7 @@
   let showChat = $state(false);
   let showCategories = $state(false);
   let showShortcuts = $state(false);
+  let shortcutDialog = $state<HTMLDialogElement | null>(null);
   let archiveForm = $state<HTMLFormElement | null>(null);
   let deleteForm = $state<HTMLFormElement | null>(null);
   let readingContent = $state<HTMLElement | null>(null);
@@ -334,6 +335,12 @@
         remoteImagesFor = Number(formData.get('id'));
       }
     };
+
+  $effect(() => {
+    if (!shortcutDialog) return;
+    if (showShortcuts && !shortcutDialog.open) shortcutDialog.showModal();
+    else if (!showShortcuts && shortcutDialog.open) shortcutDialog.close();
+  });
 
   // Keep the selected row visible when J and K move the selection.
   $effect(() => {
@@ -723,82 +730,84 @@
         account={data.selectedAccount}
         close={() => (showChat = false)}
       />{/key}{/if}
-  {#if showShortcuts}
-    <div
-      class="shortcut-backdrop"
-      role="presentation"
-      onclick={(event) => {
-        if (event.target === event.currentTarget) showShortcuts = false;
-      }}
-    >
-      <dialog open class="shortcut-dialog" aria-labelledby="shortcut-heading">
-        <div class="shortcut-heading">
-          <h2 id="shortcut-heading">Keyboard shortcuts</h2>
-          <button
-            type="button"
-            aria-label="Close keyboard shortcuts"
-            onclick={() => {
-              showShortcuts = false;
-            }}><Icon name="close" size="1.25rem" /></button
-          >
+  <!-- A click on the dialog element itself is a click on its backdrop. -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+  <dialog
+    bind:this={shortcutDialog}
+    class="shortcut-dialog"
+    aria-labelledby="shortcut-heading"
+    onclose={() => (showShortcuts = false)}
+    onclick={(event) => {
+      if (event.target === event.currentTarget) showShortcuts = false;
+    }}
+  >
+    <div class="shortcut-body">
+      <div class="shortcut-heading">
+        <h2 id="shortcut-heading">Keyboard shortcuts</h2>
+        <button
+          type="button"
+          aria-label="Close keyboard shortcuts"
+          onclick={() => {
+            showShortcuts = false;
+          }}><Icon name="close" size="1.25rem" /></button
+        >
+      </div>
+      <dl>
+        <div>
+          <dt><kbd>C</kbd></dt>
+          <dd>Compose a new message</dd>
         </div>
-        <dl>
-          <div>
-            <dt><kbd>C</kbd></dt>
-            <dd>Compose a new message</dd>
-          </div>
-          <div>
-            <dt><kbd>R</kbd></dt>
-            <dd>Reply to the selected message</dd>
-          </div>
-          <div>
-            <dt><kbd>A</kbd></dt>
-            <dd>Reply all to the selected message</dd>
-          </div>
-          <div>
-            <dt><kbd>F</kbd></dt>
-            <dd>Forward the selected message</dd>
-          </div>
-          <div>
-            <dt><kbd>J</kbd></dt>
-            <dd>Next message</dd>
-          </div>
-          <div>
-            <dt><kbd>K</kbd></dt>
-            <dd>Previous message</dd>
-          </div>
-          <div>
-            <dt><kbd>E</kbd></dt>
-            <dd>Archive selected message</dd>
-          </div>
-          <div>
-            <dt><kbd>#</kbd></dt>
-            <dd>Move selected message to Trash</dd>
-          </div>
-          <div>
-            <dt><kbd>O</kbd> <kbd>Enter</kbd></dt>
-            <dd>Open selected message</dd>
-          </div>
-          <div>
-            <dt><kbd>U</kbd> <kbd>Esc</kbd></dt>
-            <dd>Return to the message list</dd>
-          </div>
-          <div>
-            <dt><kbd>/</kbd></dt>
-            <dd>Search email</dd>
-          </div>
-          <div>
-            <dt><kbd>Esc</kbd></dt>
-            <dd>Clear search (in the search field)</dd>
-          </div>
-          <div>
-            <dt><kbd>?</kbd></dt>
-            <dd>Show or hide this list</dd>
-          </div>
-        </dl>
-      </dialog>
+        <div>
+          <dt><kbd>R</kbd></dt>
+          <dd>Reply to the selected message</dd>
+        </div>
+        <div>
+          <dt><kbd>A</kbd></dt>
+          <dd>Reply all to the selected message</dd>
+        </div>
+        <div>
+          <dt><kbd>F</kbd></dt>
+          <dd>Forward the selected message</dd>
+        </div>
+        <div>
+          <dt><kbd>J</kbd></dt>
+          <dd>Next message</dd>
+        </div>
+        <div>
+          <dt><kbd>K</kbd></dt>
+          <dd>Previous message</dd>
+        </div>
+        <div>
+          <dt><kbd>E</kbd></dt>
+          <dd>Archive selected message</dd>
+        </div>
+        <div>
+          <dt><kbd>#</kbd></dt>
+          <dd>Move selected message to Trash</dd>
+        </div>
+        <div>
+          <dt><kbd>O</kbd> <kbd>Enter</kbd></dt>
+          <dd>Open selected message</dd>
+        </div>
+        <div>
+          <dt><kbd>U</kbd> <kbd>Esc</kbd></dt>
+          <dd>Return to the message list</dd>
+        </div>
+        <div>
+          <dt><kbd>/</kbd></dt>
+          <dd>Search email</dd>
+        </div>
+        <div>
+          <dt><kbd>Esc</kbd></dt>
+          <dd>Clear search (in the search field)</dd>
+        </div>
+        <div>
+          <dt><kbd>?</kbd></dt>
+          <dd>Show or hide this list</dd>
+        </div>
+      </dl>
     </div>
-  {/if}
+  </dialog>
 </main>
 
 <style>
@@ -1302,22 +1311,20 @@
     color: var(--color-text-muted);
     font-size: 0.8rem;
   }
-  .shortcut-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    display: grid;
-    place-items: center;
-    padding: 20px;
-    background: var(--color-backdrop);
-  }
   .shortcut-dialog {
-    width: min(420px, 100%);
-    padding: 24px;
+    width: min(420px, calc(100% - 40px));
+    padding: 0;
+    color: inherit;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
     box-shadow: 0 20px 60px var(--color-shadow);
+  }
+  .shortcut-body {
+    padding: 24px;
+  }
+  .shortcut-dialog::backdrop {
+    background: var(--color-backdrop);
   }
   .shortcut-heading {
     display: flex;
