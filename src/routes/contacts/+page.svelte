@@ -11,6 +11,7 @@
 
 	let visibleContacts = $derived(data.contacts.filter((contact) => contactMatches(contact, query)));
 	let groups = $derived(groupContacts(visibleContacts));
+	let selectedAccount = $derived(data.accounts.find((account) => account.email === data.selectedAccount));
 	let selected = $derived<SyncedContact | null>(
 		visibleContacts.find((contact) => contactKey(contact) === selectedKey) ?? groups[0]?.contacts[0] ?? null);
 
@@ -55,7 +56,10 @@
 					{/each}
 				{:else}
 					<div class="empty">
-						{#if data.contacts.length === 0}<h2>No synced contacts</h2><p>Run <code>bun run sync:google</code> to download the address book.</p>
+						{#if data.contacts.length === 0}
+							{#if selectedAccount?.contactsSyncedAt}
+								<h2>No contacts found</h2><p>No contacts are saved for {selectedAccount.email}. The last sync completed {new Date(selectedAccount.contactsSyncedAt).toLocaleString()}. Check this account's Google Contacts, then select <strong>Sync now</strong> in Settings.</p>
+							{:else}<h2>No synced contacts</h2><p>Run <code>bun run sync:google</code> to download the address book.</p>{/if}
 						{:else}<h2>No matches</h2><p>No contact matches “{query.trim()}”.</p>{/if}
 					</div>
 				{/each}
