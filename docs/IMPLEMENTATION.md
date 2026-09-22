@@ -97,6 +97,8 @@ The root layout invalidates the `app:state` dependency used by mailbox and setti
 - keep the next-page cursor in SQLite so a rate-limited sync resumes from its last stored page;
 - record separate Contacts and Calendar sync times on the account.
 
+The initial Contacts and Calendar download also records Google sync tokens. While the server runs, it performs an immediate sync and repeats it on the same five-minute reconciliation cadence as Gmail. Later requests use the saved tokens and apply only changed and deleted records. Contacts has one token per account, Calendar List has one token per account, and events have one token per calendar. Tokens advance only after their complete paginated result is stored. An expired token triggers a staged full refresh. Overlapping timer and manual requests for one account share one active sync.
+
 Indexes will match the UI query: category and message date. Foreign keys will preserve account ownership.
 
 ### Ingestion and failure behavior

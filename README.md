@@ -65,7 +65,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    bun run sync:google -- --account you@example.com
    ```
 
-9. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs a Gmail backfill every five minutes while it runs. The first backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
+9. Build and run the web server. The server starts one Pub/Sub listener for each unique configured subscription, renews each configured Gmail watch once every 24 hours, and runs Gmail and Google data synchronization every five minutes while it runs. The first Gmail backfill checks the previous hour. Later backfills use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
@@ -73,7 +73,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 Open `http://127.0.0.1:3000`.
 
-Use **Settings → Google data sync** to connect or refresh one account. **Contacts** shows the local address book and **Calendar** shows the downloaded events. A sync downloads all Contacts pages, calendars, and event pages from the Google APIs. The app stores each page in SQLite staging, replaces an account's local snapshot only after all remote downloads succeed, and resumes from the last stored page after a rate limit. A failed download keeps the prior data.
+Use **Settings → Google data sync** to connect or refresh one account immediately. **Contacts** shows the local address book and **Calendar** shows the downloaded events. The first sync downloads all Contacts pages, calendars, and event pages. It stores each page in SQLite staging, replaces an account's local snapshot only after all remote downloads succeed, and resumes from the last stored page after a rate limit. Later syncs use Google sync tokens to download only changed and deleted records. The app performs this incremental sync at startup and every five minutes. An expired token causes a safe full refresh, and a failed download keeps the prior data and token for retry.
 
 ## Live updates
 

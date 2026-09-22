@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDatabase, listAccounts, listEmails, upsertAccount, upsertEmails } from './db';
+import { createDatabase, getGoogleSyncState, listAccounts, listEmails, upsertAccount, upsertEmails } from './db';
 
 let database: DatabaseSync | undefined;
 let directory: string | undefined;
@@ -94,6 +94,25 @@ describe('Google OAuth account migration', () => {
 		upsertAccount(database, { email: 'owner@example.com', refreshToken: 'refresh-token' });
 		expect(listAccounts(database)[0]).toMatchObject({
 			email: 'owner@example.com', refreshToken: 'refresh-token'
+		});
+	});
+
+	it('adds incremental sync storage to an existing database', () => {
+		directory = mkdtempSync(join(tmpdir(), 'email-check-sync-migration-'));
+		const path = join(directory, 'test.sqlite');
+		database = createDatabase(path);
+		database.exec(`ALTER TABLE accounts DROP COLUMN contacts_sync_token;
+			ALTER TABLE accounts DROP COLUMN calendar_list_sync_token;
+			ALTER TABLE calendars DROP COLUMN sync_token;
+			ALTER TABLE google_sync_progress DROP COLUMN next_sync_token;
+			ALTER TABLE google_sync_calendars DROP COLUMN sync_token;`);
+		database.close();
+
+		database = createDatabase(path);
+		upsertAccount(database, { email: 'owner@example.com', refreshToken: 'refresh-token' });
+		expect(getGoogleSyncState(database, 'owner@example.com')).toMatchObject({
+			contactsSyncToken: null,
+			calendarListSyncToken: null
 		});
 	});
 });
