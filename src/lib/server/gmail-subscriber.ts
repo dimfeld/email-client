@@ -192,7 +192,7 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 		return null;
 	}
 
-	const pubsub = new PubSub();
+	const pubsub = new PubSub({ projectId: process.env.GOOGLE_PROJECT_ID || undefined });
 	const subscriptions: Subscription[] = [];
 	const queues = new Map<string, Promise<void>>();
 	for (const [subscriptionName, accountsByEmail] of groupAccountsBySubscription(accounts)) {

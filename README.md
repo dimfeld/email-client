@@ -27,7 +27,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
    http://127.0.0.1:3000/auth/google/callback
    ```
 
-3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_FILE` to the downloaded JSON path, and set the API keys that you use. The client ID and secret variables remain available when you do not use a client file. Keep `GOOGLE_OAUTH_REDIRECT_URI` equal to the registered URI.
+3. Copy `.env.example` to `.env`. Set `GOOGLE_OAUTH_CLIENT_FILE` to the downloaded JSON path, and set the API keys that you use. The client ID and secret variables remain available when you do not use a client file. Keep `GOOGLE_OAUTH_REDIRECT_URI` equal to the registered URI. Set `GOOGLE_PROJECT_ID` to select the Pub/Sub project explicitly; if it is empty, the Pub/Sub client uses its normal project discovery.
 
 4. Start the app, open **Settings**, and select **Connect Google account** for each account. Restart the server after you connect or reconnect an account so the background Gmail listener reloads its credentials.
 
