@@ -387,23 +387,21 @@
 							{#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed}
 								<div class="remote-images-control">
 									<button type="button" class="remote-images-button" onclick={() => { remoteImagesFor = selectedEmail.id; }}>Load remote images</button>
-									<details class="remote-images-menu">
-										<summary aria-label="Remote image options">▾</summary>
-										<div class="remote-images-options">
-											{#if senderAddress(selectedEmail.fromAddress)}
-												<form method="POST" action="?/saveRemoteImageRule" use:enhance={saveRemoteImageRule}>
-													<input type="hidden" name="id" value={selectedEmail.id} />
-													<input type="hidden" name="kind" value="address" />
-													<button type="submit">Always load from {senderAddress(selectedEmail.fromAddress)}</button>
-												</form>
-												<form method="POST" action="?/saveRemoteImageRule" use:enhance={saveRemoteImageRule}>
-													<input type="hidden" name="id" value={selectedEmail.id} />
-													<input type="hidden" name="kind" value="domain" />
-													<button type="submit">Always load from {senderDomain(selectedEmail.fromAddress)}</button>
-												</form>
-											{:else}<p>No sender address is available for this message.</p>{/if}
-										</div>
-									</details>
+									<button type="button" class="remote-images-menu" aria-label="Remote image options" popovertarget="remote-images-options">▾</button>
+									<div id="remote-images-options" class="remote-images-options" popover="auto">
+										{#if senderAddress(selectedEmail.fromAddress)}
+											<form method="POST" action="?/saveRemoteImageRule" use:enhance={saveRemoteImageRule}>
+												<input type="hidden" name="id" value={selectedEmail.id} />
+												<input type="hidden" name="kind" value="address" />
+												<button type="submit">Always load from {senderAddress(selectedEmail.fromAddress)}</button>
+											</form>
+											<form method="POST" action="?/saveRemoteImageRule" use:enhance={saveRemoteImageRule}>
+												<input type="hidden" name="id" value={selectedEmail.id} />
+												<input type="hidden" name="kind" value="domain" />
+												<button type="submit">Always load from {senderDomain(selectedEmail.fromAddress)}</button>
+											</form>
+									{:else}<p>No sender address is available for this message.</p>{/if}
+									</div>
 								</div>
 							{/if}
 						</div>
@@ -532,11 +530,9 @@
 	.message-actions .delete-button { border-color: #a84c63; background: transparent; color: #ff9fb2; }
 	.remote-images-control { display: flex; position: relative; }
 	.message-actions .remote-images-button { border-color: #36363a; border-radius: 4px 0 0 4px; background: transparent; color: #79cbed; }
-	.remote-images-menu { position: relative; }
-	.remote-images-menu summary { display: flex; align-items: center; height: 100%; padding: 0 9px; border: 1px solid #36363a; border-left: 0; border-radius: 0 4px 4px 0; color: #79cbed; cursor: pointer; list-style: none; }
-	.remote-images-menu summary::-webkit-details-marker { display: none; }
-	.remote-images-menu summary:focus-visible { outline: 2px solid #35b6ee; }
-	.remote-images-options { position: absolute; top: calc(100% + 4px); right: 0; z-index: 2; min-width: 230px; max-width: min(350px, 80vw); padding: 4px; border: 1px solid #36363a; border-radius: 4px; background: #242427; box-shadow: 0 8px 24px #0008; }
+	.message-actions .remote-images-menu { display: inline-flex; align-items: center; justify-content: center; align-self: stretch; padding: 8px 9px; border-color: #36363a; border-left: 0; border-radius: 0 4px 4px 0; background: transparent; color: #79cbed; }
+	.remote-images-menu:focus-visible { outline: 2px solid #35b6ee; }
+	.remote-images-options[popover] { position-area: block-end span-inline-end; inset: auto; margin: 4px 0 0; min-width: 230px; max-width: min(350px, 80vw); padding: 4px; border: 1px solid #36363a; border-radius: 4px; background: #242427; color: inherit; box-shadow: 0 8px 24px #0008; }
 	.message-actions .remote-images-options button { width: 100%; padding: 9px 10px; border: 0; background: transparent; color: #dededf; text-align: left; overflow-wrap: anywhere; }
 	.message-actions .remote-images-options button:hover { background: #36363a; }
 	.remote-images-options p { padding: 8px; color: #939398; font-size: .8rem; }
