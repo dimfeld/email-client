@@ -3,8 +3,10 @@ import {
 	applyCalendarEventsIncrementalSync,
 	applyCalendarListIncrementalSync,
 	applyContactsIncrementalSync,
+	applyGoogleOtherContactsIncrementalSync,
 	finalizeGoogleSync,
 	getGoogleSyncCounts,
+	getGoogleOtherContactsSyncProgress,
 	getGoogleSyncProgress,
 	getGoogleSyncState,
 	listAccounts,
@@ -12,6 +14,8 @@ import {
 	saveCalendarEventsSyncPage,
 	saveCalendarListSyncPage,
 	saveContactsSyncPage,
+	saveGoogleOtherContactsSyncPage,
+	startGoogleOtherContactsSync,
 	startGoogleSync
 } from './db';
 import { googleApiRequest, isGoogleRateLimitError, type GoogleAccount } from './google-api';
@@ -88,6 +92,7 @@ function sleep(delayMs: number): Promise<void> {
 }
 
 type ContactsPage = { connections?: Record<string, unknown>[]; nextPageToken?: string; nextSyncToken?: string };
+type OtherContactsPage = { otherContacts?: Record<string, unknown>[]; nextPageToken?: string; nextSyncToken?: string };
 type CalendarPage = { items?: Record<string, unknown>[]; nextPageToken?: string; nextSyncToken?: string };
 
 function isDeleted(value: Record<string, unknown>): boolean {
@@ -147,6 +152,27 @@ async function syncGoogleAccountOnce(
 		}
 
 		if (!deferred) {
+			let otherContactsProgress = startGoogleOtherContactsSync(database, account.email);
+			while (otherContactsProgress.phase !== 'complete') {
+				let result: OtherContactsPage;
+				try {
+					result = await requestPage('https://people.googleapis.com/v1/otherContacts', {
+						readMask: 'names,emailAddresses,phoneNumbers,metadata', pageSize: 1000,
+						requestSyncToken: true, pageToken: otherContactsProgress.pageToken ?? undefined
+					});
+				} catch (error) {
+					if (!isGoogleRateLimitError(error)) throw error;
+					deferred = true;
+					break;
+				}
+				saveGoogleOtherContactsSyncPage(database, otherContactsProgress,
+					(result.otherContacts ?? []).filter((contact) => !isDeleted(contact)).map(normalizeContact),
+					result.nextPageToken, result.nextSyncToken);
+				otherContactsProgress = getGoogleOtherContactsSyncProgress(database, account.email)!;
+			}
+		}
+
+		if (!deferred) {
 			let calendarProgress = startGoogleSync(database, account.email, 'calendar');
 			while (calendarProgress.phase === 'calendarList') {
 				let result: CalendarPage;
@@ -188,21 +214,26 @@ async function syncGoogleAccountOnce(
 		if (!deferred) {
 			const calendarProgress = getGoogleSyncProgress(database, account.email, 'calendar');
 			const contactsProgress = getGoogleSyncProgress(database, account.email, 'contacts');
-			if (contactsProgress?.phase === 'complete' && calendarProgress?.phase === 'complete') finalizeGoogleSync(database, account.email);
+			const otherContactsProgress = getGoogleOtherContactsSyncProgress(database, account.email);
+			if (contactsProgress?.phase === 'complete' && otherContactsProgress?.phase === 'complete'
+				&& calendarProgress?.phase === 'complete') finalizeGoogleSync(database, account.email);
 		}
 		const counts = getGoogleSyncCounts(database, account.email);
 		return deferred ? { ...counts, deferred: true } : counts;
 	};
 
 	const contactsProgress = getGoogleSyncProgress(database, account.email, 'contacts');
+	const otherContactsProgress = getGoogleOtherContactsSyncProgress(database, account.email);
 	const calendarProgress = getGoogleSyncProgress(database, account.email, 'calendar');
 	if ((contactsProgress?.phase === 'complete' && !contactsProgress.nextSyncToken)
+		|| (otherContactsProgress?.phase === 'complete' && !otherContactsProgress.nextSyncToken)
 		|| (calendarProgress?.phase === 'complete' && !calendarProgress.nextSyncToken)) {
 		resetGoogleSyncState(database, account.email);
 		return fullSync();
 	}
 	const state = getGoogleSyncState(database, account.email);
-	if (!state.contactsSyncToken || !state.calendarListSyncToken || contactsProgress || calendarProgress) {
+	if (!state.contactsSyncToken || !state.otherContactsSyncToken || !state.calendarListSyncToken
+		|| contactsProgress || otherContactsProgress || calendarProgress) {
 		return fullSync();
 	}
 
@@ -227,6 +258,27 @@ async function syncGoogleAccountOnce(
 		} while (contactsPageToken);
 		applyContactsIncrementalSync(database, account.email, changedContacts, [...deletedContacts],
 			requireSyncToken(contactsNextSyncToken, 'Google Contacts'));
+
+		const changedOtherContacts: Omit<SyncedContact, 'accountEmail'>[] = [];
+		const deletedOtherContacts = new Set<string>();
+		let otherContactsPageToken: string | undefined;
+		let otherContactsNextSyncToken: string | undefined;
+		do {
+			const result = await requestPage<OtherContactsPage>('https://people.googleapis.com/v1/otherContacts', {
+				readMask: 'names,emailAddresses,phoneNumbers,metadata', pageSize: 1000,
+				requestSyncToken: true, syncToken: state.otherContactsSyncToken, pageToken: otherContactsPageToken
+			});
+			for (const contact of result.otherContacts ?? []) {
+				for (const oldName of previousResourceNames(contact)) deletedOtherContacts.add(oldName);
+				if (isDeleted(contact)) {
+					if (typeof contact.resourceName === 'string') deletedOtherContacts.add(contact.resourceName);
+				} else changedOtherContacts.push(normalizeContact(contact));
+			}
+			otherContactsPageToken = result.nextPageToken;
+			otherContactsNextSyncToken = result.nextSyncToken ?? otherContactsNextSyncToken;
+		} while (otherContactsPageToken);
+		applyGoogleOtherContactsIncrementalSync(database, account.email, changedOtherContacts, [...deletedOtherContacts],
+			requireSyncToken(otherContactsNextSyncToken, 'Google Other Contacts'));
 
 		const changedCalendars: Omit<SyncedCalendar, 'accountEmail'>[] = [];
 		const deletedCalendars: string[] = [];

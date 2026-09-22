@@ -52,7 +52,7 @@
 	{#if form?.message}<p class="feedback" role="status">{form.message}</p>{/if}
 	<section aria-labelledby="google-sync-heading">
 		<h2 id="google-sync-heading">Google data sync</h2>
-		<p class="help">Connect a Google account with OAuth. Email Check uses the Gmail, Google Contacts, and Google Calendar APIs. Restart the server after you connect or reconnect an account so the background Gmail listener reloads it. A failed download keeps the last complete local copy.</p>
+		<p class="help">Connect a Google account with OAuth. Email Check uses the Gmail, Google Contacts, Google Calendar, and Google Other contacts APIs. Reconnect each account to grant access to Other contacts, which includes people saved by Gmail autocomplete. Restart the server after you connect or reconnect an account so the background Gmail listener reloads it. A failed download keeps the last complete local copy.</p>
 		<p class="connect"><a href="/auth/google/start">Connect Google account</a></p>
 		<div class="sync-list">
 			{#each data.accounts as account}
