@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
   import type { SyncedContact } from '$lib/server/types';
   import {
@@ -113,7 +114,8 @@
     <div class="detail-pane">
       {#if selected}
         <article class="detail">
-          <button type="button" class="back" onclick={() => (detailOpen = false)}>‹ Contacts</button
+          <button type="button" class="back" onclick={() => (detailOpen = false)}
+            ><Icon name="chevron-left" /> Contacts</button
           >
           <div class="identity">
             <div class="avatar large" aria-hidden="true">{contactInitials(selected)}</div>
@@ -446,7 +448,9 @@
       display: block;
     }
     .back {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
     .detail {
       padding: 20px 16px;

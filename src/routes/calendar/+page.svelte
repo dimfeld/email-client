@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { enhance } from '$app/forms';
   import {
     canRespondToEvent,
@@ -205,13 +206,13 @@
         <a
           class="button"
           href={href(data.view, shiftView(data.view, data.date, -1))}
-          aria-label="Previous {data.view}">‹</a
+          aria-label="Previous {data.view}"><Icon name="chevron-left" /></a
         >
         <a class="button" href={href(data.view, today)}>Today</a>
         <a
           class="button"
           href={href(data.view, shiftView(data.view, data.date, 1))}
-          aria-label="Next {data.view}">›</a
+          aria-label="Next {data.view}"><Icon name="chevron-right" /></a
         >
       </div>
       <h1>{title}</h1>

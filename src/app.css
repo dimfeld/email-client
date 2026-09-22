@@ -83,3 +83,11 @@ input,
 textarea {
   font: inherit;
 }
+
+/* Center icons in their controls. Zero specificity, so component rules win. */
+:where(button, a):where(:has(> .icon)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { onDestroy } from 'svelte';
   import type { ChatAnswer, ChatMessage } from '$lib/email-chat';
   let { account, close }: { account: string | null; close: () => void } = $props();
@@ -51,7 +52,7 @@
       <h2>Chat with email</h2>
       <small>{account ?? 'All accounts'}</small>
     </div>
-    <button onclick={close} aria-label="Close email chat">×</button>
+    <button onclick={close} aria-label="Close email chat"><Icon name="close" /></button>
   </header>
   <div class="conversation" aria-live="polite" aria-busy={pending}>
     {#if messages.length === 0}<p class="help">

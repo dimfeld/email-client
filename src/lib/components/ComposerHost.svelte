@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { onMount } from 'svelte';
   import {
     UNDO_SEND_SECONDS,
@@ -205,13 +206,17 @@
 </script>
 
 {#if error && !draft}<div class="global-error" role="alert">
-    {error}<button onclick={() => (error = '')} aria-label="Close error">×</button>
+    {error}<button onclick={() => (error = '')} aria-label="Close error"
+      ><Icon name="close" /></button
+    >
   </div>{/if}
 {#if showDrafts}
   <section class="draft-list" aria-label="Drafts and outbox">
     <header>
       <h2>Drafts and outbox</h2>
-      <button onclick={() => (showDrafts = false)} aria-label="Close draft list">×</button>
+      <button onclick={() => (showDrafts = false)} aria-label="Close draft list"
+        ><Icon name="close" /></button
+      >
     </header>
     {#each data.drafts as item}<button
         class="draft-row"
@@ -248,11 +253,14 @@
               : draft.status}</span
       ><button
         aria-label={minimized ? 'Restore composer' : 'Minimize composer'}
-        onclick={() => (minimized = !minimized)}>—</button
+        onclick={() => (minimized = !minimized)}><Icon name="minimize" /></button
       ><button
         aria-label={expanded ? 'Reduce composer' : 'Expand composer'}
-        onclick={() => (expanded = !expanded)}>↗</button
-      ><button aria-label="Save and close composer" disabled={busy} onclick={close}>×</button>
+        onclick={() => (expanded = !expanded)}
+        ><Icon name={expanded ? 'collapse' : 'expand'} /></button
+      ><button aria-label="Save and close composer" disabled={busy} onclick={close}
+        ><Icon name="close" /></button
+      >
     </header>
     <div class="compose-body">
       {#if editable}
@@ -303,7 +311,8 @@
                 <span>{file.filename} ({Math.ceil(file.size / 1024)} KB)</span><button
                   aria-label={`Remove ${file.filename}`}
                   disabled={busy}
-                  onclick={() => action('removeAttachment', { attachmentId: file.id })}>×</button
+                  onclick={() => action('removeAttachment', { attachmentId: file.id })}
+                  ><Icon name="close" /></button
                 >
               </li>{/each}
           </ul>{/if}

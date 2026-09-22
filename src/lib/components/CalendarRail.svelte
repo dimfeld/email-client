@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onMount } from 'svelte';
@@ -55,9 +56,15 @@
         day: 'numeric',
       }).format(new Date(`${day}T12:00:00`))}</strong
     >
-    <button aria-label="Previous day" onclick={() => changeDay(addDays(day, -1))}>←</button>
-    <button aria-label="Today" onclick={() => changeDay(dateKeyFromDate(new Date()))}>•</button>
-    <button aria-label="Next day" onclick={() => changeDay(addDays(day, 1))}>→</button>
+    <button aria-label="Previous day" onclick={() => changeDay(addDays(day, -1))}
+      ><Icon name="chevron-left" /></button
+    >
+    <button aria-label="Today" onclick={() => changeDay(dateKeyFromDate(new Date()))}
+      ><Icon name="today" /></button
+    >
+    <button aria-label="Next day" onclick={() => changeDay(addDays(day, 1))}
+      ><Icon name="chevron-right" /></button
+    >
   </div>
   {#each allDay as event}<a class="all-day" href={`/calendar?view=day&date=${day}`}
       >{event.summary}</a

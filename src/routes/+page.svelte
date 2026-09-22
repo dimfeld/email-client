@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
@@ -342,7 +343,7 @@
         class="menu-button"
         aria-label="Toggle mail categories"
         aria-expanded={showCategories}
-        onclick={() => (showCategories = !showCategories)}>☰</button
+        onclick={() => (showCategories = !showCategories)}><Icon name="menu" /></button
       >
       <h1>Inbox</h1>
     </div>
@@ -358,12 +359,12 @@
         placeholder={'Search email · "exact phrase" · from:example.com'}
         value={data.query}
       />
-      <button type="submit" aria-label="Search">⌕</button>
+      <button type="submit" aria-label="Search"><Icon name="search" /></button>
       {#if data.query}<a
           href={data.selectedAccount
             ? `/?account=${encodeURIComponent(data.selectedAccount)}`
             : '/'}
-          aria-label="Clear search">×</a
+          aria-label="Clear search"><Icon name="close" /></a
         >{/if}
     </form>
     <button
@@ -483,7 +484,7 @@
     <section class="detail-pane" aria-label="Message detail">
       <header class="pane-heading detail-toolbar">
         <button class="back-button" onclick={() => updateMailboxUrl({ message: null })}
-          >← Back to messages</button
+          ><Icon name="arrow-left" /> Back to messages</button
         >
         <span
           >{selectedEmail
@@ -636,7 +637,7 @@
                     type="button"
                     class="remote-images-menu"
                     aria-label="Remote image options"
-                    popovertarget="remote-images-options">▾</button
+                    popovertarget="remote-images-options"><Icon name="chevron-down" /></button
                   >
                   <div id="remote-images-options" class="remote-images-options" popover="auto">
                     {#if senderAddress(selectedEmail.fromAddress)}
@@ -716,7 +717,7 @@
             aria-label="Close keyboard shortcuts"
             onclick={() => {
               showShortcuts = false;
-            }}>×</button
+            }}><Icon name="close" size="1.25rem" /></button
           >
         </div>
         <dl>
@@ -1352,7 +1353,9 @@
     font-size: 1.2rem;
   }
   .back-button {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: transparent;
     border: 0;
     padding: 8px 0;
