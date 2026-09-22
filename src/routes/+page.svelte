@@ -160,19 +160,33 @@
 		updateMailboxUrl({ message: visibleEmails[nextIndex].id });
 	}
 
-	function isTypingTarget(target: EventTarget | null): boolean {
+	function isInteractiveTarget(target: EventTarget | null): boolean {
 		if (!target || typeof target !== 'object' || !('tagName' in target)) return false;
 		const element = target as HTMLElement;
-		return element.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName);
+		return element.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName) || !!element.closest('a[href]');
+	}
+
+	function handleMessageLinkClick(event: MouseEvent) {
+		if (event.type === 'auxclick' && event.button !== 1) return;
+		const anchor = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+		if (!anchor) return;
+		event.preventDefault();
+		const url = new URL(anchor.href);
+		if (['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) {
+			window.open(url.href, '_blank', 'noopener,noreferrer');
+		}
 	}
 
 	function handleMessageFrameLoad(event: Event) {
 		resizeHtmlMessage(event);
-		(event.currentTarget as HTMLIFrameElement).contentDocument?.addEventListener('keydown', handleKeydown);
+		const document = (event.currentTarget as HTMLIFrameElement).contentDocument;
+		document?.addEventListener('keydown', handleKeydown);
+		document?.addEventListener('click', handleMessageLinkClick);
+		document?.addEventListener('auxclick', handleMessageLinkClick);
 	}
 
 	async function handleKeydown(event: KeyboardEvent) {
-		if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+		if (isInteractiveTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
 		if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
 		const key = event.key.toLowerCase();
 		if (key === 'c') {
