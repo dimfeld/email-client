@@ -83,6 +83,7 @@
   let archiveForm = $state<HTMLFormElement | null>(null);
   let deleteForm = $state<HTMLFormElement | null>(null);
   let readingContent = $state<HTMLElement | null>(null);
+  let messageList = $state<HTMLElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   let useful = $derived(
     data.emails.filter(
@@ -326,6 +327,14 @@
       }
     };
 
+  // Keep the selected row visible when J and K move the selection.
+  $effect(() => {
+    if (selectedId === null || !messageList) return;
+    messageList
+      .querySelector(`[data-email-id="${selectedId}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  });
+
   $effect(() => {
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
@@ -436,10 +445,11 @@
       {#if data.query}<p class="search-summary">
           Search results · Best match first · Includes archived mail
         </p>{/if}
-      <div class="message-list">
+      <div class="message-list" bind:this={messageList}>
         {#each visibleEmails as email (email.id)}
           <button
             class="message"
+            data-email-id={email.id}
             class:unread={email.labels.includes('UNREAD')}
             class:selected={selectedEmail?.id === email.id}
             aria-pressed={selectedEmail?.id === email.id}
