@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { Editor } from '@tiptap/core';
   import StarterKit from '@tiptap/starter-kit';
   import { Markdown } from '@tiptap/markdown';
@@ -42,7 +42,10 @@
     return () => editor?.destroy();
   });
   $effect(() => {
-    editor?.setEditable(!disabled, false);
+    const current = editor;
+    const editable = !disabled;
+    // setEditable runs a transaction, and onTransaction reads and writes `version`.
+    untrack(() => current?.setEditable(editable, false));
   });
   function active(mark: string) {
     version;
