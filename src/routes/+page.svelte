@@ -84,6 +84,7 @@
   let deleteForm = $state<HTMLFormElement | null>(null);
   let readingContent = $state<HTMLElement | null>(null);
   let messageList = $state<HTMLElement | null>(null);
+  let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   let useful = $derived(
     data.emails.filter(
@@ -123,6 +124,9 @@
     selectedEmail !== null &&
       (remoteImagesFor === selectedEmail.id ||
         allowsRemoteImages(selectedEmail.fromAddress, remoteImageRules))
+  );
+  let clearSearchHref = $derived(
+    data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'
   );
   let filterLabel = $derived(
     filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail'
@@ -301,6 +305,10 @@
       event.preventDefault();
       if (showShortcuts) showShortcuts = false;
       else updateMailboxUrl({ message: null });
+    } else if (event.key === '/') {
+      event.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
     } else if (event.key === '?') {
       event.preventDefault();
       showShortcuts = !showShortcuts;
@@ -363,17 +371,21 @@
           value={data.selectedAccount}
         />{/if}
       <input
+        bind:this={searchInput}
         name="q"
         aria-label="Search email"
+        onkeydown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          if (searchInput?.value) searchInput.value = '';
+          else searchInput?.blur();
+          if (data.query) void goto(clearSearchHref, { keepFocus: true, noScroll: true });
+        }}
         placeholder={'Search email · "exact phrase" · from:example.com'}
         value={data.query}
       />
       <button type="submit" aria-label="Search"><Icon name="search" /></button>
-      {#if data.query}<a
-          href={data.selectedAccount
-            ? `/?account=${encodeURIComponent(data.selectedAccount)}`
-            : '/'}
-          aria-label="Clear search"><Icon name="close" /></a
+      {#if data.query}<a href={clearSearchHref} aria-label="Clear search"><Icon name="close" /></a
         >{/if}
     </form>
     <button
@@ -770,6 +782,14 @@
           <div>
             <dt><kbd>U</kbd> <kbd>Esc</kbd></dt>
             <dd>Return to the message list</dd>
+          </div>
+          <div>
+            <dt><kbd>/</kbd></dt>
+            <dd>Search email</dd>
+          </div>
+          <div>
+            <dt><kbd>Esc</kbd></dt>
+            <dd>Clear search (in the search field)</dd>
           </div>
           <div>
             <dt><kbd>?</kbd></dt>
