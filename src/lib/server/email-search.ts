@@ -15,7 +15,8 @@ export function emailBodyText(text: string, html: string | null): string {
 export function registerSearchFunctions(database: DatabaseSync) {
 	database.function('email_search_body', { deterministic: true }, (text, html) => emailBodyText(String(text ?? ''), html === null ? null : String(html)));
 	database.function('email_search_date', { deterministic: true }, (value) => {
-		const date = Date.parse(String(value));
+		const text = String(value ?? '').trim();
+		const date = /^\d{13}$/.test(text) ? Number(text) : Date.parse(text);
 		return Number.isNaN(date) ? null : date;
 	});
 	database.function('email_search_address', { deterministic: true }, (addresses, filter) => {

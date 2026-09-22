@@ -1386,7 +1386,7 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
       action_items_json, reminders_json, extraction_model, extraction_error,
       category_confidence, importance_confidence, classification_error, deleted_at, headers_json
      FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
-     ORDER BY message_date DESC, first_seen_at DESC`
+     ORDER BY email_search_date(emails.message_date) DESC, first_seen_at DESC, emails.id DESC`
 	);
 	const rows = (account ? statement.all({ $account: account }) : statement.all()) as Array<
 		Record<string, unknown>
@@ -1415,7 +1415,7 @@ export function emailSummaryFromRow(row: Record<string, unknown>): EmailSummary 
 export function listEmailSummaries(database: DatabaseSync, account?: string): EmailSummary[] {
 	const rows = database.prepare(`SELECT ${emailSummaryColumns} FROM emails e
 		WHERE e.deleted_at IS NULL AND e.archived_at IS NULL${account ? ' AND e.account_email = ?' : ''}
-		ORDER BY e.message_date DESC, e.first_seen_at DESC`)
+		ORDER BY email_search_date(e.message_date) DESC, e.first_seen_at DESC, e.id DESC`)
 		.all(...(account ? [account] : []));
 	return rows.map(emailSummaryFromRow);
 }
