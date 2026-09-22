@@ -188,6 +188,15 @@
     }).format(date);
   }
 
+  function formatFullDate(value: string | null): string {
+    if (!value) return 'Date unknown';
+    const date = new Date(value);
+    if (Number.isNaN(date.valueOf())) return value;
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' }).format(
+      date
+    );
+  }
+
   function confidence(email: StoredEmail): string | null {
     if (email.categoryConfidence === null) return null;
     return `${Math.round(email.categoryConfidence * 100)}%`;
@@ -571,7 +580,9 @@
               </div>
               <div>
                 <dt>Date</dt>
-                <dd>{selectedEmail.messageDate || 'Date unknown'}</dd>
+                <dd title={selectedEmail.messageDate ?? undefined}>
+                  {formatFullDate(selectedEmail.messageDate)}
+                </dd>
               </div>
             </dl>
             <details>
