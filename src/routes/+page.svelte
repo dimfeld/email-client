@@ -1218,6 +1218,7 @@
                   </div>
                 {/if}
                 {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed(selectedEmail)}
+                  {@const remoteImagesMenuId = `remote-images-options-${selectedEmail.id}`}
                   <div class="remote-images-control">
                     <button
                       type="button"
@@ -1230,9 +1231,9 @@
                       type="button"
                       class="remote-images-menu"
                       aria-label="Remote image options"
-                      popovertarget="remote-images-options"><Icon name="chevron-down" /></button
+                      popovertarget={remoteImagesMenuId}><Icon name="chevron-down" /></button
                     >
-                    <div id="remote-images-options" class="action-menu" popover="auto">
+                    <div id={remoteImagesMenuId} class="action-menu" popover="auto">
                       {#if senderAddress(selectedEmail.fromAddress)}
                         <form
                           method="POST"
