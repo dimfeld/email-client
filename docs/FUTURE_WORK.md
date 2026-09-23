@@ -24,10 +24,6 @@ Load the previous and next messages, and the row under the pointer, before the u
 
 A first attempt kept extra `getSelectedMessage` query proxies alive. It was removed because a message that opened while its own preload request was still in flight never appeared in the reading pane: the page's `await` on the shared cache entry did not get the result. SvelteKit has no supported prefetch API for remote queries. Possible next steps: check a newer SvelteKit version for a fix or a prefetch API, or preload through a separate remote function with its own cache key and use that data only for the first render.
 
-## Settings subpages
-
-Give each settings group its own subpage, with a menu on the left to move between them.
-
 ## Snooze
 
 Add Snooze to the right swipe. A long swipe to the right stars the thread. A short swipe to the right shows Star and Snooze buttons. Snooze opens a dialog with common times, a Custom option that shows a date and time picker, and a small text field at the top that accepts natural language, for example "3 hours".

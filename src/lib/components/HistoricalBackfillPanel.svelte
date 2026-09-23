@@ -114,9 +114,6 @@
 </section>
 
 <style>
-  section {
-    margin-top: 36px;
-  }
   h2 {
     font-size: 1.3rem;
     margin: 0 0 12px;
