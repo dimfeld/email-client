@@ -374,7 +374,9 @@
       event.preventDefault();
       archiveForm.requestSubmit();
     } else if (
-      (event.key === '#' || (event.shiftKey && event.code === 'Digit3')) &&
+      (event.key === 'Delete' ||
+        event.key === '#' ||
+        (event.shiftKey && event.code === 'Digit3')) &&
       selectedEmail &&
       deleteForm
     ) {
@@ -1120,7 +1122,7 @@
           <dd>Archive selected message</dd>
         </div>
         <div>
-          <dt><kbd>#</kbd></dt>
+          <dt><kbd>Delete</kbd> <kbd>#</kbd></dt>
           <dd>Move selected message to Trash</dd>
         </div>
         <div>
