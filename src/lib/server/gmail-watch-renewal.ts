@@ -29,7 +29,7 @@ async function renewAccountWatch(
   if (!account.topic) throw new Error(`No Pub/Sub topic is configured for ${account.email}.`);
   const result = await request(account, 'https://gmail.googleapis.com/gmail/v1/users/me/watch', {
     method: 'POST',
-    data: { topicName: account.topic, labelIds: ['INBOX'], labelFilterBehavior: 'include' },
+    data: { topicName: account.topic },
   });
   return parseWatchRenewalHistoryId(result);
 }

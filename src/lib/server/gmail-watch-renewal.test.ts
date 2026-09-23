@@ -41,11 +41,7 @@ describe('Gmail watch renewal', () => {
     expect(requests[0]).toMatchObject({
       email: 'one@example.com',
       url: 'https://gmail.googleapis.com/gmail/v1/users/me/watch',
-      data: {
-        topicName: 'projects/p/topics/mail',
-        labelIds: ['INBOX'],
-        labelFilterBehavior: 'include',
-      },
+      data: { topicName: 'projects/p/topics/mail' },
     });
     expect(listAccounts(database).map((account) => account.historyId)).toEqual(['200', '300']);
   });

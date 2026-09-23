@@ -67,7 +67,7 @@ if (oauthFile) {
   const response = await client.request<{ historyId?: unknown }>({
     url: 'https://gmail.googleapis.com/gmail/v1/users/me/watch',
     method: 'POST',
-    data: { topicName: account.topic, labelIds: ['INBOX'], labelFilterBehavior: 'include' },
+    data: { topicName: account.topic },
   });
   result = response.data;
 } else {
@@ -80,7 +80,7 @@ if (oauthFile) {
     'https://gmail.googleapis.com/gmail/v1/users/me/watch',
     {
       method: 'POST',
-      data: { topicName: account.topic, labelIds: ['INBOX'], labelFilterBehavior: 'include' },
+      data: { topicName: account.topic },
     }
   );
 }
