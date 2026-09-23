@@ -460,28 +460,6 @@
     else if (!showShortcuts && shortcutDialog.open) shortcutDialog.close();
   });
 
-  // Load messages before they open: the previous and next messages, and the row under the
-  // pointer. The remote query cache keeps an entry while its proxy object is alive, so
-  // `preloaded` holds the proxies. Mail changes refresh them too.
-  let hoveredId = $state<number | null>(null);
-  let preloaded: { refresh(): Promise<void> }[] = [];
-  $effect(() => {
-    const index = visibleEmails.findIndex((email) => email.id === selectedId);
-    const ids = [
-      visibleEmails[index - 1]?.id,
-      index < 0 ? undefined : visibleEmails[index + 1]?.id,
-      hoveredId ?? undefined,
-    ].filter((id): id is number => id !== undefined && id !== selectedId);
-    const account = selectedAccount;
-    preloaded = untrack(() =>
-      ids.map((id) => {
-        const query = getSelectedMessage({ account, id });
-        void query.current;
-        return query;
-      })
-    );
-  });
-
   // Refresh only the queries for the kinds of data that changed on the server.
   $effect(() =>
     onStateChange((scopes) => {
@@ -491,7 +469,6 @@
         tasks.push(getMailList(mailListArgs()).refresh());
         if (selectedId !== null)
           tasks.push(getSelectedMessage({ account, id: selectedId }).refresh());
-        tasks.push(...preloaded.map((query) => query.refresh()));
       }
       if (scopes.has('categories')) tasks.push(getMailCategories().refresh());
       if (scopes.has('calendar')) {
@@ -741,7 +718,6 @@
                   class:unread={email.labels.includes('UNREAD')}
                   class:selected={selectedEmail?.id === email.id}
                   aria-current={selectedEmail?.id === email.id ? 'true' : undefined}
-                  onpointerenter={() => (hoveredId = email.id)}
                 >
                   <span class="sender-avatar" aria-hidden="true"
                     >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
