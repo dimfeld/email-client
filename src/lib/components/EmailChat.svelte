@@ -1,13 +1,15 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { ChatAnswer, ChatMessage } from '$lib/email-chat';
   let { account, close }: { account: string | null; close: () => void } = $props();
   let messages = $state<(ChatMessage & { sources?: ChatAnswer['sources'] })[]>([]);
   let question = $state('');
   let pending = $state(false);
   let error = $state('');
+  let questionField: HTMLTextAreaElement;
   let controller: AbortController | undefined;
+  onMount(() => questionField.focus());
   onDestroy(() => controller?.abort());
   async function ask(event: SubmitEvent) {
     event.preventDefault();
@@ -76,10 +78,17 @@
   <form onsubmit={ask}>
     <label for="email-question">Ask a question</label><textarea
       id="email-question"
+      bind:this={questionField}
       bind:value={question}
       rows="3"
       placeholder="What needs my attention this week?"
-      disabled={pending}></textarea>
+      disabled={pending}
+      onkeydown={(event) => {
+        if (event.metaKey && event.key === 'Enter') {
+          event.preventDefault();
+          if (!pending) event.currentTarget.form?.requestSubmit();
+        }
+      }}></textarea>
     <div>
       {#if pending}<button type="button" onclick={() => controller?.abort()}>Stop</button
         >{:else}<button type="submit" disabled={!question.trim()}>Ask</button>{/if}<button
