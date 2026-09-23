@@ -4,10 +4,10 @@
   import { showToast } from '$lib/toast.svelte';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
-  import { enhance } from '$app/forms';
+  import { deserialize, enhance } from '$app/forms';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import type { SubmitFunction } from '@sveltejs/kit';
+  import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
   import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { effectiveImportance } from '$lib/categories';
@@ -381,8 +381,36 @@
     readingContent.focus({ preventScroll: true });
   });
 
-  const submitMessageAction: SubmitFunction = ({ formData, cancel }) => {
+  function actionError(result: ActionResult): string {
+    if (result.type === 'failure' && typeof result.data?.error === 'string')
+      return result.data.error;
+    if (result.type === 'error') return String(result.error?.message ?? result.error);
+    return 'The action failed.';
+  }
+
+  async function undoMessageAction(id: number, action: 'archive' | 'delete') {
+    const body = new FormData();
+    body.set('id', String(id));
+    const response = await fetch(`?/${action === 'archive' ? 'unarchive' : 'undelete'}`, {
+      method: 'POST',
+      body,
+      headers: { 'x-sveltekit-action': 'true' },
+    });
+    const result = deserialize(await response.text());
+    if (result.type !== 'success') {
+      showToast(actionError(result), { tone: 'error' });
+      return;
+    }
+    await getMailList({ account: selectedAccount, search }).refresh();
+    removedIds.delete(id);
+    focusReadingPaneOnLoad = true;
+    updateMailboxUrl({ message: id });
+    if (typeof result.data?.message === 'string') showToast(result.data.message);
+  }
+
+  const submitMessageAction: SubmitFunction = ({ formData, cancel, action: url }) => {
     const id = Number(formData.get('id'));
+    const action = url.search === '?/delete' ? 'delete' : 'archive';
     if (removedIds.has(id)) {
       cancel();
       return;
@@ -395,18 +423,15 @@
     updateMailboxUrl({ message: next?.id ?? null });
     return async ({ result }) => {
       if (result.type === 'success') {
-        if (typeof result.data?.message === 'string') showToast(result.data.message);
+        // Gmail Trash and archive are recoverable, so Undo replaces a confirmation step.
+        showToast(action === 'archive' ? 'Message archived.' : 'Message moved to Trash.', {
+          action: { label: 'Undo', run: () => void undoMessageAction(id, action) },
+        });
         await getMailList({ account: selectedAccount, search }).refresh();
         return;
       }
       removedIds.delete(id);
-      const message =
-        result.type === 'failure' && typeof result.data?.error === 'string'
-          ? result.data.error
-          : result.type === 'error'
-            ? String(result.error?.message ?? result.error)
-            : 'The action failed.';
-      showToast(message, { tone: 'error' });
+      showToast(actionError(result), { tone: 'error' });
     };
   };
 
@@ -759,9 +784,6 @@
                 method="POST"
                 action="?/delete"
                 use:enhance={submitMessageAction}
-                onsubmit={(event) => {
-                  if (!window.confirm('Move this message to Gmail Trash?')) event.preventDefault();
-                }}
               >
                 <input type="hidden" name="id" value={selectedEmail.id} />
                 <button type="submit" class="delete-button">Delete</button>

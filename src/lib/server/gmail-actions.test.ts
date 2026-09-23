@@ -75,6 +75,44 @@ describe('Gmail message actions', () => {
     expect(listEmails(database)).toHaveLength(1);
   });
 
+  it('reverses archive and delete with the Gmail modify and untrash endpoints', async () => {
+    const requests: { url: string; options: unknown }[] = [];
+    const request = async <T>(_account: GoogleAccount, url: string, options?: unknown) => {
+      requests.push({ url, options });
+      return {} as T;
+    };
+    const account = { email: 'one@example.com', refreshToken: 'token' };
+    await runGmailMessageAction(account, 'gmail-message', 'unarchive', request);
+    await runGmailMessageAction(account, 'gmail-message', 'undelete', request);
+    expect(requests).toEqual([
+      {
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/gmail-message/modify',
+        options: { method: 'POST', data: { addLabelIds: ['INBOX'] } },
+      },
+      {
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/gmail-message/untrash',
+        options: { method: 'POST', data: undefined },
+      },
+    ]);
+  });
+
+  it('shows a message again locally after undo', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com' });
+    upsertEmails(database, 'one@example.com', [{ id: 'gmail-message', subject: 'A message' }]);
+    const account = { email: 'one@example.com', refreshToken: 'token' };
+    const request = async <T>() => ({}) as T;
+
+    await applyGmailMessageAction(database, account, 'gmail-message', 'archive', request);
+    await applyGmailMessageAction(database, account, 'gmail-message', 'unarchive', request);
+    expect(listEmails(database)).toHaveLength(1);
+
+    await applyGmailMessageAction(database, account, 'gmail-message', 'delete', request);
+    expect(listEmails(database)).toHaveLength(0);
+    await applyGmailMessageAction(database, account, 'gmail-message', 'undelete', request);
+    expect(listEmails(database)).toHaveLength(1);
+  });
+
   it('does not hide a message when Gmail rejects the action', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, { email: 'one@example.com' });

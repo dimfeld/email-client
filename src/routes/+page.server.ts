@@ -18,16 +18,21 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
     return fail(400, { error: 'The message ID is invalid.' });
 
   const database = getDatabase();
-  const target = getEmailActionTarget(database, emailId);
+  // Undelete must find a message that is in Trash.
+  const target = getEmailActionTarget(database, emailId, { includeDeleted: action === 'undelete' });
   if (!target) return fail(404, { error: 'The message is no longer available.' });
   const account = listAccounts(database).find((item) => item.email === target.accountEmail);
   if (!account) return fail(404, { error: 'The email account is no longer available.' });
 
   try {
     await applyGmailMessageAction(database, account, target.gmailId, action);
-    return {
-      message: action === 'archive' ? 'Message archived.' : 'Message moved to Gmail Trash.',
+    const messages: Record<GmailMessageAction, string> = {
+      archive: 'Message archived.',
+      delete: 'Message moved to Gmail Trash.',
+      unarchive: 'Message moved back to the inbox.',
+      undelete: 'Message restored from Gmail Trash.',
     };
+    return { message: messages[action] };
   } catch (error) {
     return fail(502, { error: error instanceof Error ? error.message : String(error) });
   }
@@ -36,6 +41,8 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
 export const actions: Actions = {
   archive: (event) => changeMessage(event, 'archive'),
   delete: (event) => changeMessage(event, 'delete'),
+  unarchive: (event) => changeMessage(event, 'unarchive'),
+  undelete: (event) => changeMessage(event, 'undelete'),
   saveRemoteImageRule: async ({ request }) => {
     const fields = await request.formData();
     const id = Number(fields.get('id'));

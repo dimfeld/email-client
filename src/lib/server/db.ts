@@ -1447,10 +1447,13 @@ export function setAccountLastBackfillAt(
 
 export function getEmailActionTarget(
   database: DatabaseSync,
-  emailId: number
+  emailId: number,
+  { includeDeleted = false }: { includeDeleted?: boolean } = {}
 ): { accountEmail: string; gmailId: string } | null {
   const row = database
-    .prepare('SELECT account_email, gmail_id FROM emails WHERE id = ? AND deleted_at IS NULL')
+    .prepare(
+      `SELECT account_email, gmail_id FROM emails WHERE id = ?${includeDeleted ? '' : ' AND deleted_at IS NULL'}`
+    )
     .get(emailId) as { account_email: string; gmail_id: string } | null;
   return row ? { accountEmail: row.account_email, gmailId: row.gmail_id } : null;
 }
@@ -1765,6 +1768,38 @@ export function markArchived(
   const now = new Date().toISOString();
   withTransaction(database, () => {
     for (const gmailId of gmailIds) statement.run(now, now, accountEmail, gmailId);
+  });
+}
+
+export function markUndeleted(
+  database: DatabaseSync,
+  accountEmail: string,
+  gmailIds: string[]
+): void {
+  clearEmailTimestamp(database, 'deleted_at', accountEmail, gmailIds);
+}
+
+export function markUnarchived(
+  database: DatabaseSync,
+  accountEmail: string,
+  gmailIds: string[]
+): void {
+  clearEmailTimestamp(database, 'archived_at', accountEmail, gmailIds);
+}
+
+function clearEmailTimestamp(
+  database: DatabaseSync,
+  column: 'deleted_at' | 'archived_at',
+  accountEmail: string,
+  gmailIds: string[]
+): void {
+  if (gmailIds.length === 0) return;
+  const statement = database.prepare(
+    `UPDATE emails SET ${column} = NULL, updated_at = ? WHERE account_email = ? AND gmail_id = ?`
+  );
+  const now = new Date().toISOString();
+  withTransaction(database, () => {
+    for (const gmailId of gmailIds) statement.run(now, accountEmail, gmailId);
   });
 }
 
