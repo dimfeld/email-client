@@ -1,9 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { markArchived, markDeleted, markUnarchived, markUndeleted } from './db';
+import { markArchived, markDeleted, markRead, markUnarchived, markUndeleted } from './db';
 import { googleApiRequest, type GoogleAccount } from './google-api';
 
 /** `unarchive` and `undelete` reverse `archive` and `delete`, for Undo. */
-export type GmailMessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete';
+export type GmailMessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete' | 'markRead';
+
+const labelChanges = {
+  archive: { removeLabelIds: ['INBOX'] },
+  unarchive: { addLabelIds: ['INBOX'] },
+  markRead: { removeLabelIds: ['UNREAD'] },
+};
 
 export async function runGmailMessageAction(
   account: GoogleAccount,
@@ -12,17 +18,14 @@ export async function runGmailMessageAction(
   request: typeof googleApiRequest = googleApiRequest
 ): Promise<void> {
   const messageUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(gmailId)}`;
-  if (action === 'archive' || action === 'unarchive') {
-    await request(account, `${messageUrl}/modify`, {
+  if (action === 'delete' || action === 'undelete') {
+    await request(account, `${messageUrl}/${action === 'delete' ? 'trash' : 'untrash'}`, {
       method: 'POST',
-      data: action === 'archive' ? { removeLabelIds: ['INBOX'] } : { addLabelIds: ['INBOX'] },
+      data: undefined,
     });
     return;
   }
-  await request(account, `${messageUrl}/${action === 'delete' ? 'trash' : 'untrash'}`, {
-    method: 'POST',
-    data: undefined,
-  });
+  await request(account, `${messageUrl}/modify`, { method: 'POST', data: labelChanges[action] });
 }
 
 export async function applyGmailMessageAction(
@@ -38,6 +41,7 @@ export async function applyGmailMessageAction(
     delete: markDeleted,
     unarchive: markUnarchived,
     undelete: markUndeleted,
+    markRead,
   }[action];
   mark(database, account.email, [gmailId]);
 }

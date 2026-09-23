@@ -113,6 +113,30 @@ describe('Gmail message actions', () => {
     expect(listEmails(database)).toHaveLength(1);
   });
 
+  it('marks a message as read in Gmail and removes the local UNREAD label', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com' });
+    upsertEmails(database, 'one@example.com', [
+      { id: 'gmail-message', subject: 'A message', labels: ['INBOX', 'UNREAD'] },
+    ]);
+    let request: { url: string; options: unknown } | undefined;
+    await applyGmailMessageAction(
+      database,
+      { email: 'one@example.com', refreshToken: 'token' },
+      'gmail-message',
+      'markRead',
+      async <T>(_account: GoogleAccount, url: string, options?: unknown) => {
+        request = { url, options };
+        return {} as T;
+      }
+    );
+    expect(request).toEqual({
+      url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/gmail-message/modify',
+      options: { method: 'POST', data: { removeLabelIds: ['UNREAD'] } },
+    });
+    expect(listEmails(database)[0].labels).toEqual(['INBOX']);
+  });
+
   it('does not hide a message when Gmail rejects the action', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, { email: 'one@example.com' });

@@ -31,6 +31,7 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
       delete: 'Message moved to Gmail Trash.',
       unarchive: 'Message moved back to the inbox.',
       undelete: 'Message restored from Gmail Trash.',
+      markRead: 'Message marked as read.',
     };
     return { message: messages[action] };
   } catch (error) {
@@ -43,6 +44,7 @@ export const actions: Actions = {
   delete: (event) => changeMessage(event, 'delete'),
   unarchive: (event) => changeMessage(event, 'unarchive'),
   undelete: (event) => changeMessage(event, 'undelete'),
+  markRead: (event) => changeMessage(event, 'markRead'),
   saveRemoteImageRule: async ({ request }) => {
     const fields = await request.formData();
     const id = Number(fields.get('id'));

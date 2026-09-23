@@ -1772,6 +1772,20 @@ export function markArchived(
   });
 }
 
+export function markRead(database: DatabaseSync, accountEmail: string, gmailIds: string[]): void {
+  if (gmailIds.length === 0) return;
+  const statement = database.prepare(
+    `UPDATE emails SET
+      labels_json = (SELECT json_group_array(value) FROM json_each(labels_json) WHERE value != 'UNREAD'),
+      updated_at = ?
+     WHERE account_email = ? AND gmail_id = ?`
+  );
+  const now = new Date().toISOString();
+  withTransaction(database, 'mail', () => {
+    for (const gmailId of gmailIds) statement.run(now, accountEmail, gmailId);
+  });
+}
+
 export function markUndeleted(
   database: DatabaseSync,
   accountEmail: string,

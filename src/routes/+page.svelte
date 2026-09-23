@@ -396,15 +396,37 @@
     return 'The action failed.';
   }
 
-  async function undoMessageAction(id: number, action: 'archive' | 'delete') {
+  async function postMessageAction(
+    action: 'unarchive' | 'undelete' | 'markRead',
+    id: number
+  ): Promise<ActionResult> {
     const body = new FormData();
     body.set('id', String(id));
-    const response = await fetch(`?/${action === 'archive' ? 'unarchive' : 'undelete'}`, {
+    const response = await fetch(`?/${action}`, {
       method: 'POST',
       body,
       headers: { 'x-sveltekit-action': 'true' },
     });
-    const result = deserialize(await response.text());
+    return deserialize(await response.text());
+  }
+
+  // Opened messages are marked read at once, here and in Gmail. This runs from the rendered
+  // message, because an effect can run before the async message query resolves.
+  const readIds = new SvelteSet<number>();
+  function markReadOnOpen(email: StoredEmail) {
+    return () => {
+      if (!email.labels.includes('UNREAD') || untrack(() => readIds.has(email.id))) return;
+      readIds.add(email.id);
+      void postMessageAction('markRead', email.id).then((result) => {
+        if (result.type === 'success') return;
+        readIds.delete(email.id);
+        showToast(actionError(result), { tone: 'error' });
+      });
+    };
+  }
+
+  async function undoMessageAction(id: number, action: 'archive' | 'delete') {
+    const result = await postMessageAction(action === 'archive' ? 'unarchive' : 'undelete', id);
     if (result.type !== 'success') {
       showToast(actionError(result), { tone: 'error' });
       return;
@@ -715,7 +737,7 @@
                   data-sveltekit-keepfocus
                   data-sveltekit-noscroll
                   data-email-id={email.id}
-                  class:unread={email.labels.includes('UNREAD')}
+                  class:unread={email.labels.includes('UNREAD') && !readIds.has(email.id)}
                   class:selected={selectedEmail?.id === email.id}
                   aria-current={selectedEmail?.id === email.id ? 'true' : undefined}
                 >
@@ -790,6 +812,7 @@
           {#if $effect.pending() > 0}<div class="progress" aria-hidden="true"></div>{/if}
           <article
             bind:this={readingContent}
+            {@attach markReadOnOpen(selectedEmail)}
             class="reading-content"
             class:stale={$effect.pending() > 0}
             aria-busy={$effect.pending() > 0}
