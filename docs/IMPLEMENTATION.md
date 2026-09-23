@@ -107,6 +107,8 @@ The subscriber validates each Pub/Sub payload and matches its email address to a
 
 If download, storage, or classification fails, the subscriber does not advance the account history cursor and it rejects the Pub/Sub message for retry. A retry updates the same row because the account and Gmail message ID are unique. If classification fails, the downloaded message remains in SQLite with an error and no final classification.
 
+The server also checks Gmail history periodically for each enabled account. It uses the saved history cursor and the same change handler as Pub/Sub. Account work runs in one queue so a poll and a notification cannot race the cursor. A failed check keeps the cursor for the next run.
+
 The server also runs a periodic Gmail search backfill for each enabled account. The first run searches the previous hour. Later runs search from five minutes before that account's last successful backfill time. The backfill stores messages through the same idempotent ingestion path and advances only the account's backfill time after the search and ingestion complete. Rate-limit failures are logged, do not stop other accounts, and leave that account's cursor unchanged for the next run.
 
 ### UI

@@ -1,5 +1,6 @@
 import { PubSub, type Message, type Subscription } from '@google-cloud/pubsub';
 import type { DatabaseSync } from 'node:sqlite';
+import { queueGmailAccountWork } from './gmail-account-queue';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, markArchived, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
@@ -8,12 +9,13 @@ import { ingestGmailPayload } from './ingest';
 import { gmailMessageArrivalStats } from './message-arrival-stats';
 import type { IncomingEmail } from './types';
 
-export type GmailSubscriberAccount = {
+export type GmailSyncAccount = {
   email: string;
   refreshToken: string | null;
-  subscription: string;
   historyId: string | null;
 };
+
+export type GmailSubscriberAccount = GmailSyncAccount & { subscription: string };
 
 export type GmailNotification = {
   emailAddress: string;
@@ -99,7 +101,7 @@ function parseHistoryResult(value: unknown): HistoryResult {
 }
 
 async function loadInitialHistoryId(
-  account: GmailSubscriberAccount,
+  account: GmailSyncAccount,
   database: DatabaseSync,
   request: typeof googleApiRequest
 ): Promise<string> {
@@ -117,7 +119,7 @@ async function loadInitialHistoryId(
 }
 
 async function fetchMessage(
-  account: GmailSubscriberAccount,
+  account: GmailSyncAccount,
   messageId: string,
   getMessage: typeof getGmailMessage
 ): Promise<IncomingEmail | null> {
@@ -130,7 +132,7 @@ async function fetchMessage(
 }
 
 export async function processGmailNotification(
-  account: GmailSubscriberAccount,
+  account: GmailSyncAccount,
   notification: GmailNotification,
   dependencies: SubscriberDependencies
 ): Promise<{
@@ -222,7 +224,6 @@ export function startGmailSubscribers(): GmailSubscribers | null {
 
   const pubsub = new PubSub({ projectId: process.env.GOOGLE_PROJECT_ID || undefined });
   const subscriptions: Subscription[] = [];
-  const queues = new Map<string, Promise<void>>();
   for (const [subscriptionName, accountsByEmail] of groupAccountsBySubscription(accounts)) {
     const subscription = pubsub.subscription(subscriptionName);
     subscriptions.push(subscription);
@@ -252,32 +253,27 @@ export function startGmailSubscribers(): GmailSubscribers | null {
         return;
       }
 
-      const previous = queues.get(account.email) ?? Promise.resolve();
-      const current = previous
-        .catch(() => undefined)
-        .then(async () => {
-          try {
-            const result = await processGmailNotification(account, notification, {
-              database,
-              classify: createJevClassifier(),
-              extract,
-            });
-            gmailMessageArrivalStats.recordAndLog(account.email, 'pubsub', result.stored);
-            console.info('Gmail Pub/Sub sync completed.', {
-              account: account.email,
-              notificationHistoryId: notification.historyId,
-              historyId: account.historyId,
-              ...result,
-            });
-            message.ack();
-          } catch (error) {
-            console.error(`Gmail notification failed for ${account.email}.`, error);
-            message.nack();
-          }
-        });
-      queues.set(account.email, current);
-      void current.finally(() => {
-        if (queues.get(account.email) === current) queues.delete(account.email);
+      void queueGmailAccountWork(account.email, async () => {
+        try {
+          account.historyId =
+            listAccounts(database).find((item) => item.email === account.email)?.historyId ?? null;
+          const result = await processGmailNotification(account, notification, {
+            database,
+            classify: createJevClassifier(),
+            extract,
+          });
+          gmailMessageArrivalStats.recordAndLog(account.email, 'pubsub', result.stored);
+          console.info('Gmail Pub/Sub sync completed.', {
+            account: account.email,
+            notificationHistoryId: notification.historyId,
+            historyId: account.historyId,
+            ...result,
+          });
+          message.ack();
+        } catch (error) {
+          console.error(`Gmail notification failed for ${account.email}.`, error);
+          message.nack();
+        }
       });
     });
     subscription.on('error', (error) => {
