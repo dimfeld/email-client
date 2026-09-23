@@ -76,6 +76,13 @@ async function backfillAccount(
   );
   gmailMessageArrivalStats.recordAndLog(account.email, 'backfill', ingested.stored);
   setAccountLastBackfillAt(dependencies.database, account.email, now.toISOString());
+  console.info('Gmail backfill completed.', {
+    account: account.email,
+    query,
+    matched: messages.length,
+    stored: ingested.stored,
+    classified: ingested.classified,
+  });
   return { stored: ingested.stored, classified: ingested.classified };
 }
 

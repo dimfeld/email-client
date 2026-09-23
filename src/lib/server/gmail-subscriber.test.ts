@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import type { EmailClassifier } from './classifier';
-import { createDatabase, listAccounts, listEmails, upsertAccount } from './db';
+import { createDatabase, listAccounts, listEmails, upsertAccount, upsertEmails } from './db';
 import {
   groupAccountsBySubscription,
   parseGmailNotification,
@@ -153,9 +153,57 @@ describe('Gmail notification processing', () => {
       }
     );
 
-    expect(result).toEqual({ stored: 0, classified: 0, extracted: 0, deleted: 0 });
+    expect(result).toEqual({ stored: 0, classified: 0, extracted: 0, deleted: 0, archived: 0 });
     expect(calls).toBe(1);
     expect(account.historyId).toBe('100');
     expect(listAccounts(database)[0].historyId).toBe('100');
+  });
+
+  it('applies archive and Trash changes to stored messages', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com', refreshToken: 'one' });
+    upsertEmails(database, 'one@example.com', [
+      { id: 'archived', subject: 'Archived', labels: ['INBOX'] },
+      { id: 'trashed', subject: 'Trashed', labels: ['INBOX'] },
+    ]);
+    const account: GmailSubscriberAccount = {
+      email: 'one@example.com',
+      refreshToken: 'one',
+      subscription: 'mail',
+      historyId: '100',
+    };
+
+    const result = await processGmailNotification(
+      account,
+      { emailAddress: account.email, historyId: '105' },
+      {
+        database,
+        classify,
+        request: async <T>() =>
+          ({
+            historyId: '105',
+            history: [
+              { labelsRemoved: [{ message: { id: 'archived' }, labelIds: ['INBOX'] }] },
+              { labelsAdded: [{ message: { id: 'trashed' }, labelIds: ['TRASH'] }] },
+            ],
+          }) as T,
+        getMessage: async (_account, id) => ({
+          id,
+          labels: id === 'archived' ? [] : ['TRASH'],
+        }),
+      }
+    );
+
+    expect(result).toMatchObject({ stored: 0, archived: 1, deleted: 1 });
+    expect(listEmails(database)).toEqual([]);
+    expect(
+      database
+        .prepare('SELECT archived_at, deleted_at FROM emails WHERE gmail_id = ?')
+        .get('archived')
+    ).toMatchObject({ archived_at: expect.any(String), deleted_at: null });
+    expect(
+      database.prepare('SELECT deleted_at FROM emails WHERE gmail_id = ?').get('trashed')
+    ).toMatchObject({ deleted_at: expect.any(String) });
+    expect(account.historyId).toBe('105');
   });
 });

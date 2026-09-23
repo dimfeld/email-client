@@ -1,7 +1,7 @@
 import { PubSub, type Message, type Subscription } from '@google-cloud/pubsub';
 import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
-import { getDatabase, listAccounts, setAccountHistoryId } from './db';
+import { getDatabase, listAccounts, markArchived, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { getGmailMessage, googleApiRequest, GoogleApiError } from './google-api';
 import { ingestGmailPayload } from './ingest';
@@ -133,12 +133,18 @@ export async function processGmailNotification(
   account: GmailSubscriberAccount,
   notification: GmailNotification,
   dependencies: SubscriberDependencies
-): Promise<{ stored: number; classified: number; extracted: number; deleted: number }> {
+): Promise<{
+  stored: number;
+  classified: number;
+  extracted: number;
+  deleted: number;
+  archived: number;
+}> {
   const request = dependencies.request ?? googleApiRequest;
   const getMessage = dependencies.getMessage ?? getGmailMessage;
   const currentHistoryId = await loadInitialHistoryId(account, dependencies.database, request);
   if (!isNewerHistoryId(notification.historyId, currentHistoryId)) {
-    return { stored: 0, classified: 0, extracted: 0, deleted: 0 };
+    return { stored: 0, classified: 0, extracted: 0, deleted: 0, archived: 0 };
   }
 
   const combined: Record<string, unknown>[] = [];
@@ -160,12 +166,15 @@ export async function processGmailNotification(
 
   const messages: IncomingEmail[] = [];
   const deletedMessageIds: string[] = [];
-  for (const messageId of [...new Set(history.messages)]) {
+  const archivedMessageIds: string[] = [];
+  for (const messageId of new Set(history.messages)) {
     const message = await fetchMessage(account, messageId, getMessage);
-    if (!message) {
+    if (!message || message.labels?.includes('TRASH')) {
       deletedMessageIds.push(messageId);
     } else if (message.labels?.includes('INBOX')) {
       messages.push(message);
+    } else {
+      archivedMessageIds.push(messageId);
     }
   }
 
@@ -181,9 +190,10 @@ export async function processGmailNotification(
     dependencies.classify,
     dependencies.extract ?? null
   );
+  markArchived(dependencies.database, account.email, archivedMessageIds);
   setAccountHistoryId(dependencies.database, account.email, history.historyId);
   account.historyId = history.historyId;
-  return result;
+  return { ...result, archived: archivedMessageIds.length };
 }
 
 export type GmailSubscribers = {
@@ -253,6 +263,12 @@ export function startGmailSubscribers(): GmailSubscribers | null {
               extract,
             });
             gmailMessageArrivalStats.recordAndLog(account.email, 'pubsub', result.stored);
+            console.info('Gmail Pub/Sub sync completed.', {
+              account: account.email,
+              notificationHistoryId: notification.historyId,
+              historyId: account.historyId,
+              ...result,
+            });
             message.ack();
           } catch (error) {
             console.error(`Gmail notification failed for ${account.email}.`, error);

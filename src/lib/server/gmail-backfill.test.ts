@@ -39,7 +39,7 @@ describe('Gmail backfill', () => {
     upsertAccount(database, { email: 'two@example.com', refreshToken: 'two' });
     const now = new Date('2026-09-20T12:00:00.000Z');
     const queries: string[] = [];
-    const logs = spyOn(console, 'log').mockImplementation(() => undefined);
+    const logs = spyOn(console, 'info').mockImplementation(() => undefined);
 
     try {
       await expect(
@@ -53,7 +53,11 @@ describe('Gmail backfill', () => {
           },
         })
       ).resolves.toMatchObject({ accounts: 2, succeeded: 2, failed: 0 });
-      expect(logs).not.toHaveBeenCalled();
+      expect(logs).toHaveBeenCalledTimes(2);
+      expect(logs).toHaveBeenCalledWith(
+        'Gmail backfill completed.',
+        expect.objectContaining({ account: 'one@example.com', matched: 0, stored: 0 })
+      );
     } finally {
       logs.mockRestore();
     }
