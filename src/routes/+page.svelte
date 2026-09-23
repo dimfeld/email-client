@@ -147,6 +147,8 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   const originalColorIds = new SvelteSet<number>();
+  // Recipients are hidden until the user opens them for a message.
+  const recipientIds = new SvelteSet<number>();
   let filters = $derived([
     { category: 'all' as const, label: 'All inbox', count: filterCounts.all ?? 0 },
     { category: 'important', label: 'All important', count: filterCounts.important ?? 0 },
@@ -183,11 +185,6 @@
       .replace(/^(?:(?:re|fw|fwd):\s*)+/gi, '')
       .trim()
       .toLowerCase();
-  }
-  function addressSet(email: StoredEmail) {
-    const addresses =
-      `${email.toAddresses},${email.headers?.cc ?? ''}`.match(/[^\s<>,;"()]+@[^\s<>,;"()]+/g) ?? [];
-    return [...new Set(addresses.map((address) => address.toLowerCase()))].sort().join(',');
   }
   let clearSearchHref = $derived(
     data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'
@@ -264,6 +261,29 @@
       day: 'numeric',
       year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
     }).format(date);
+  }
+
+  function formatCompactDateTime(sortTime: number): string {
+    const date = new Date(sortTime);
+    const now = new Date();
+    const time = { hour: 'numeric', minute: '2-digit' } as const;
+    if (date.toDateString() === now.toDateString()) {
+      return new Intl.DateTimeFormat(undefined, time).format(date);
+    }
+    if (date.getFullYear() === now.getFullYear()) {
+      return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', ...time }).format(
+        date
+      );
+    }
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(date);
+  }
+
+  function accountLabel(email: string): string {
+    return accounts.find((account) => account.email === email)?.alias || email;
   }
 
   function formatFullDate(value: string | null): string {
@@ -1042,20 +1062,41 @@
         <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
           <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
           {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
+            {@const from = selectedEmail.labels.includes('SENT')
+              ? selectedEmail.accountEmail
+              : selectedEmail.fromAddress}
+            {@const fromAddress = senderAddress(from)}
+            {@const showRecipients = recipientIds.has(selectedEmail.id)}
             <article {@attach attachReadingContent} class="reading-content" tabindex="-1">
               {#if memberIndex > 0 && meaningfulSubject(selectedEmail.subject) !== meaningfulSubject(selectedThread[memberIndex - 1].subject)}
                 <h3>{selectedEmail.subject || '(No subject)'}</h3>
               {/if}
-              <dl class="message-metadata">
-                <div>
-                  <dt>From</dt>
-                  <dd>
-                    {selectedEmail.labels.includes('SENT')
-                      ? selectedEmail.accountEmail
-                      : selectedEmail.fromAddress || 'Unknown sender'}
-                  </dd>
-                </div>
-                {#if memberIndex === 0 || addressSet(selectedEmail) !== addressSet(selectedThread[memberIndex - 1])}
+              <header class="message-header">
+                <span class="account-badge" title={selectedEmail.accountEmail}
+                  >{accountLabel(selectedEmail.accountEmail)}</span
+                >
+                <strong class="message-sender" title={from}>{senderName(from)}</strong>
+                {#if fromAddress && fromAddress !== senderName(from).toLowerCase()}<span
+                    class="message-sender-address">{fromAddress}</span
+                  >{/if}
+                <button
+                  type="button"
+                  class="recipients-toggle"
+                  aria-expanded={showRecipients}
+                  aria-label={showRecipients ? 'Hide recipients' : 'Show recipients'}
+                  title={showRecipients ? 'Hide recipients' : 'Show recipients'}
+                  onclick={() =>
+                    showRecipients
+                      ? recipientIds.delete(selectedEmail.id)
+                      : recipientIds.add(selectedEmail.id)}><Icon name="chevron-down" /></button
+                >
+                <time
+                  datetime={new Date(selectedEmail.sortTime).toISOString()}
+                  title={formatFullDate(new Date(selectedEmail.sortTime).toISOString())}
+                  >{formatCompactDateTime(selectedEmail.sortTime)}</time
+                >
+              </header>
+              {#if showRecipients}<dl class="message-recipients">
                   <div>
                     <dt>To</dt>
                     <dd>{selectedEmail.toAddresses || 'Unknown recipient'}</dd>
@@ -1064,18 +1105,7 @@
                       <dt>Cc</dt>
                       <dd>{selectedEmail.headers.cc}</dd>
                     </div>{/if}
-                {/if}
-                <div>
-                  <dt>Account</dt>
-                  <dd>{selectedEmail.accountEmail}</dd>
-                </div>
-                <div>
-                  <dt>Date</dt>
-                  <dd title={selectedEmail.messageDate ?? undefined}>
-                    {formatFullDate(new Date(selectedEmail.sortTime).toISOString())}
-                  </dd>
-                </div>
-              </dl>
+                </dl>{/if}
               {#if !selectedEmail.labels.includes('SENT')}<details>
                   <summary>Classification details</summary>
                   <div class="classification-summary" aria-label="Jev classification results">
@@ -1761,15 +1791,77 @@
     line-height: 1.35;
     letter-spacing: -0.025em;
   }
-  .message-metadata {
-    margin: 24px 0 12px;
-    font-size: 0.8rem;
-    line-height: 1.6;
+  .message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin: 16px 0 8px;
+    font-size: var(--text-sm);
   }
-  .message-metadata > div {
+  .account-badge {
+    flex: none;
+    max-width: 12em;
+    overflow: hidden;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--color-accent-bg-subtle);
+    color: var(--color-accent-text);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .message-sender {
+    flex: none;
+    max-width: 50%;
+    overflow: hidden;
+    color: var(--color-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .message-sender-address {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text-faint);
+    font-size: var(--text-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .recipients-toggle {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    padding: 2px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-text-faint);
+    cursor: pointer;
+    transition: transform var(--motion-fast);
+  }
+  .recipients-toggle:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+  }
+  .recipients-toggle[aria-expanded='true'] {
+    transform: rotate(180deg);
+  }
+  .message-header time {
+    flex: none;
+    margin-left: auto;
+    color: var(--color-text-faint);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+  }
+  .message-recipients {
+    margin: 0 0 8px;
+    font-size: var(--text-xs);
+    line-height: 1.5;
+  }
+  .message-recipients > div {
     display: grid;
-    grid-template-columns: 64px minmax(0, 1fr);
-    margin-top: 4px;
+    grid-template-columns: 28px minmax(0, 1fr);
   }
   dt {
     color: var(--color-text-faint);

@@ -30,10 +30,11 @@ mkdir -p "$SCRATCH/app"
 rsync -a --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='build' --exclude='.env*' ./ "$SCRATCH/app/"
 ln -s "$PWD/node_modules" "$SCRATCH/app/node_modules"
 cd "$SCRATCH/app"
-DATABASE_PATH="$SCRATCH/test.sqlite" GOOGLE_APPLICATION_CREDENTIALS=/nonexistent \
+DATABASE_PATH="$SCRATCH/test.sqlite" GOOGLE_APPLICATION_CREDENTIALS=/nonexistent TYPESAFE_API_KEY=dummy \
   bunx --bun vite dev --port 5199 --strictPort
 ```
 
+- Set `TYPESAFE_API_KEY` to a placeholder value. Without it, the server hook throws and every page returns error 500. The placeholder does not make real classification requests succeed.
 - Do not load `.env`. The source copy keeps Vite from loading `.env` files. Restart the dev server after edits to many files, because stale hot-reload state causes false errors.
 - For a production build, copy the source to the scratch directory (symlink `node_modules`), build there, and run `bun scripts/start.ts` with `PORT`, `ORIGIN`, and the variables above.
 - Gmail actions fail on the copy ("not connected to Google OAuth"). To test the success path, make `runGmailMessageAction` return early in the scratch copy only.

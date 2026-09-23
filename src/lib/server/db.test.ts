@@ -14,6 +14,7 @@ import {
   listEmailSummaries,
   listEmails,
   populateAccountDisplayName,
+  setAccountAlias,
   setAccountDisplayName,
   upsertAccount,
   upsertEmails,
@@ -136,6 +137,22 @@ describe('Google OAuth account migration', () => {
     upsertAccount(database, { email: 'owner@example.com', displayName: 'Changed Google Name' });
     populateAccountDisplayName(database, 'owner@example.com', 'Changed Google Name');
     expect(listAccounts(database)[0].displayName).toBe('Preferred Name');
+  });
+
+  it('adds an alias column to existing accounts and clears a blank alias', () => {
+    directory = mkdtempSync(join(tmpdir(), 'email-check-account-alias-migration-'));
+    const path = join(directory, 'test.sqlite');
+    database = createDatabase(path);
+    upsertAccount(database, { email: 'owner@example.com', refreshToken: 'token' });
+    database.exec('ALTER TABLE accounts DROP COLUMN alias');
+    database.close();
+
+    database = createDatabase(path);
+    expect(listAccounts(database)[0].alias).toBeNull();
+    setAccountAlias(database, 'owner@example.com', ' Work ');
+    expect(listAccounts(database)[0].alias).toBe('Work');
+    setAccountAlias(database, 'owner@example.com', '  ');
+    expect(listAccounts(database)[0].alias).toBeNull();
   });
 
   it('adds refresh-token storage to a database created by the gog integration', () => {
