@@ -70,4 +70,28 @@ describe('Gmail watch renewal', () => {
       listAccounts(database).find((account) => account.email === 'working@example.com')?.historyId
     ).toBe('400');
   });
+
+  it('renews only the named account when an external token supplies its credentials', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com', topic: 'projects/p/topics/mail' });
+    upsertAccount(database, {
+      email: 'two@example.com',
+      topic: 'projects/p/topics/mail',
+      refreshToken: 'two',
+    });
+    const requested: string[] = [];
+
+    const result = await renewGmailWatches(
+      database,
+      async <T>(account: GoogleAccount) => {
+        requested.push(account.email);
+        return { historyId: '500' } as T;
+      },
+      'one@example.com'
+    );
+
+    expect(result).toEqual({ renewed: 1, failed: 0 });
+    expect(requested).toEqual(['one@example.com']);
+    expect(listAccounts(database).map((account) => account.historyId)).toEqual(['500', null]);
+  });
 });

@@ -36,10 +36,15 @@ async function renewAccountWatch(
 
 export async function renewGmailWatches(
   database: DatabaseSync,
-  request: typeof googleApiRequest = googleApiRequest
+  request: typeof googleApiRequest = googleApiRequest,
+  accountEmail?: string
 ): Promise<{ renewed: number; failed: number }> {
   const accounts = listAccounts(database).filter(
-    (account) => account.enabled && account.topic && account.refreshToken
+    (account) =>
+      account.enabled &&
+      account.topic &&
+      (account.refreshToken || accountEmail === account.email) &&
+      (accountEmail === undefined || account.email === accountEmail)
   );
   const results = await Promise.all(
     accounts.map(async (account) => {
