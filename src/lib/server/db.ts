@@ -22,6 +22,7 @@ import type { StateScope } from '$lib/state-scopes';
 import { defaultCategories } from './default-categories';
 import { emailSortTime, installThreadSchema } from './thread-schema';
 import type { RemoteImageRule } from '$lib/remote-images';
+import type { GmailMessageAction } from './gmail-actions';
 
 const defaultPath = resolve(process.env.DATABASE_PATH ?? 'data/email-check.sqlite');
 let sharedDatabase: DatabaseSync | undefined;
@@ -1967,7 +1968,7 @@ export function getThreadEmails(
 export function getThreadActionTargets(
   database: DatabaseSync,
   id: number,
-  action: 'archive' | 'delete' | 'markRead' | 'unarchive' | 'undelete',
+  action: GmailMessageAction,
   succeededIds?: number[]
 ): { id: number; accountEmail: string; gmailId: string }[] {
   if (succeededIds) {
@@ -1996,11 +1997,15 @@ export function getThreadActionTargets(
         ? `AND deleted_at IS NULL AND instr(labels_json, '"UNREAD"') > 0`
         : action === 'undelete'
           ? 'AND deleted_at IS NOT NULL'
-          : 'AND deleted_at IS NULL';
+          : action === 'unstar'
+            ? `AND deleted_at IS NULL AND instr(labels_json, '"STARRED"') > 0`
+            : 'AND deleted_at IS NULL';
+  // Gmail stars a thread by starring its latest message.
+  const order = action === 'star' ? 'ORDER BY sort_time DESC, id DESC LIMIT 1' : 'ORDER BY id';
   return (
     database
       .prepare(`SELECT id, account_email, gmail_id FROM emails
-    WHERE account_email = ? AND thread_key = ? ${condition} ORDER BY id`)
+    WHERE account_email = ? AND thread_key = ? ${condition} ${order}`)
       .all(selected.account_email, selected.thread_key) as {
       id: number;
       account_email: string;

@@ -102,3 +102,19 @@ it('applies filters and counts to search results', () => {
     counts: {},
   });
 });
+
+it('marks threads that have a starred message', () => {
+  setup();
+  upsertEmails(database!, 'one@example.com', [
+    {
+      id: 'b',
+      subject: 'Message b kiwi',
+      date: new Date(Date.UTC(2026, 0, 9)).toUTCString(),
+      labels: ['INBOX', 'STARRED'],
+    },
+  ]);
+  const emails = listMail(database!, { search: '', filter: 'all', limit: 10 }).emails;
+  expect(emails.filter((email) => email.starred).map((email) => email.subject)).toEqual([
+    'Message b kiwi',
+  ]);
+});

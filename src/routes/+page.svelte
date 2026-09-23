@@ -6,12 +6,14 @@
   import { onStateChange } from '$lib/state-change';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
+  import SwipeRow, { type SwipeActions } from '$lib/components/SwipeRow.svelte';
+  import type { SwipeSide } from '$lib/swipe';
   import { deserialize, enhance } from '$app/forms';
   import { goto, onNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
   import { tick, untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { effectiveImportance } from '$lib/categories';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
   import { buildEmailDocument, emailColorMode, hasRemoteImages } from '$lib/email-html';
@@ -572,7 +574,14 @@
     return 'The action failed.';
   }
 
-  type MessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete' | 'markRead';
+  type MessageAction =
+    | 'archive'
+    | 'delete'
+    | 'unarchive'
+    | 'undelete'
+    | 'markRead'
+    | 'star'
+    | 'unstar';
 
   async function postMessageAction(
     action: MessageAction,
@@ -615,7 +624,8 @@
     id: number,
     action: 'archive' | 'delete',
     succeededIds: number[],
-    rowId: number
+    rowId: number,
+    wasOpen: boolean
   ) {
     const result = await postMessageAction(
       action === 'archive' ? 'unarchive' : 'undelete',
@@ -628,8 +638,10 @@
     }
     await getMailList(mailListArgs()).refresh();
     removedIds.delete(rowId);
-    focusReadingPaneOnLoad = true;
-    updateMailboxUrl({ message: id });
+    if (wasOpen) {
+      focusReadingPaneOnLoad = true;
+      updateMailboxUrl({ message: id });
+    }
     if (typeof result.data?.message === 'string') showToast(result.data.message);
   }
 
@@ -652,6 +664,14 @@
         (email) =>
           email.threadKey === target?.threadKey && email.accountEmail === target?.accountEmail
       )?.id ?? id;
+    await runThreadAction(id, rowId, action);
+  }
+
+  // Archives or deletes the thread of message `id`, which the list shows as row `rowId`.
+  async function runThreadAction(id: number, rowId: number, action: 'archive' | 'delete') {
+    // When the thread is open, the next message opens after it leaves the list.
+    const wasOpen =
+      selectedId !== null && (selectedSummary === null || selectedSummary.id === rowId);
     const navigation = queueMailTransition(async () => {
       if (removedIds.has(rowId)) return false;
       if (action === 'archive' && mailView === 'sent') return true;
@@ -660,8 +680,10 @@
       const next =
         index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
       removedIds.add(rowId);
-      focusReadingPaneOnLoad = next !== null;
-      await updateMailboxUrl({ message: next?.id ?? null });
+      if (wasOpen) {
+        focusReadingPaneOnLoad = next !== null;
+        await updateMailboxUrl({ message: next?.id ?? null });
+      }
       return true;
     });
     if (!(await navigation)) return;
@@ -682,19 +704,71 @@
           action: {
             label: 'Undo',
             run: () =>
-              void undoMessageAction(id, action, result.data!.succeededIds as number[], rowId),
+              void undoMessageAction(
+                id,
+                action,
+                result.data!.succeededIds as number[],
+                rowId,
+                wasOpen
+              ),
           },
         }
       );
       if (result.data.error) {
         removedIds.delete(rowId);
         await getMailList(mailListArgs()).refresh();
-        await updateMailboxUrl({ message: id });
+        if (wasOpen) await updateMailboxUrl({ message: id });
       }
       return;
     }
     removedIds.delete(rowId);
     showToast(actionError(result), { tone: 'error' });
+  }
+
+  // A star shows at once. The list keeps the change until its next refresh.
+  const starOverrides = new SvelteMap<number, boolean>();
+  async function toggleStar(email: EmailSummary) {
+    const starred = !(starOverrides.get(email.id) ?? email.starred ?? false);
+    starOverrides.set(email.id, starred);
+    const result = await postMessageAction(starred ? 'star' : 'unstar', email.id);
+    if (result.type === 'success' && !result.data?.error) {
+      await getMailList(mailListArgs()).refresh();
+      starOverrides.delete(email.id);
+      return;
+    }
+    starOverrides.delete(email.id);
+    showToast(result.type === 'success' ? String(result.data?.error) : actionError(result), {
+      tone: 'error',
+    });
+  }
+
+  // The list row that shows its swipe buttons. Only one row is open at a time.
+  let swipeOpen = $state<{ id: number; side: SwipeSide } | null>(null);
+  function swipeActions(email: EmailSummary, canArchive: boolean, starred: boolean) {
+    const archive = {
+      label: 'Archive',
+      icon: 'archive',
+      tone: 'archive',
+      run: () => void runThreadAction(email.id, email.id, 'archive'),
+    } as const;
+    const remove = {
+      label: 'Delete',
+      icon: 'trash',
+      tone: 'delete',
+      run: () => void runThreadAction(email.id, email.id, 'delete'),
+    } as const;
+    const star = {
+      label: starred ? 'Unstar' : 'Star',
+      icon: 'star',
+      tone: 'star',
+      run: () => void toggleStar(email),
+    } as const;
+    return {
+      left: (canArchive
+        ? { buttons: [archive, remove], long: archive }
+        : { buttons: [remove] }) satisfies SwipeActions,
+      right: { buttons: [], long: star } satisfies SwipeActions,
+    };
   }
 
   const saveRemoteImageRule: SubmitFunction =
@@ -965,54 +1039,65 @@
         onscroll={handleListScroll}
       >
         {#if visibleEmails.length > 0}
+          {@const canArchive = mailView === 'inbox' && !search}
+          {@const openRow = swipeOpen}
           <ul
             aria-label="Messages"
             style:padding-top="{rowWindow.start * rowHeight}px"
             style:padding-bottom="{(visibleEmails.length - rowWindow.end) * rowHeight}px"
           >
             {#each visibleEmails.slice(rowWindow.start, rowWindow.end) as email, index (email.id)}
+              {@const starred = starOverrides.get(email.id) ?? email.starred ?? false}
+              {@const swipe = swipeActions(email, canArchive, starred)}
               <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
-                <a
-                  class="message"
-                  href={mailboxHref({ message: email.id })}
-                  data-sveltekit-keepfocus
-                  data-sveltekit-noscroll
-                  data-email-id={email.id}
-                  class:unread={email.unread && !readIds.has(email.id)}
-                  class:selected={selectedEmail?.threadKey === email.threadKey &&
-                    selectedEmail?.accountEmail === email.accountEmail}
-                  aria-current={selectedEmail?.threadKey === email.threadKey &&
-                  selectedEmail?.accountEmail === email.accountEmail
-                    ? 'true'
-                    : undefined}
+                <SwipeRow
+                  left={swipe.left}
+                  right={swipe.right}
+                  open={openRow?.id === email.id ? openRow.side : null}
+                  onOpenChange={(side) => (swipeOpen = side ? { id: email.id, side } : null)}
                 >
-                  <span class="sender-avatar" aria-hidden="true"
-                    >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
+                  <a
+                    class="message"
+                    href={mailboxHref({ message: email.id })}
+                    data-sveltekit-keepfocus
+                    data-sveltekit-noscroll
+                    data-email-id={email.id}
+                    class:unread={email.unread && !readIds.has(email.id)}
+                    class:selected={selectedEmail?.threadKey === email.threadKey &&
+                      selectedEmail?.accountEmail === email.accountEmail}
+                    aria-current={selectedEmail?.threadKey === email.threadKey &&
+                    selectedEmail?.accountEmail === email.accountEmail
+                      ? 'true'
+                      : undefined}
                   >
-                  <strong class="sender" title={email.fromAddress}
-                    >{senderName(email.fromAddress)}</strong
-                  >
-                  <span class="message-line"
-                    ><span class="subject">{email.subject || '(No subject)'}</span><span
-                      class="preview"
+                    <span class="sender-avatar" aria-hidden="true"
+                      >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
                     >
-                      — {email.snippet || 'No preview text.'}</span
-                    ></span
-                  >
-                  {#if mailView === 'inbox'}<span class="category-tag"
-                      >{email.category ? labels[email.category] : 'Pending'}</span
-                    >{:else}<span></span>{/if}
-                  {#if importance(email) === 'important'}<span class="star" aria-label="Important"
-                      >★</span
-                    >{:else}<span></span>{/if}
-                  <time title={email.accountEmail}
-                    >{formatDate(
-                      email.latestSortTime
-                        ? new Date(email.latestSortTime).toISOString()
-                        : email.messageDate
-                    )}</time
-                  >
-                </a>
+                    <strong class="sender" title={email.fromAddress}
+                      >{senderName(email.fromAddress)}</strong
+                    >
+                    <span class="message-line"
+                      ><span class="subject">{email.subject || '(No subject)'}</span><span
+                        class="preview"
+                      >
+                        — {email.snippet || 'No preview text.'}</span
+                      ></span
+                    >
+                    {#if mailView === 'inbox'}<span class="category-tag"
+                        >{email.category ? labels[email.category] : 'Pending'}</span
+                      >{:else}<span></span>{/if}
+                    <span class="star" aria-label={starred ? 'Starred' : undefined}
+                      >{starred ? '★' : ''}</span
+                    >
+                    <time title={email.accountEmail}
+                      >{formatDate(
+                        email.latestSortTime
+                          ? new Date(email.latestSortTime).toISOString()
+                          : email.messageDate
+                      )}</time
+                    >
+                  </a>
+                </SwipeRow>
               </li>
             {/each}
           </ul>
@@ -2267,13 +2352,12 @@
       display: none;
     }
     .message {
-      grid-template-columns: 22px 96px minmax(0, 1fr) 60px;
+      grid-template-columns: 22px 96px minmax(0, 1fr) 14px 60px;
       padding-inline: 8px;
       height: 44px;
     }
     .message > .category-tag,
-    .message > .star,
-    .message > span:empty {
+    .message > span:empty:not(.star) {
       display: none;
     }
     .pane-heading > span {

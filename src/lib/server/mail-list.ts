@@ -130,8 +130,8 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
   const categoryMatch = database.prepare(`SELECT e.category, e.importance FROM emails e
     WHERE e.account_email = ? AND e.thread_key = ? AND e.deleted_at IS NULL
       AND e.is_sent = 0 AND e.category = ? ORDER BY e.sort_time DESC, e.id DESC LIMIT 1`);
-  const unread = database.prepare(`SELECT 1 FROM thread_labels
-    WHERE account_email = ? AND thread_key = ? AND label = 'UNREAD'`);
+  const threadLabel = database.prepare(`SELECT 1 FROM thread_labels
+    WHERE account_email = ? AND thread_key = ? AND label = ?`);
   const emails = candidates.slice(0, query.limit).map((candidate) => {
     const row = summary.get(candidate.preview_id) as Record<string, unknown>;
     const result = emailSummaryFromRow(row);
@@ -149,7 +149,12 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
     result.threadKey = candidate.thread_key;
     result.latestMessageId = candidate.latest_email_id;
     result.latestSortTime = candidate.latest_sort_time;
-    result.unread = Boolean(unread.get(candidate.account_email, candidate.thread_key));
+    result.unread = Boolean(
+      threadLabel.get(candidate.account_email, candidate.thread_key, 'UNREAD')
+    );
+    result.starred = Boolean(
+      threadLabel.get(candidate.account_email, candidate.thread_key, 'STARRED')
+    );
     return result;
   });
   return { emails, hasMore: candidates.length > query.limit, counts: {} };

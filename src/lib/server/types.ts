@@ -107,6 +107,7 @@ export type EmailSummary = Pick<
   latestMessageId?: number;
   latestSortTime?: number;
   unread?: boolean;
+  starred?: boolean;
 };
 
 export type SyncedContact = {

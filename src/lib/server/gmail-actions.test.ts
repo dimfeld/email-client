@@ -208,3 +208,41 @@ it('keeps completed thread changes on a partial Gmail failure and undoes only th
       .sort()
   ).toEqual(['first', 'late', 'second']);
 });
+
+it('stars the latest thread message and unstars every starred message', async () => {
+  database = createDatabase(':memory:');
+  const account = { email: 'one@example.com', refreshToken: 'token' };
+  upsertAccount(database, account);
+  upsertEmails(database, account.email, [
+    { id: 'old', threadId: 'thread', date: 'Mon, 5 Jan 2026 10:00:00 +0000', labels: ['INBOX'] },
+    { id: 'new', threadId: 'thread', date: 'Tue, 6 Jan 2026 10:00:00 +0000', labels: ['INBOX'] },
+  ]);
+  const oldId = Number(database.prepare("SELECT id FROM emails WHERE gmail_id = 'old'").get()!.id);
+  const urls: string[] = [];
+  const request = (async (_account: GoogleAccount, url: string) => {
+    urls.push(url);
+    return {};
+  }) as Parameters<typeof applyGmailThreadAction>[5];
+  const starredIds = () =>
+    listEmails(database!)
+      .filter((email) => email.labels.includes('STARRED'))
+      .map((email) => email.gmailId)
+      .sort();
+
+  await applyGmailThreadAction(database, account, oldId, 'star', undefined, request);
+  expect(urls).toEqual(['https://gmail.googleapis.com/gmail/v1/users/me/messages/new/modify']);
+  expect(starredIds()).toEqual(['new']);
+
+  upsertEmails(database, account.email, [
+    {
+      id: 'old',
+      threadId: 'thread',
+      date: 'Mon, 5 Jan 2026 10:00:00 +0000',
+      labels: ['INBOX', 'STARRED'],
+    },
+  ]);
+  urls.length = 0;
+  await applyGmailThreadAction(database, account, oldId, 'unstar', undefined, request);
+  expect(urls).toHaveLength(2);
+  expect(starredIds()).toEqual([]);
+});

@@ -3,12 +3,21 @@ import { changeEmailLabels, getThreadActionTargets, markDeleted, markUndeleted }
 import { googleApiRequest, type GoogleAccount } from './google-api';
 
 /** `unarchive` and `undelete` reverse `archive` and `delete`, for Undo. */
-export type GmailMessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete' | 'markRead';
+export type GmailMessageAction =
+  | 'archive'
+  | 'delete'
+  | 'unarchive'
+  | 'undelete'
+  | 'markRead'
+  | 'star'
+  | 'unstar';
 
 export const labelChanges = {
   archive: { removeLabelIds: ['INBOX'] },
   unarchive: { addLabelIds: ['INBOX'] },
   markRead: { removeLabelIds: ['UNREAD'] },
+  star: { addLabelIds: ['STARRED'] },
+  unstar: { removeLabelIds: ['STARRED'] },
 };
 
 export async function runGmailMessageAction(
