@@ -4,7 +4,7 @@ import { createTransport } from 'nodemailer';
 import addressparser from 'nodemailer/lib/addressparser';
 import sanitizeHtml from 'sanitize-html';
 import type { ComposeMode, Draft, DraftInput } from '$lib/composer';
-import { getEmail, listAccounts, markArchived, upsertEmails } from './db';
+import { getEmail, listAccounts, upsertEmails } from './db';
 import { googleApiRequest, normalizeGmailMessage, type GoogleAccount } from './google-api';
 import { publishStateChange } from './state-events';
 
@@ -540,7 +540,7 @@ export async function sendNextDraft(
       sameSubject(source.subject, draft.subject)
         ? source.threadId
         : null;
-    const sent = await request<{ id?: string }>(
+    const sent = await request<{ id?: string; threadId?: string }>(
       account,
       'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
       {
@@ -568,11 +568,10 @@ export async function sendNextDraft(
         bodyHtml: draft.html,
         date: new Date().toISOString(),
         labels: ['SENT'],
-        threadId: threadId ?? undefined,
+        threadId: sent.threadId ?? threadId ?? undefined,
         headers: { 'message-id': String(row.message_id), cc: draft.cc },
       },
     ]);
-    markArchived(database, account.email, [sent.id]);
   } catch (error) {
     // Sending is not idempotent. Do not automatically repeat an uncertain request.
     database

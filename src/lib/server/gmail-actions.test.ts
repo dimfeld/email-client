@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, listEmails, upsertAccount, upsertEmails } from './db';
-import { applyGmailMessageAction, runGmailMessageAction } from './gmail-actions';
+import {
+  applyGmailMessageAction,
+  applyGmailThreadAction,
+  runGmailMessageAction,
+} from './gmail-actions';
 import type { GoogleAccount } from './google-api';
 
 let database: DatabaseSync | undefined;
@@ -67,9 +71,9 @@ describe('Gmail message actions', () => {
     expect(listEmails(database)).toHaveLength(0);
     expect(
       database
-        .prepare('SELECT archived_at, deleted_at FROM emails WHERE gmail_id = ?')
+        .prepare('SELECT labels_json, deleted_at FROM emails WHERE gmail_id = ?')
         .get(message.id)
-    ).toMatchObject({ archived_at: expect.any(String), deleted_at: null });
+    ).toMatchObject({ labels_json: '[]', deleted_at: null });
 
     upsertEmails(database, 'one@example.com', [message]);
     expect(listEmails(database)).toHaveLength(1);
@@ -99,7 +103,9 @@ describe('Gmail message actions', () => {
   it('shows a message again locally after undo', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, { email: 'one@example.com' });
-    upsertEmails(database, 'one@example.com', [{ id: 'gmail-message', subject: 'A message' }]);
+    upsertEmails(database, 'one@example.com', [
+      { id: 'gmail-message', subject: 'A message', labels: ['INBOX'] },
+    ]);
     const account = { email: 'one@example.com', refreshToken: 'token' };
     const request = async <T>() => ({}) as T;
 
@@ -140,7 +146,9 @@ describe('Gmail message actions', () => {
   it('does not hide a message when Gmail rejects the action', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, { email: 'one@example.com' });
-    upsertEmails(database, 'one@example.com', [{ id: 'gmail-message', subject: 'A message' }]);
+    upsertEmails(database, 'one@example.com', [
+      { id: 'gmail-message', subject: 'A message', labels: ['INBOX'] },
+    ]);
 
     await expect(
       applyGmailMessageAction(
@@ -155,4 +163,48 @@ describe('Gmail message actions', () => {
     ).rejects.toThrow('Gmail unavailable');
     expect(listEmails(database)).toHaveLength(1);
   });
+});
+
+it('keeps completed thread changes on a partial Gmail failure and undoes only those messages', async () => {
+  database = createDatabase(':memory:');
+  const account = { email: 'one@example.com', refreshToken: 'token' };
+  upsertAccount(database, account);
+  upsertEmails(database, account.email, [
+    { id: 'first', threadId: 'thread', labels: ['INBOX'] },
+    { id: 'second', threadId: 'thread', labels: ['INBOX'] },
+    { id: 'sent', threadId: 'thread', labels: ['SENT'] },
+  ]);
+  const firstId = Number(
+    database.prepare("SELECT id FROM emails WHERE gmail_id = 'first'").get()!.id
+  );
+  let requests = 0;
+  const request = (async () => {
+    requests += 1;
+    if (requests === 2) throw new Error('Gmail failed');
+    return {};
+  }) as Parameters<typeof applyGmailThreadAction>[5];
+  const result = await applyGmailThreadAction(
+    database,
+    account,
+    firstId,
+    'archive',
+    undefined,
+    request
+  );
+  expect(result).toEqual({ succeededIds: [firstId], total: 2, error: 'Gmail failed' });
+  expect(listEmails(database).map((email) => email.gmailId)).toEqual(['second']);
+  upsertEmails(database, account.email, [{ id: 'late', threadId: 'thread', labels: ['INBOX'] }]);
+  await applyGmailThreadAction(
+    database,
+    account,
+    firstId,
+    'unarchive',
+    result.succeededIds,
+    (async () => ({})) as Parameters<typeof applyGmailThreadAction>[5]
+  );
+  expect(
+    listEmails(database)
+      .map((email) => email.gmailId)
+      .sort()
+  ).toEqual(['first', 'late', 'second']);
 });

@@ -6,7 +6,6 @@ import {
   getDatabase,
   getIncomingEmail,
   listAccounts,
-  markArchived,
   markDeleted,
   saveClassification,
   saveClassificationError,
@@ -225,11 +224,13 @@ async function runStep({
     if (!alreadyDone) {
       try {
         const email =
-          getIncomingEmail(database, account.email, id) ?? (await getMessage(account, id));
+          (getIncomingEmail(database, account.email, id)?.threadId
+            ? getIncomingEmail(database, account.email, id)
+            : null) ?? (await getMessage(account, id));
         if (email.id !== id) throw new Error('Gmail returned a different message ID.');
-        const pending = upsertEmails(database, account.email, [email]);
-        if (email.labels?.includes('TRASH')) markDeleted(database, account.email, [id]);
-        else if (!email.labels?.includes('INBOX')) markArchived(database, account.email, [id]);
+        const pending = email.labels?.includes('DRAFT')
+          ? []
+          : upsertEmails(database, account.email, [email]);
         if (job.classify && pending.length) {
           try {
             saveClassification(

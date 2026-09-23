@@ -22,8 +22,9 @@
     getMailCategories,
     getMailEvents,
     getMailList,
+    getMailCounts,
     getRemoteImageRules,
-    getSelectedMessage,
+    getSelectedThread,
   } from './mail.remote';
   import type { ActionData } from './$types';
   import type { EmailSummary, StoredEmail } from '$lib/server/types';
@@ -36,6 +37,9 @@
     accounts.some((account) => account.email === requestedAccount) ? requestedAccount : null
   );
   let search = $derived(new URL(currentUrl).searchParams.get('q')?.trim() ?? '');
+  let mailView = $derived(
+    new URL(currentUrl).searchParams.get('view') === 'sent' ? ('sent' as const) : ('inbox' as const)
+  );
   let requestedDay = $derived(new URL(currentUrl).searchParams.get('day'));
   let calendarDay = $derived(isDateKey(requestedDay) ? requestedDay : dateKeyFromDate(new Date()));
   let selectedId = $derived.by(() => {
@@ -59,7 +63,7 @@
   });
   // Pages of the list that are loaded. A new list starts again at one page.
   let pageCount = $derived.by(() => {
-    void [selectedAccount, search, activeFilter];
+    void [selectedAccount, search, activeFilter, mailView];
     return 1;
   });
   let mailList = $derived(
@@ -67,13 +71,15 @@
       account: selectedAccount,
       search,
       filter: activeFilter,
+      view: mailView,
       limit: pageCount * MAIL_PAGE_SIZE,
     })
   );
-  let selectedMessage = $derived(
-    selectedId === null
-      ? null
-      : await getSelectedMessage({ account: selectedAccount, id: selectedId })
+  let selectedThread = $derived(
+    selectedId === null ? [] : await getSelectedThread({ account: selectedAccount, id: selectedId })
+  );
+  let counts = $derived(
+    mailView === 'sent' && !search ? {} : await getMailCounts({ account: selectedAccount, search })
   );
   let data = $derived({
     accounts,
@@ -122,12 +128,13 @@
       account: selectedAccount,
       search,
       filter: activeFilter,
+      view: mailView,
       limit: pageCount * MAIL_PAGE_SIZE,
     };
   }
 
   // The server filters the list and counts each filter over the whole mailbox.
-  let filterCounts = $derived(data.counts);
+  let filterCounts = $derived(counts);
   let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
   let showChat = $state(false);
   let showCategories = $state(false);
@@ -140,7 +147,7 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   let filters = $derived([
-    { category: 'all' as const, label: 'All mail', count: filterCounts.all ?? 0 },
+    { category: 'all' as const, label: 'All inbox', count: filterCounts.all ?? 0 },
     { category: 'important', label: 'All important', count: filterCounts.important ?? 0 },
     { category: 'useful' as const, label: 'Useful now', count: filterCounts.useful ?? 0 },
     ...data.categories.map((category) => ({
@@ -153,21 +160,39 @@
   let visibleEmails = $derived(emails);
   // The whole list size, for screen readers, since only some rows are in the page.
   let listSize = $derived(
-    filters.find((filter) => filter.category === activeFilter)?.count ?? visibleEmails.length
+    mailView === 'sent'
+      ? visibleEmails.length
+      : (filters.find((filter) => filter.category === activeFilter)?.count ?? visibleEmails.length)
   );
-  let selectedEmail = $derived(selectedId === null ? null : selectedMessage);
+  let selectedEmail = $derived(selectedThread.at(-1) ?? null);
+  let selectedSummary = $derived(
+    emails.find(
+      (email) =>
+        email.threadKey === selectedEmail?.threadKey &&
+        email.accountEmail === selectedEmail?.accountEmail
+    ) ?? null
+  );
   // The list row that J and K move to while the reading pane is closed.
   let cursorId = $state<number | null>(null);
-  let remoteImagesAllowed = $derived(
-    selectedEmail !== null &&
-      (remoteImagesFor === selectedEmail.id ||
-        allowsRemoteImages(selectedEmail.fromAddress, remoteImageRules))
-  );
+  function remoteImagesAllowed(email: StoredEmail) {
+    return remoteImagesFor === email.id || allowsRemoteImages(email.fromAddress, remoteImageRules);
+  }
+  function meaningfulSubject(subject: string) {
+    return subject
+      .replace(/^(?:(?:re|fw|fwd):\s*)+/gi, '')
+      .trim()
+      .toLowerCase();
+  }
+  function addressSet(email: StoredEmail) {
+    const addresses =
+      `${email.toAddresses},${email.headers?.cc ?? ''}`.match(/[^\s<>,;"()]+@[^\s<>,;"()]+/g) ?? [];
+    return [...new Set(addresses.map((address) => address.toLowerCase()))].sort().join(',');
+  }
   let clearSearchHref = $derived(
     data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'
   );
   let filterLabel = $derived(
-    filters.find((filter) => filter.category === activeFilter)?.label ?? 'All mail'
+    filters.find((filter) => filter.category === activeFilter)?.label ?? 'All inbox'
   );
 
   function mailboxHref(changes: { category?: Filter; message?: number | null }): string {
@@ -194,6 +219,14 @@
 
   function selectFilter(filter: Filter) {
     updateMailboxUrl({ category: filter, message: null });
+  }
+  function selectView(view: 'inbox' | 'sent') {
+    const url = new URL(currentUrl);
+    if (view === 'inbox') url.searchParams.delete('view');
+    else url.searchParams.set('view', view);
+    url.searchParams.delete('category');
+    url.searchParams.delete('message');
+    void goto(`${url.pathname}${url.search}`, { keepFocus: true, noScroll: true });
   }
 
   function fitMessageFrame(frame: HTMLIFrameElement, reset: boolean) {
@@ -520,9 +553,14 @@
 
   type MessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete' | 'markRead';
 
-  async function postMessageAction(action: MessageAction, id: number): Promise<ActionResult> {
+  async function postMessageAction(
+    action: MessageAction,
+    id: number,
+    succeededIds?: number[]
+  ): Promise<ActionResult> {
     const body = new FormData();
     body.set('id', String(id));
+    if (succeededIds) body.set('succeededIds', JSON.stringify(succeededIds));
     const response = await fetch(`?/${action}`, {
       method: 'POST',
       body,
@@ -536,24 +574,39 @@
   const readIds = new SvelteSet<number>();
   function markReadOnOpen(email: StoredEmail) {
     return () => {
-      if (!email.labels.includes('UNREAD') || untrack(() => readIds.has(email.id))) return;
+      if (
+        !selectedThread.some((member) => member.labels.includes('UNREAD')) ||
+        untrack(() => readIds.has(email.id))
+      )
+        return;
       readIds.add(email.id);
       void postMessageAction('markRead', email.id).then((result) => {
-        if (result.type === 'success') return;
+        if (result.type === 'success' && !result.data?.error) return;
         readIds.delete(email.id);
-        showToast(actionError(result), { tone: 'error' });
+        showToast(result.type === 'success' ? String(result.data?.error) : actionError(result), {
+          tone: 'error',
+        });
       });
     };
   }
 
-  async function undoMessageAction(id: number, action: 'archive' | 'delete') {
-    const result = await postMessageAction(action === 'archive' ? 'unarchive' : 'undelete', id);
+  async function undoMessageAction(
+    id: number,
+    action: 'archive' | 'delete',
+    succeededIds: number[],
+    rowId: number
+  ) {
+    const result = await postMessageAction(
+      action === 'archive' ? 'unarchive' : 'undelete',
+      id,
+      succeededIds
+    );
     if (result.type !== 'success') {
       showToast(actionError(result), { tone: 'error' });
       return;
     }
     await getMailList(mailListArgs()).refresh();
-    removedIds.delete(id);
+    removedIds.delete(rowId);
     focusReadingPaneOnLoad = true;
     updateMailboxUrl({ message: id });
     if (typeof result.data?.message === 'string') showToast(result.data.message);
@@ -572,27 +625,54 @@
   async function submitMessageAction(event: SubmitEvent, action: 'archive' | 'delete') {
     event.preventDefault();
     const id = Number(new FormData(event.currentTarget as HTMLFormElement).get('id'));
+    const target = selectedThread.find((member) => member.id === id);
+    const rowId =
+      visibleEmails.find(
+        (email) =>
+          email.threadKey === target?.threadKey && email.accountEmail === target?.accountEmail
+      )?.id ?? id;
     const navigation = queueMailTransition(async () => {
-      if (removedIds.has(id)) return false;
+      if (removedIds.has(rowId)) return false;
+      if (action === 'archive' && mailView === 'sent') return true;
       // Open the next message, as most mail clients do, so E can process mail row by row.
-      const index = visibleEmails.findIndex((email) => email.id === id);
+      const index = visibleEmails.findIndex((email) => email.id === rowId);
       const next =
         index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
-      removedIds.add(id);
+      removedIds.add(rowId);
       focusReadingPaneOnLoad = next !== null;
       await updateMailboxUrl({ message: next?.id ?? null });
       return true;
     });
     if (!(await navigation)) return;
     const result = await postMessageAction(action, id);
-    if (result.type === 'success') {
+    if (
+      result.type === 'success' &&
+      Array.isArray(result.data?.succeededIds) &&
+      result.data.succeededIds.length
+    ) {
       // Gmail Trash and archive are recoverable, so Undo replaces a confirmation step.
-      showToast(action === 'archive' ? 'Message archived.' : 'Message moved to Trash.', {
-        action: { label: 'Undo', run: () => void undoMessageAction(id, action) },
-      });
+      showToast(
+        typeof result.data.error === 'string'
+          ? result.data.message
+          : action === 'archive'
+            ? 'Thread archived.'
+            : 'Thread moved to Trash.',
+        {
+          action: {
+            label: 'Undo',
+            run: () =>
+              void undoMessageAction(id, action, result.data!.succeededIds as number[], rowId),
+          },
+        }
+      );
+      if (result.data.error) {
+        removedIds.delete(rowId);
+        await getMailList(mailListArgs()).refresh();
+        await updateMailboxUrl({ message: id });
+      }
       return;
     }
-    removedIds.delete(id);
+    removedIds.delete(rowId);
     showToast(actionError(result), { tone: 'error' });
   }
 
@@ -623,8 +703,9 @@
             const account = selectedAccount;
             const id = selectedId;
             const refreshes = [getMailList(mailListArgs()).refresh()];
-            if (id !== null) refreshes.push(getSelectedMessage({ account, id }).refresh());
+            if (id !== null) refreshes.push(getSelectedThread({ account, id }).refresh());
             await Promise.all(refreshes);
+            await getMailCounts({ account, search }).refresh();
           })
         );
       }
@@ -750,7 +831,7 @@
         aria-expanded={showCategories}
         onclick={() => (showCategories = !showCategories)}><Icon name="menu" /></button
       >
-      <h1>Inbox</h1>
+      <h1>{mailView === 'sent' ? 'Sent' : 'Inbox'}</h1>
     </div>
     <form method="GET" class="search-form">
       {#if data.selectedAccount}<input
@@ -811,16 +892,23 @@
   <div class="mailbox" class:show-detail={mobileDetail} class:show-categories={showCategories}>
     <nav class="sidebar" aria-label="Mailbox">
       <p class="eyebrow">MAILBOX</p>
-      {#each filters as filter}
-        <button
-          class="filter"
-          class:active={activeFilter === filter.category}
-          aria-pressed={activeFilter === filter.category}
-          onclick={() => selectFilter(filter.category)}
-        >
-          <span class="filter-label">{filter.label}</span><span class="count">{filter.count}</span>
-        </button>
-      {/each}
+      <button class="filter" class:active={mailView === 'inbox'} onclick={() => selectView('inbox')}
+        >Inbox</button
+      >
+      <button class="filter" class:active={mailView === 'sent'} onclick={() => selectView('sent')}
+        >Sent</button
+      >
+      {#if mailView === 'inbox'}{#each filters as filter}
+          <button
+            class="filter"
+            class:active={activeFilter === filter.category}
+            aria-pressed={activeFilter === filter.category}
+            onclick={() => selectFilter(filter.category)}
+          >
+            <span class="filter-label">{filter.label}</span><span class="count">{filter.count}</span
+            >
+          </button>
+        {/each}{/if}
       <p class="eyebrow app-heading">APPS</p>
       <a class="filter" href="/calendar">Calendar</a>
       <a class="filter" href="/contacts">Contacts</a>
@@ -830,10 +918,10 @@
     <section class="list-pane" aria-label="Message list">
       <header class="pane-heading">
         <!-- The sidebar has the same filters, so the tabs show only when it is closed. -->
-        {#if !showCategories}
+        {#if !showCategories && mailView === 'inbox'}
           <div class="mail-tabs">
             <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
-              >All mail <small>{filterCounts.all ?? 0}</small></button
+              >All inbox <small>{filterCounts.all ?? 0}</small></button
             ><button
               class:tab-active={activeFilter === 'important'}
               onclick={() => selectFilter('important')}>Important</button
@@ -843,7 +931,7 @@
             >
           </div>
         {/if}
-        <span>{filterLabel} · {listSize}</span>
+        <span>{mailView === 'sent' ? 'Sent' : filterLabel} · {listSize}</span>
       </header>
       {#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
       {#if data.query}<p class="search-summary">
@@ -869,9 +957,13 @@
                   data-sveltekit-keepfocus
                   data-sveltekit-noscroll
                   data-email-id={email.id}
-                  class:unread={email.labels.includes('UNREAD') && !readIds.has(email.id)}
-                  class:selected={selectedEmail?.id === email.id}
-                  aria-current={selectedEmail?.id === email.id ? 'true' : undefined}
+                  class:unread={email.unread && !readIds.has(email.id)}
+                  class:selected={selectedEmail?.threadKey === email.threadKey &&
+                    selectedEmail?.accountEmail === email.accountEmail}
+                  aria-current={selectedEmail?.threadKey === email.threadKey &&
+                  selectedEmail?.accountEmail === email.accountEmail
+                    ? 'true'
+                    : undefined}
                 >
                   <span class="sender-avatar" aria-hidden="true"
                     >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
@@ -886,13 +978,19 @@
                       — {email.snippet || 'No preview text.'}</span
                     ></span
                   >
-                  <span class="category-tag"
-                    >{email.category ? labels[email.category] : 'Pending'}</span
-                  >
+                  {#if mailView === 'inbox'}<span class="category-tag"
+                      >{email.category ? labels[email.category] : 'Pending'}</span
+                    >{:else}<span></span>{/if}
                   {#if importance(email) === 'important'}<span class="star" aria-label="Important"
                       >★</span
                     >{:else}<span></span>{/if}
-                  <time title={email.accountEmail}>{formatDate(email.messageDate)}</time>
+                  <time title={email.accountEmail}
+                    >{formatDate(
+                      email.latestSortTime
+                        ? new Date(email.latestSortTime).toISOString()
+                        : email.messageDate
+                    )}</time
+                  >
                 </a>
               </li>
             {/each}
@@ -924,212 +1022,228 @@
           ><Icon name="arrow-left" /> Back to messages</button
         >
         <span
-          >{selectedEmail
-            ? selectedEmail.category
-              ? labels[selectedEmail.category]
-              : 'Needs classification'
-            : 'Message detail'}</span
+          >{mailView === 'sent'
+            ? 'Sent thread'
+            : selectedSummary?.category
+              ? labels[selectedSummary.category]
+              : 'Message detail'}</span
         >
-        {#if selectedEmail && importance(selectedEmail) !== null}<span class="useful-tag"
-            >{importance(selectedEmail) === 'important'
+        {#if mailView === 'inbox' && selectedSummary && importance(selectedSummary) !== null}<span
+            class="useful-tag"
+            >{importance(selectedSummary) === 'important'
               ? 'Important'
-              : importance(selectedEmail) === 'useful'
+              : importance(selectedSummary) === 'useful'
                 ? 'Useful'
                 : 'Other'}</span
           >{/if}
       </header>
       {#if selectedEmail}
-        {#key selectedEmail.id}
-          <article
-            {@attach attachReadingContent}
-            {@attach markReadOnOpen(selectedEmail)}
-            class="reading-content"
-            tabindex="-1"
-          >
-            <h2>{selectedEmail.subject || '(No subject)'}</h2>
-            <dl class="message-metadata">
-              <div>
-                <dt>From</dt>
-                <dd>{selectedEmail.fromAddress || 'Unknown sender'}</dd>
-              </div>
-              <div>
-                <dt>To</dt>
-                <dd>{selectedEmail.toAddresses || 'Unknown recipient'}</dd>
-              </div>
-              <div>
-                <dt>Account</dt>
-                <dd>{selectedEmail.accountEmail}</dd>
-              </div>
-              <div>
-                <dt>Date</dt>
-                <dd title={selectedEmail.messageDate ?? undefined}>
-                  {formatFullDate(selectedEmail.messageDate)}
-                </dd>
-              </div>
-            </dl>
-            <details>
-              <summary>Classification details</summary>
-              <div class="classification-summary" aria-label="Jev classification results">
-                {#if confidence(selectedEmail)}<span
-                    >Category confidence: <strong>{confidence(selectedEmail)}</strong></span
-                  >{/if}
-                {#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span
-                    >Action item: <strong
-                      >{jevAnswer(
-                        selectedEmail.hasActionItem,
-                        selectedEmail.actionItemProbability
-                      )}</strong
-                    ></span
-                  >{/if}
-                {#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span
-                    >Reminder: <strong
-                      >{jevAnswer(
-                        selectedEmail.hasReminder,
-                        selectedEmail.reminderProbability
-                      )}</strong
-                    ></span
-                  >{/if}
-              </div>
-            </details>
-            {#if selectedEmail.classificationError}<p class="notice">
-                Classification failed. This message needs another attempt.
-              </p>{/if}
-            {#if selectedEmail.actionItems.length > 0 || selectedEmail.reminders.length > 0 || selectedEmail.extractionError}
-              <section class="extraction-panel" aria-label="Extracted action items and reminders">
-                {#if selectedEmail.actionItems.length > 0}
-                  <div class="extraction-group">
-                    <h3>Action items</h3>
-                    <ul>
-                      {#each selectedEmail.actionItems as item}
-                        <li>
-                          <strong>{item.title}</strong>
-                          {#if item.details}<span>{item.details}</span>{/if}
-                          {#if extractedDate(item.dueAt)}<small
-                              >Due {extractedDate(item.dueAt)}</small
-                            >{/if}
-                        </li>
-                      {/each}
-                    </ul>
+        <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
+          <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
+          {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
+            <article {@attach attachReadingContent} class="reading-content" tabindex="-1">
+              {#if memberIndex > 0 && meaningfulSubject(selectedEmail.subject) !== meaningfulSubject(selectedThread[memberIndex - 1].subject)}
+                <h3>{selectedEmail.subject || '(No subject)'}</h3>
+              {/if}
+              <dl class="message-metadata">
+                <div>
+                  <dt>From</dt>
+                  <dd>
+                    {selectedEmail.labels.includes('SENT')
+                      ? selectedEmail.accountEmail
+                      : selectedEmail.fromAddress || 'Unknown sender'}
+                  </dd>
+                </div>
+                {#if memberIndex === 0 || addressSet(selectedEmail) !== addressSet(selectedThread[memberIndex - 1])}
+                  <div>
+                    <dt>To</dt>
+                    <dd>{selectedEmail.toAddresses || 'Unknown recipient'}</dd>
+                  </div>
+                  {#if selectedEmail.headers?.cc}<div>
+                      <dt>Cc</dt>
+                      <dd>{selectedEmail.headers.cc}</dd>
+                    </div>{/if}
+                {/if}
+                <div>
+                  <dt>Account</dt>
+                  <dd>{selectedEmail.accountEmail}</dd>
+                </div>
+                <div>
+                  <dt>Date</dt>
+                  <dd title={selectedEmail.messageDate ?? undefined}>
+                    {formatFullDate(new Date(selectedEmail.sortTime).toISOString())}
+                  </dd>
+                </div>
+              </dl>
+              {#if !selectedEmail.labels.includes('SENT')}<details>
+                  <summary>Classification details</summary>
+                  <div class="classification-summary" aria-label="Jev classification results">
+                    {#if confidence(selectedEmail)}<span
+                        >Category confidence: <strong>{confidence(selectedEmail)}</strong></span
+                      >{/if}
+                    {#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span
+                        >Action item: <strong
+                          >{jevAnswer(
+                            selectedEmail.hasActionItem,
+                            selectedEmail.actionItemProbability
+                          )}</strong
+                        ></span
+                      >{/if}
+                    {#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span
+                        >Reminder: <strong
+                          >{jevAnswer(
+                            selectedEmail.hasReminder,
+                            selectedEmail.reminderProbability
+                          )}</strong
+                        ></span
+                      >{/if}
+                  </div>
+                </details>{/if}
+              {#if selectedEmail.classificationError}<p class="notice">
+                  Classification failed. This message needs another attempt.
+                </p>{/if}
+              {#if selectedEmail.actionItems.length > 0 || selectedEmail.reminders.length > 0 || selectedEmail.extractionError}
+                <section class="extraction-panel" aria-label="Extracted action items and reminders">
+                  {#if selectedEmail.actionItems.length > 0}
+                    <div class="extraction-group">
+                      <h3>Action items</h3>
+                      <ul>
+                        {#each selectedEmail.actionItems as item}
+                          <li>
+                            <strong>{item.title}</strong>
+                            {#if item.details}<span>{item.details}</span>{/if}
+                            {#if extractedDate(item.dueAt)}<small
+                                >Due {extractedDate(item.dueAt)}</small
+                              >{/if}
+                          </li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
+                  {#if selectedEmail.reminders.length > 0}
+                    <div class="extraction-group">
+                      <h3>Reminders</h3>
+                      <ul>
+                        {#each selectedEmail.reminders as reminder}
+                          <li>
+                            <strong>{reminder.title}</strong>
+                            {#if reminder.details}<span>{reminder.details}</span>{/if}
+                            {#if extractedDate(reminder.remindAt)}<small
+                                >Reminder {extractedDate(reminder.remindAt)}</small
+                              >{/if}
+                          </li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
+                  {#if selectedEmail.extractionError}<p class="notice extraction-error">
+                      Extraction failed: {selectedEmail.extractionError}
+                    </p>{/if}
+                </section>
+              {/if}
+              {#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
+              <div class="message-actions">
+                <button
+                  onclick={() => openComposer({ mode: 'reply', sourceEmailId: selectedEmail!.id })}
+                  >Reply</button
+                >
+                <button
+                  onclick={() =>
+                    openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail!.id })}
+                  >Reply all</button
+                >
+                <button
+                  onclick={() =>
+                    openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}
+                  >Forward</button
+                >
+                {#if selectedThread.some((member) => member.labels.includes('INBOX'))}<form
+                    bind:this={archiveForm}
+                    method="POST"
+                    action="?/archive"
+                    onsubmit={(event) => void submitMessageAction(event, 'archive')}
+                  >
+                    <input type="hidden" name="id" value={selectedEmail.id} />
+                    <button type="submit">Archive</button>
+                  </form>{/if}
+                <form
+                  bind:this={deleteForm}
+                  method="POST"
+                  action="?/delete"
+                  onsubmit={(event) => void submitMessageAction(event, 'delete')}
+                >
+                  <input type="hidden" name="id" value={selectedEmail.id} />
+                  <button type="submit" class="delete-button">Delete</button>
+                </form>
+                {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed(selectedEmail)}
+                  <div class="remote-images-control">
+                    <button
+                      type="button"
+                      class="remote-images-button"
+                      onclick={() => {
+                        remoteImagesFor = selectedEmail.id;
+                      }}>Load remote images</button
+                    >
+                    <button
+                      type="button"
+                      class="remote-images-menu"
+                      aria-label="Remote image options"
+                      popovertarget="remote-images-options"><Icon name="chevron-down" /></button
+                    >
+                    <div id="remote-images-options" class="remote-images-options" popover="auto">
+                      {#if senderAddress(selectedEmail.fromAddress)}
+                        <form
+                          method="POST"
+                          action="?/saveRemoteImageRule"
+                          use:enhance={saveRemoteImageRule}
+                        >
+                          <input type="hidden" name="id" value={selectedEmail.id} />
+                          <input type="hidden" name="kind" value="address" />
+                          <button type="submit"
+                            >Always load from {senderAddress(selectedEmail.fromAddress)}</button
+                          >
+                        </form>
+                        <form
+                          method="POST"
+                          action="?/saveRemoteImageRule"
+                          use:enhance={saveRemoteImageRule}
+                        >
+                          <input type="hidden" name="id" value={selectedEmail.id} />
+                          <input type="hidden" name="kind" value="domain" />
+                          <button type="submit"
+                            >Always load from {senderDomain(selectedEmail.fromAddress)}</button
+                          >
+                        </form>
+                      {:else}<p>No sender address is available for this message.</p>{/if}
+                    </div>
                   </div>
                 {/if}
-                {#if selectedEmail.reminders.length > 0}
-                  <div class="extraction-group">
-                    <h3>Reminders</h3>
-                    <ul>
-                      {#each selectedEmail.reminders as reminder}
-                        <li>
-                          <strong>{reminder.title}</strong>
-                          {#if reminder.details}<span>{reminder.details}</span>{/if}
-                          {#if extractedDate(reminder.remindAt)}<small
-                              >Reminder {extractedDate(reminder.remindAt)}</small
-                            >{/if}
-                        </li>
-                      {/each}
-                    </ul>
-                  </div>
-                {/if}
-                {#if selectedEmail.extractionError}<p class="notice extraction-error">
-                    Extraction failed: {selectedEmail.extractionError}
-                  </p>{/if}
-              </section>
-            {/if}
-            {#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
-            <div class="message-actions">
-              <button
-                onclick={() => openComposer({ mode: 'reply', sourceEmailId: selectedEmail!.id })}
-                >Reply</button
-              >
-              <button
-                onclick={() => openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail!.id })}
-                >Reply all</button
-              >
-              <button
-                onclick={() => openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}
-                >Forward</button
-              >
-              <form
-                bind:this={archiveForm}
-                method="POST"
-                action="?/archive"
-                onsubmit={(event) => void submitMessageAction(event, 'archive')}
-              >
-                <input type="hidden" name="id" value={selectedEmail.id} />
-                <button type="submit">Archive</button>
-              </form>
-              <form
-                bind:this={deleteForm}
-                method="POST"
-                action="?/delete"
-                onsubmit={(event) => void submitMessageAction(event, 'delete')}
-              >
-                <input type="hidden" name="id" value={selectedEmail.id} />
-                <button type="submit" class="delete-button">Delete</button>
-              </form>
-              {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed}
-                <div class="remote-images-control">
-                  <button
-                    type="button"
-                    class="remote-images-button"
-                    onclick={() => {
-                      remoteImagesFor = selectedEmail.id;
-                    }}>Load remote images</button
-                  >
-                  <button
-                    type="button"
-                    class="remote-images-menu"
-                    aria-label="Remote image options"
-                    popovertarget="remote-images-options"><Icon name="chevron-down" /></button
-                  >
-                  <div id="remote-images-options" class="remote-images-options" popover="auto">
-                    {#if senderAddress(selectedEmail.fromAddress)}
-                      <form
-                        method="POST"
-                        action="?/saveRemoteImageRule"
-                        use:enhance={saveRemoteImageRule}
-                      >
-                        <input type="hidden" name="id" value={selectedEmail.id} />
-                        <input type="hidden" name="kind" value="address" />
-                        <button type="submit"
-                          >Always load from {senderAddress(selectedEmail.fromAddress)}</button
-                        >
-                      </form>
-                      <form
-                        method="POST"
-                        action="?/saveRemoteImageRule"
-                        use:enhance={saveRemoteImageRule}
-                      >
-                        <input type="hidden" name="id" value={selectedEmail.id} />
-                        <input type="hidden" name="kind" value="domain" />
-                        <button type="submit"
-                          >Always load from {senderDomain(selectedEmail.fromAddress)}</button
-                        >
-                      </form>
-                    {:else}<p>No sender address is available for this message.</p>{/if}
-                  </div>
+              </div>
+              {#if selectedEmail.bodyHtml}
+                <div class="message-paper">
+                  <iframe
+                    class="html-message"
+                    title="Email message content"
+                    sandbox="allow-same-origin"
+                    referrerpolicy="no-referrer"
+                    srcdoc={buildEmailDocument(
+                      selectedEmail.bodyHtml,
+                      remoteImagesAllowed(selectedEmail)
+                    )}
+                    {@attach messageFrame}
+                  ></iframe>
+                </div>
+              {:else}
+                <div class="message-body">
+                  {selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}
                 </div>
               {/if}
-            </div>
-            {#if selectedEmail.bodyHtml}
-              <div class="message-paper">
-                <iframe
-                  class="html-message"
-                  title="Email message content"
-                  sandbox="allow-same-origin"
-                  referrerpolicy="no-referrer"
-                  srcdoc={buildEmailDocument(selectedEmail.bodyHtml, remoteImagesAllowed)}
-                  {@attach messageFrame}
-                ></iframe>
-              </div>
-            {:else}
-              <div class="message-body">
-                {selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}
-              </div>
-            {/if}
-            {#if selectedEmail.bodyTruncated}<p class="notice">
-                Only part of this message was downloaded.
-              </p>{/if}
-          </article>
-        {/key}
+              {#if selectedEmail.bodyTruncated}<p class="notice">
+                  Only part of this message was downloaded.
+                </p>{/if}
+            </article>
+          {/each}
+        </div>
       {:else}
         <div class="detail-empty">
           <span aria-hidden="true">@</span>
@@ -1578,14 +1692,23 @@
   }
   .reading-content {
     padding: 24px;
-    overflow-y: auto;
     overflow-wrap: anywhere;
+    border-top: 1px solid var(--color-border);
+  }
+  .thread-content {
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .thread-subject {
+    padding: 20px 24px;
+    margin: 0;
+    font-size: 1.1rem;
   }
   /* Focus moves here by script so keys act on the message; it is not a control. */
   .reading-content:focus {
     outline: none;
   }
-  .reading-content h2 {
+  .reading-content h3 {
     font-size: 1.05rem;
     line-height: 1.35;
     letter-spacing: -0.025em;

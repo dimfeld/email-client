@@ -37,6 +37,7 @@ describe('Gmail ingestion', () => {
     const message = {
       id: 'same-gmail-id',
       subject: 'Reply requested',
+      labels: ['INBOX'],
       from: 'Alex <alex@example.com>',
       date: '2026-09-18T12:00:00Z',
     };
@@ -73,7 +74,7 @@ describe('Gmail ingestion', () => {
         source: 'gmail',
         account: 'one@example.com',
         deletedMessageIds: [],
-        messages: [{ id: 'message-1', subject: 'Reply requested' }],
+        messages: [{ id: 'message-1', subject: 'Reply requested', labels: ['INBOX'] }],
       },
       classify
     );
@@ -98,7 +99,7 @@ describe('Gmail ingestion', () => {
         source: 'gmail',
         account: 'owner@example.com',
         deletedMessageIds: [],
-        messages: [{ id: 'message', subject: 'Reply requested' }],
+        messages: [{ id: 'message', subject: 'Reply requested', labels: ['INBOX'] }],
       },
       async (email, account) => {
         seen.push(`classify:${account}`);
@@ -130,7 +131,7 @@ describe('Gmail ingestion', () => {
         source: 'gmail',
         account: 'one@example.com',
         deletedMessageIds: [],
-        messages: [{ id: 'message-1', subject: 'Reply requested' }],
+        messages: [{ id: 'message-1', subject: 'Reply requested', labels: ['INBOX'] }],
       },
       classify,
       extract
@@ -157,7 +158,7 @@ describe('Gmail ingestion', () => {
       source: 'gmail' as const,
       account: 'one@example.com',
       deletedMessageIds: [],
-      messages: [{ id: 'message-1', subject: 'Reply requested' }],
+      messages: [{ id: 'message-1', subject: 'Reply requested', labels: ['INBOX'] }],
     };
     await ingestGmailPayload(database, payload, countingClassifier, null);
 
@@ -206,7 +207,7 @@ describe('Gmail ingestion', () => {
           source: 'gmail',
           account: 'one@example.com',
           deletedMessageIds: [],
-          messages: [{ id: 'message-1', subject: 'Reply requested' }],
+          messages: [{ id: 'message-1', subject: 'Reply requested', labels: ['INBOX'] }],
         },
         classify,
         async () => {
@@ -231,7 +232,7 @@ describe('Gmail ingestion', () => {
           source: 'gmail',
           account: 'one@example.com',
           deletedMessageIds: [],
-          messages: [{ id: 'message-1', subject: 'Unknown' }],
+          messages: [{ id: 'message-1', subject: 'Unknown', labels: ['INBOX'] }],
         },
         async () => {
           throw new Error('Jev unavailable');
@@ -252,7 +253,7 @@ describe('Gmail ingestion', () => {
         source: 'gmail',
         account: 'one@example.com',
         deletedMessageIds: [],
-        messages: [{ id: 'message-1', subject: 'Reply requested' }],
+        messages: [{ id: 'message-1', subject: 'Reply requested', labels: ['INBOX'] }],
       },
       classify
     );

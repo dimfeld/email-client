@@ -114,7 +114,7 @@ describe('Gmail notification processing', () => {
       { database, classify, request, getMessage }
     );
 
-    expect(result.stored).toBe(1);
+    expect(result.stored).toBe(2);
     expect(listEmails(database).map((email) => email.gmailId)).toEqual(['inbox-message']);
     expect(listAccounts(database).find((item) => item.email === 'one@example.com')?.historyId).toBe(
       '105'
@@ -194,13 +194,13 @@ describe('Gmail notification processing', () => {
       }
     );
 
-    expect(result).toMatchObject({ stored: 0, archived: 1, deleted: 1 });
+    expect(result).toMatchObject({ stored: 1, archived: 1, deleted: 1 });
     expect(listEmails(database)).toEqual([]);
     expect(
       database
-        .prepare('SELECT archived_at, deleted_at FROM emails WHERE gmail_id = ?')
+        .prepare('SELECT labels_json, deleted_at FROM emails WHERE gmail_id = ?')
         .get('archived')
-    ).toMatchObject({ archived_at: expect.any(String), deleted_at: null });
+    ).toMatchObject({ labels_json: '[]', deleted_at: null });
     expect(
       database.prepare('SELECT deleted_at FROM emails WHERE gmail_id = ?').get('trashed')
     ).toMatchObject({ deleted_at: expect.any(String) });

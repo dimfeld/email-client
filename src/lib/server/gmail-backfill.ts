@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
-import { getDatabase, getIncomingEmail, listAccounts, setAccountLastBackfillAt } from './db';
+import { getDatabase, listAccounts, setAccountLastBackfillAt } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { getGmailMessage, listGmailMessageIds, listGmailMessages } from './google-api';
 import { ingestGmailPayload } from './ingest';
@@ -42,7 +42,7 @@ export function buildGmailBackfillQuery(lastBackfillAt: string | null, now: Date
   const startAt = Number.isFinite(recordedAt)
     ? recordedAt - GMAIL_BACKFILL_OVERLAP_MS
     : now.getTime() - GMAIL_BACKFILL_INITIAL_LOOKBACK_MS;
-  return `in:inbox after:${Math.max(0, Math.floor(startAt / 1000))}`;
+  return `after:${Math.max(0, Math.floor(startAt / 1000))}`;
 }
 
 async function backfillAccount(
@@ -59,8 +59,7 @@ async function backfillAccount(
     const getMessage = dependencies.getMessage ?? getGmailMessage;
     messages = [];
     for (const id of ids) {
-      const stored = getIncomingEmail(dependencies.database, account.email, id);
-      messages.push(stored ?? (await getMessage(account, id)));
+      messages.push(await getMessage(account, id));
     }
   }
   const ingested = await ingestGmailPayload(

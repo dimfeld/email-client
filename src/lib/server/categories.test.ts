@@ -67,11 +67,16 @@ describe('category settings', () => {
     const path = join(directory, 'test.sqlite');
     database = createDatabase(path);
     upsertEmails(database, 'test@example.com', [
-      { id: 'useful' },
-      { id: 'other' },
-      { id: 'pending' },
+      { id: 'useful', labels: ['INBOX'] },
+      { id: 'other', labels: ['INBOX'] },
+      { id: 'pending', labels: ['INBOX'] },
     ]);
-    database.exec(`ALTER TABLE emails DROP COLUMN importance;
+    database.exec(`DROP TRIGGER emails_thread_insert;
+      DROP TRIGGER emails_thread_delete;
+      DROP TRIGGER emails_thread_update;
+      DROP TRIGGER emails_thread_classification;
+      DROP TRIGGER categories_thread_filters_update;
+      ALTER TABLE emails DROP COLUMN importance;
 			ALTER TABLE emails DROP COLUMN importance_confidence;
 			ALTER TABLE emails DROP COLUMN importance_probabilities_json;
 			UPDATE emails SET useful = 1, category = 'newsletter' WHERE gmail_id = 'useful';
@@ -121,7 +126,9 @@ describe('category settings', () => {
 
   it('keeps message membership when a category is renamed or marked important', () => {
     database = createDatabase(':memory:');
-    upsertEmails(database, 'test@example.com', [{ id: 'message', subject: 'Reply' }]);
+    upsertEmails(database, 'test@example.com', [
+      { id: 'message', subject: 'Reply', labels: ['INBOX'] },
+    ]);
     saveClassification(database, 'test@example.com', 'message', classification);
     saveCategory(database, {
       id: 'action',
@@ -166,7 +173,7 @@ describe('category settings', () => {
 
   it('moves messages from a removed category to pending and rejects results for a removed category', () => {
     database = createDatabase(':memory:');
-    const message = { id: 'message', subject: 'Reply' };
+    const message = { id: 'message', subject: 'Reply', labels: ['INBOX'] };
     upsertEmails(database, 'test@example.com', [message]);
     saveClassification(database!, 'test@example.com', message.id, classification);
     deleteCategory(database, 'action');
@@ -193,8 +200,8 @@ describe('effective message importance', () => {
   it('orders messages by date without sorting by effective importance', () => {
     database = createDatabase(':memory:');
     upsertEmails(database, 'test@example.com', [
-      { id: 'older-important', date: '2026-01-01T00:00:00.000Z' },
-      { id: 'newer-other', date: '2026-01-02T00:00:00.000Z' },
+      { id: 'older-important', labels: ['INBOX'], date: '2026-01-01T00:00:00.000Z' },
+      { id: 'newer-other', labels: ['INBOX'], date: '2026-01-02T00:00:00.000Z' },
     ]);
     saveClassification(database, 'test@example.com', 'older-important', {
       ...classification,

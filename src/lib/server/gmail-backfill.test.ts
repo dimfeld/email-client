@@ -65,7 +65,7 @@ describe('Gmail backfill', () => {
     expect(queries).toHaveLength(2);
     for (const query of queries) {
       expect(query).toBe(
-        `in:inbox after:${Math.floor((now.getTime() - GMAIL_BACKFILL_INITIAL_LOOKBACK_MS) / 1000)}`
+        `after:${Math.floor((now.getTime() - GMAIL_BACKFILL_INITIAL_LOOKBACK_MS) / 1000)}`
       );
     }
     expect(listAccounts(database).map((account) => account.lastBackfillAt)).toEqual([

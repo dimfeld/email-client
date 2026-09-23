@@ -1,9 +1,9 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
-import { applyGmailMessageAction } from '$lib/server/gmail-actions';
+import { applyGmailThreadAction } from '$lib/server/gmail-actions';
 import {
   getDatabase,
   getEmail,
-  getEmailActionTarget,
+  getThreadActionTargets,
   listAccounts,
   saveRemoteImageRule,
 } from '$lib/server/db';
@@ -18,14 +18,28 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
     return fail(400, { error: 'The message ID is invalid.' });
 
   const database = getDatabase();
-  // Undelete must find a message that is in Trash.
-  const target = getEmailActionTarget(database, emailId, { includeDeleted: action === 'undelete' });
-  if (!target) return fail(404, { error: 'The message is no longer available.' });
-  const account = listAccounts(database).find((item) => item.email === target.accountEmail);
+  const undoIds = fields.get('succeededIds');
+  let succeededIds: number[] | undefined;
+  if (undoIds && (action === 'unarchive' || action === 'undelete')) {
+    try {
+      const parsed: unknown = JSON.parse(String(undoIds));
+      if (!Array.isArray(parsed) || !parsed.every((item) => Number.isInteger(item) && item > 0))
+        return fail(400, { error: 'The Undo message IDs are invalid.' });
+      succeededIds = parsed as number[];
+    } catch {
+      return fail(400, { error: 'The Undo message IDs are invalid.' });
+    }
+  }
+  if ((action === 'unarchive' || action === 'undelete') && !succeededIds)
+    return fail(400, { error: 'Undo requires the messages changed by the original action.' });
+  const targets = getThreadActionTargets(database, emailId, action, succeededIds);
+  if (!targets.length) return fail(404, { error: 'The thread is no longer available.' });
+  const account = listAccounts(database).find((item) => item.email === targets[0].accountEmail);
   if (!account) return fail(404, { error: 'The email account is no longer available.' });
 
   try {
-    await applyGmailMessageAction(database, account, target.gmailId, action);
+    const result = await applyGmailThreadAction(database, account, emailId, action, succeededIds);
+    if (result.error && result.succeededIds.length === 0) return fail(502, { error: result.error });
     const messages: Record<GmailMessageAction, string> = {
       archive: 'Message archived.',
       delete: 'Message moved to Gmail Trash.',
@@ -33,7 +47,13 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
       undelete: 'Message restored from Gmail Trash.',
       markRead: 'Message marked as read.',
     };
-    return { message: messages[action] };
+    return {
+      message: result.error
+        ? `${result.succeededIds.length} of ${result.total} messages changed.`
+        : messages[action],
+      succeededIds: result.succeededIds,
+      error: result.error,
+    };
   } catch (error) {
     return fail(502, { error: error instanceof Error ? error.message : String(error) });
   }

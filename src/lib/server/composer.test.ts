@@ -99,6 +99,7 @@ test('reply all uses Reply-To, removes own accounts and duplicates, and keeps th
   upsertEmails(database, 'me@test.com', [
     {
       id: 'original',
+      labels: ['INBOX'],
       threadId: 'thread-1',
       from: 'sender@test.com',
       to: 'me@test.com, colleague@test.com',
@@ -133,7 +134,13 @@ test('reply all uses Reply-To, removes own accounts and duplicates, and keeps th
 test('forward loads original attachments and starts a new conversation', async () => {
   account();
   upsertEmails(database, 'me@test.com', [
-    { id: 'original', from: 'sender@test.com', subject: 'Attachment', bodyText: 'Original' },
+    {
+      id: 'original',
+      from: 'sender@test.com',
+      subject: 'Attachment',
+      bodyText: 'Original',
+      labels: ['INBOX'],
+    },
   ]);
   const source = listEmails(database)[0];
   const request = (async (_account, url) =>
@@ -234,4 +241,18 @@ test('does not resend after an uncertain response, and can check Gmail for the s
     return { messages: [{ id: 'sent-remotely' }] };
   }) as typeof googleApiRequest;
   expect((await checkUncertainDraft(database, draft.id, check)).status).toBe('sent');
+});
+
+test('new sends store the thread ID returned by Gmail', async () => {
+  const draft = await ready();
+  await queueDraft(database, draft.id, draft.version, UNDO_SEND_SECONDS, 0);
+  const request = (async () => ({
+    id: 'new-sent',
+    threadId: 'gmail-thread',
+  })) as typeof googleApiRequest;
+  await sendNextDraft(database, request, 10_000);
+  const row = database
+    .prepare("SELECT thread_id, labels_json FROM emails WHERE gmail_id = 'new-sent'")
+    .get();
+  expect(row).toMatchObject({ thread_id: 'gmail-thread', labels_json: '["SENT"]' });
 });

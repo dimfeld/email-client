@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { addDays, isDateKey } from '$lib/calendar';
 import {
   getDatabase,
-  getEmail,
+  getThreadEmails,
   listAccounts,
   listCalendars,
   listCalendarEventsBetween,
@@ -11,13 +11,14 @@ import {
   listRemoteImageRules,
 } from '$lib/server/db';
 import { SearchQueryError } from '$lib/server/email-search';
-import { listMail, type MailList } from '$lib/server/mail-list';
+import { countMailFilters, listMail, type MailList } from '$lib/server/mail-list';
 
 const accountInput = z.string().nullable();
 const listInput = z.object({
   account: accountInput,
   search: z.string(),
   filter: z.string(),
+  view: z.enum(['inbox', 'sent']),
   limit: z.number().int().positive(),
 });
 const eventsInput = z.object({ account: accountInput, day: z.string().refine(isDateKey) });
@@ -42,9 +43,15 @@ export const getMailEvents = query(eventsInput, ({ account, day }) =>
   )
 );
 
-export const getMailList = query(listInput, ({ account, search, filter, limit }) => {
+export const getMailList = query(listInput, ({ account, search, filter, view, limit }) => {
   try {
-    const list = listMail(getDatabase(), { account: account ?? undefined, search, filter, limit });
+    const list = listMail(getDatabase(), {
+      account: account ?? undefined,
+      search,
+      filter,
+      view,
+      limit,
+    });
     return { ...list, searchError: null as string | null };
   } catch (error) {
     if (!(error instanceof SearchQueryError)) throw error;
@@ -57,6 +64,11 @@ export const getMailList = query(listInput, ({ account, search, filter, limit })
   }
 });
 
-export const getSelectedMessage = query(messageInput, ({ account, id }) =>
-  getEmail(getDatabase(), id, account ?? undefined)
+export const getMailCounts = query(
+  z.object({ account: accountInput, search: z.string() }),
+  ({ account, search }) => countMailFilters(getDatabase(), account ?? undefined, search)
+);
+
+export const getSelectedThread = query(messageInput, ({ account, id }) =>
+  getThreadEmails(getDatabase(), id, account ?? undefined)
 );

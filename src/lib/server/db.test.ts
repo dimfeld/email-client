@@ -35,6 +35,7 @@ describe('email body storage', () => {
     upsertEmails(database, 'one@example.com', [
       {
         id: 'message',
+        labels: ['INBOX'],
         subject: 'Hello',
         snippet: 'Preview',
         bodyText: 'Private body',
@@ -52,6 +53,7 @@ describe('email body storage', () => {
     upsertEmails(database, 'one@example.com', [
       {
         id: 'message',
+        labels: ['INBOX'],
         bodyText: 'Readable text',
         bodyHtml: '<p style="color:red">Styled HTML</p>',
       },
@@ -67,7 +69,7 @@ describe('email body storage', () => {
     directory = mkdtempSync(join(tmpdir(), 'email-check-body-migration-'));
     const path = join(directory, 'test.sqlite');
     database = createDatabase(path);
-    upsertEmails(database, 'one@example.com', [{ id: 'message' }]);
+    upsertEmails(database, 'one@example.com', [{ id: 'message', labels: ['INBOX'] }]);
     database.exec(`DROP TRIGGER email_fts_insert; DROP TRIGGER email_fts_update; DROP TRIGGER email_fts_delete; DROP TABLE email_fts;
 			ALTER TABLE emails ADD COLUMN body TEXT NOT NULL DEFAULT '';
 			UPDATE emails SET body = '<html><body><p style="color:red">Legacy</p></body></html>';

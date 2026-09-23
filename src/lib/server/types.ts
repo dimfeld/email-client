@@ -63,10 +63,12 @@ export type StoredEmail = {
   accountEmail: string;
   gmailId: string;
   threadId: string | null;
+  threadKey: string;
   fromAddress: string;
   toAddresses: string;
   subject: string;
   messageDate: string | null;
+  sortTime: number;
   snippet: string;
   bodyText: string;
   bodyHtml: string | null;
@@ -100,7 +102,12 @@ export type EmailSummary = Pick<
   | 'labels'
   | 'category'
   | 'importance'
->;
+> & {
+  threadKey?: string;
+  latestMessageId?: number;
+  latestSortTime?: number;
+  unread?: boolean;
+};
 
 export type SyncedContact = {
   accountEmail: string;

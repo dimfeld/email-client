@@ -8,10 +8,10 @@ afterEach(() => database.exec('DELETE FROM emails'));
 const context = { toolCallId: 'test', messages: [], context: {} };
 function seed() {
   upsertEmails(database, 'a@test.com', [
-    { id: 'one', subject: 'Launch', bodyText: 'Launch is Friday.', labels: [] },
+    { id: 'one', subject: 'Launch', bodyText: 'Launch is Friday.', labels: ['INBOX'] },
   ]);
   upsertEmails(database, 'b@test.com', [
-    { id: 'two', subject: 'Private', bodyText: 'Other account.' },
+    { id: 'two', subject: 'Private', bodyText: 'Other account.', labels: ['INBOX'] },
   ]);
   return {
     one: listEmails(database, 'a@test.com')[0].id,

@@ -1,11 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { markArchived, markDeleted, markRead, markUnarchived, markUndeleted } from './db';
+import { changeEmailLabels, getThreadActionTargets, markDeleted, markUndeleted } from './db';
 import { googleApiRequest, type GoogleAccount } from './google-api';
 
 /** `unarchive` and `undelete` reverse `archive` and `delete`, for Undo. */
 export type GmailMessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete' | 'markRead';
 
-const labelChanges = {
+export const labelChanges = {
   archive: { removeLabelIds: ['INBOX'] },
   unarchive: { addLabelIds: ['INBOX'] },
   markRead: { removeLabelIds: ['UNREAD'] },
@@ -36,12 +36,33 @@ export async function applyGmailMessageAction(
   request: typeof googleApiRequest = googleApiRequest
 ): Promise<void> {
   await runGmailMessageAction(account, gmailId, action, request);
-  const mark = {
-    archive: markArchived,
-    delete: markDeleted,
-    unarchive: markUnarchived,
-    undelete: markUndeleted,
-    markRead,
-  }[action];
-  mark(database, account.email, [gmailId]);
+  if (action === 'delete') markDeleted(database, account.email, [gmailId]);
+  else if (action === 'undelete') markUndeleted(database, account.email, [gmailId]);
+  else changeEmailLabels(database, account.email, [gmailId], labelChanges[action]);
+}
+
+export async function applyGmailThreadAction(
+  database: DatabaseSync,
+  account: GoogleAccount,
+  localMessageId: number,
+  action: GmailMessageAction,
+  succeededIds?: number[],
+  request: typeof googleApiRequest = googleApiRequest
+): Promise<{ succeededIds: number[]; total: number; error: string | null }> {
+  const targets = getThreadActionTargets(database, localMessageId, action, succeededIds);
+  const completed: number[] = [];
+  for (const target of targets) {
+    if (target.accountEmail !== account.email) continue;
+    try {
+      await applyGmailMessageAction(database, account, target.gmailId, action, request);
+      completed.push(target.id);
+    } catch (error) {
+      return {
+        succeededIds: completed,
+        total: targets.length,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  return { succeededIds: completed, total: targets.length, error: null };
 }

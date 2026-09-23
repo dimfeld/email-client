@@ -20,6 +20,7 @@ import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
 import type { StateScope } from '$lib/state-scopes';
 import { defaultCategories } from './default-categories';
+import { emailSortTime, installThreadSchema } from './thread-schema';
 import type { RemoteImageRule } from '$lib/remote-images';
 
 const defaultPath = resolve(process.env.DATABASE_PATH ?? 'data/email-check.sqlite');
@@ -66,6 +67,10 @@ CREATE TABLE IF NOT EXISTS emails (
   body_html TEXT,
   body_truncated INTEGER NOT NULL DEFAULT 0 CHECK (body_truncated IN (0, 1)),
   labels_json TEXT NOT NULL DEFAULT '[]',
+  thread_key TEXT GENERATED ALWAYS AS (CASE WHEN thread_id IS NOT NULL AND thread_id != '' THEN 't:' || thread_id ELSE 'm:' || gmail_id END) VIRTUAL,
+  in_inbox INTEGER GENERATED ALWAYS AS (instr(labels_json, '"INBOX"') > 0) VIRTUAL,
+  is_sent INTEGER GENERATED ALWAYS AS (instr(labels_json, '"SENT"') > 0) VIRTUAL,
+  sort_time INTEGER NOT NULL DEFAULT 0,
   content_hash TEXT NOT NULL,
   category TEXT,
   useful INTEGER CHECK (useful IN (0, 1)),
@@ -86,7 +91,6 @@ CREATE TABLE IF NOT EXISTS emails (
   classification_error TEXT,
   classified_at TEXT,
   deleted_at TEXT,
-  archived_at TEXT,
   first_seen_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE(account_email, gmail_id)
@@ -365,9 +369,6 @@ export function createDatabase(path = defaultPath): DatabaseSync {
 				ALTER TABLE emails ADD COLUMN importance_probabilities_json TEXT;
 				UPDATE emails SET importance = CASE useful WHEN 1 THEN 'useful' WHEN 0 THEN 'other' ELSE NULL END;`);
     }
-    if (!emailColumns.some((column) => column.name === 'archived_at')) {
-      database.exec('ALTER TABLE emails ADD COLUMN archived_at TEXT');
-    }
     if (!emailColumns.some((column) => column.name === 'has_action_item')) {
       database.exec(`ALTER TABLE emails ADD COLUMN has_action_item INTEGER CHECK (has_action_item IN (0, 1));
 				ALTER TABLE emails ADD COLUMN action_item_probability REAL;
@@ -383,6 +384,19 @@ export function createDatabase(path = defaultPath): DatabaseSync {
     }
     if (!emailColumns.some((column) => column.name === 'headers_json'))
       database.exec("ALTER TABLE emails ADD COLUMN headers_json TEXT NOT NULL DEFAULT '{}'");
+    if (installThreadSchema(database)) {
+      const rows = database.prepare('SELECT account_email, gmail_id FROM emails').all() as {
+        account_email: string;
+        gmail_id: string;
+      }[];
+      const updateHash = database.prepare(
+        'UPDATE emails SET content_hash = ? WHERE account_email = ? AND gmail_id = ?'
+      );
+      for (const row of rows) {
+        const email = getIncomingEmail(database, row.account_email, row.gmail_id);
+        if (email) updateHash.run(hashEmail(email), row.account_email, row.gmail_id);
+      }
+    }
     installEmailSearch(database);
   });
   database.exec('PRAGMA optimize');
@@ -1503,11 +1517,10 @@ function hashEmail(email: IncomingEmail): string {
       JSON.stringify({
         from: email.from ?? '',
         to: email.to ?? '',
-        subject: email.subject ?? '',
+        subject: email.subject ?? '(no subject)',
         date: email.date ?? '',
         snippet: email.snippet ?? '',
         bodyText: email.bodyText ?? '',
-        labels: email.labels ?? [],
       })
     )
     .digest('hex');
@@ -1549,17 +1562,17 @@ export function upsertEmails(
   const now = new Date().toISOString();
   const needsClassification: IncomingEmail[] = [];
   const existing = database.prepare(
-    'SELECT content_hash, classified_at FROM emails WHERE account_email = ? AND gmail_id = ?'
+    'SELECT content_hash, classified_at, category, first_seen_at FROM emails WHERE account_email = ? AND gmail_id = ?'
   );
   const insert = database.prepare(`
     INSERT INTO emails (
       account_email, gmail_id, thread_id, from_address, to_addresses, subject,
       message_date, snippet, body_text, body_html, body_truncated, labels_json, content_hash,
-      first_seen_at, updated_at, deleted_at, headers_json
+      first_seen_at, updated_at, deleted_at, headers_json, sort_time
     ) VALUES (
       $account, $gmailId, $threadId, $from, $to, $subject,
       $messageDate, $snippet, $bodyText, $bodyHtml, $bodyTruncated, $labels, $contentHash,
-      $now, $now, NULL, $headers
+      $now, $now, $deletedAt, $headers, $sortTime
     )
     ON CONFLICT(account_email, gmail_id) DO UPDATE SET
       headers_json = excluded.headers_json,
@@ -1573,27 +1586,12 @@ export function upsertEmails(
       body_html = excluded.body_html,
       body_truncated = excluded.body_truncated,
       labels_json = excluded.labels_json,
+      sort_time = excluded.sort_time,
       content_hash = excluded.content_hash,
-      category = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.category ELSE NULL END,
-      importance = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.importance ELSE NULL END,
-      has_action_item = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.has_action_item ELSE NULL END,
-      action_item_probability = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.action_item_probability ELSE NULL END,
-      has_reminder = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.has_reminder ELSE NULL END,
-      reminder_probability = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.reminder_probability ELSE NULL END,
-      action_items_json = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.action_items_json ELSE NULL END,
-      reminders_json = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.reminders_json ELSE NULL END,
-      extraction_model = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.extraction_model ELSE NULL END,
-      extraction_error = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.extraction_error ELSE NULL END,
-      extracted_at = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.extracted_at ELSE NULL END,
       classified_at = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classified_at ELSE NULL END,
       classification_error = CASE WHEN emails.content_hash = excluded.content_hash THEN emails.classification_error ELSE NULL END,
-      archived_at = CASE
-        WHEN instr(excluded.labels_json, '"INBOX"') > 0 THEN NULL
-        WHEN emails.content_hash = excluded.content_hash THEN emails.archived_at
-        ELSE NULL
-      END,
       updated_at = excluded.updated_at,
-      deleted_at = NULL
+      deleted_at = excluded.deleted_at
   `);
 
   withTransaction(database, 'mail', () => {
@@ -1602,6 +1600,8 @@ export function upsertEmails(
       const prior = existing.get(accountEmail, email.id) as {
         content_hash: string;
         classified_at: string | null;
+        category: string | null;
+        first_seen_at: string;
       } | null;
       insert.run({
         $account: accountEmail,
@@ -1617,10 +1617,19 @@ export function upsertEmails(
         $bodyHtml: email.bodyHtml ?? null,
         $bodyTruncated: email.bodyTruncated ? 1 : 0,
         $labels: JSON.stringify(email.labels ?? []),
+        $deletedAt: email.labels?.some((label) => label === 'TRASH' || label === 'SPAM')
+          ? now
+          : null,
+        $sortTime: emailSortTime(email.date, prior?.first_seen_at ?? now),
         $contentHash: contentHash,
         $now: now,
       });
-      if (!prior?.classified_at || prior.content_hash !== contentHash)
+      if (
+        !email.labels?.includes('SENT') &&
+        !email.labels?.some((label) => label === 'TRASH' || label === 'SPAM') &&
+        ((prior?.category && (prior.content_hash !== contentHash || !prior.classified_at)) ||
+          (email.labels?.includes('INBOX') && !prior?.classified_at))
+      )
         needsClassification.push(email);
     }
   });
@@ -1800,27 +1809,38 @@ export function markArchived(
   accountEmail: string,
   gmailIds: string[]
 ): void {
-  if (gmailIds.length === 0) return;
-  const statement = database.prepare(
-    'UPDATE emails SET archived_at = ?, updated_at = ? WHERE account_email = ? AND gmail_id = ?'
-  );
-  const now = new Date().toISOString();
-  withTransaction(database, 'mail', () => {
-    for (const gmailId of gmailIds) statement.run(now, now, accountEmail, gmailId);
-  });
+  changeEmailLabels(database, accountEmail, gmailIds, { removeLabelIds: ['INBOX'] });
 }
 
 export function markRead(database: DatabaseSync, accountEmail: string, gmailIds: string[]): void {
-  if (gmailIds.length === 0) return;
-  const statement = database.prepare(
-    `UPDATE emails SET
-      labels_json = (SELECT json_group_array(value) FROM json_each(labels_json) WHERE value != 'UNREAD'),
-      updated_at = ?
-     WHERE account_email = ? AND gmail_id = ?`
+  changeEmailLabels(database, accountEmail, gmailIds, { removeLabelIds: ['UNREAD'] });
+}
+
+export type LabelChange = { addLabelIds?: string[]; removeLabelIds?: string[] };
+
+export function changeEmailLabels(
+  database: DatabaseSync,
+  accountEmail: string,
+  gmailIds: string[],
+  change: LabelChange
+): void {
+  if (!gmailIds.length) return;
+  const get = database.prepare(
+    'SELECT labels_json FROM emails WHERE account_email = ? AND gmail_id = ?'
+  );
+  const update = database.prepare(
+    'UPDATE emails SET labels_json = ?, updated_at = ? WHERE account_email = ? AND gmail_id = ?'
   );
   const now = new Date().toISOString();
   withTransaction(database, 'mail', () => {
-    for (const gmailId of gmailIds) statement.run(now, accountEmail, gmailId);
+    for (const gmailId of gmailIds) {
+      const row = get.get(accountEmail, gmailId) as { labels_json: string } | undefined;
+      if (!row) continue;
+      const labels = new Set(JSON.parse(row.labels_json) as string[]);
+      for (const label of change.removeLabelIds ?? []) labels.delete(label);
+      for (const label of change.addLabelIds ?? []) labels.add(label);
+      update.run(JSON.stringify([...labels]), now, accountEmail, gmailId);
+    }
   });
 }
 
@@ -1837,12 +1857,12 @@ export function markUnarchived(
   accountEmail: string,
   gmailIds: string[]
 ): void {
-  clearEmailTimestamp(database, 'archived_at', accountEmail, gmailIds);
+  changeEmailLabels(database, accountEmail, gmailIds, { addLabelIds: ['INBOX'] });
 }
 
 function clearEmailTimestamp(
   database: DatabaseSync,
-  column: 'deleted_at' | 'archived_at',
+  column: 'deleted_at',
   accountEmail: string,
   gmailIds: string[]
 ): void {
@@ -1861,12 +1881,12 @@ export function listEmails(database: DatabaseSync, account?: string): StoredEmai
     ? 'WHERE deleted_at IS NULL AND account_email = $account'
     : 'WHERE deleted_at IS NULL';
   const statement = database.prepare(
-    `SELECT emails.id, account_email, gmail_id, thread_id, from_address, to_addresses,
-      subject, message_date, snippet, body_text, body_html, body_truncated, labels_json, category,
+    `SELECT emails.id, account_email, gmail_id, thread_id, thread_key, from_address, to_addresses,
+      subject, message_date, sort_time, snippet, body_text, body_html, body_truncated, labels_json, category,
       importance, has_action_item, action_item_probability, has_reminder, reminder_probability,
       action_items_json, reminders_json, extraction_model, extraction_error,
       category_confidence, importance_confidence, classification_error, deleted_at, headers_json
-     FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND archived_at IS NULL
+     FROM emails LEFT JOIN categories ON categories.id = emails.category ${where} AND in_inbox = 1
      ORDER BY email_search_date(emails.message_date) DESC, first_seen_at DESC, emails.id DESC`
   );
   const rows = (account ? statement.all({ $account: account }) : statement.all()) as Array<
@@ -1896,7 +1916,7 @@ export function emailSummaryFromRow(row: Record<string, unknown>): EmailSummary 
 export function listEmailSummaries(database: DatabaseSync, account?: string): EmailSummary[] {
   const rows = database
     .prepare(`SELECT ${emailSummaryColumns} FROM emails e
-		WHERE e.deleted_at IS NULL AND e.archived_at IS NULL${account ? ' AND e.account_email = ?' : ''}
+		WHERE e.deleted_at IS NULL AND e.in_inbox = 1${account ? ' AND e.account_email = ?' : ''}
 		ORDER BY email_search_date(e.message_date) DESC, e.first_seen_at DESC, e.id DESC`)
     .all(...(account ? [account] : []));
   return rows.map(emailSummaryFromRow);
@@ -1911,16 +1931,82 @@ export function getEmail(database: DatabaseSync, id: number, account?: string): 
   return row ? emailFromRow(row) : null;
 }
 
+export function getThreadEmails(
+  database: DatabaseSync,
+  id: number,
+  account?: string
+): StoredEmail[] {
+  const selected = database
+    .prepare(`SELECT account_email, thread_key FROM emails
+    WHERE id = ? AND deleted_at IS NULL${account ? ' AND account_email = ?' : ''}`)
+    .get(...(account ? [id, account] : [id])) as
+    | { account_email: string; thread_key: string }
+    | undefined;
+  if (!selected) return [];
+  return database
+    .prepare(`SELECT * FROM emails WHERE account_email = ? AND thread_key = ?
+    AND deleted_at IS NULL ORDER BY sort_time, id`)
+    .all(selected.account_email, selected.thread_key)
+    .map(emailFromRow);
+}
+
+export function getThreadActionTargets(
+  database: DatabaseSync,
+  id: number,
+  action: 'archive' | 'delete' | 'markRead' | 'unarchive' | 'undelete',
+  succeededIds?: number[]
+): { id: number; accountEmail: string; gmailId: string }[] {
+  if (succeededIds) {
+    const selected = database
+      .prepare('SELECT account_email, thread_key FROM emails WHERE id = ?')
+      .get(id) as { account_email: string; thread_key: string } | undefined;
+    if (!selected) return [];
+    const lookup = database.prepare(
+      'SELECT id, account_email, gmail_id FROM emails WHERE id = ? AND account_email = ? AND thread_key = ?'
+    );
+    return succeededIds.flatMap((memberId) => {
+      const row = lookup.get(memberId, selected.account_email, selected.thread_key) as
+        | { id: number; account_email: string; gmail_id: string }
+        | undefined;
+      return row ? [{ id: row.id, accountEmail: row.account_email, gmailId: row.gmail_id }] : [];
+    });
+  }
+  const selected = database
+    .prepare('SELECT account_email, thread_key FROM emails WHERE id = ?')
+    .get(id) as { account_email: string; thread_key: string } | undefined;
+  if (!selected) return [];
+  const condition =
+    action === 'archive'
+      ? 'AND deleted_at IS NULL AND in_inbox = 1'
+      : action === 'markRead'
+        ? `AND deleted_at IS NULL AND instr(labels_json, '"UNREAD"') > 0`
+        : action === 'undelete'
+          ? 'AND deleted_at IS NOT NULL'
+          : 'AND deleted_at IS NULL';
+  return (
+    database
+      .prepare(`SELECT id, account_email, gmail_id FROM emails
+    WHERE account_email = ? AND thread_key = ? ${condition} ORDER BY id`)
+      .all(selected.account_email, selected.thread_key) as {
+      id: number;
+      account_email: string;
+      gmail_id: string;
+    }[]
+  ).map((row) => ({ id: row.id, accountEmail: row.account_email, gmailId: row.gmail_id }));
+}
+
 export function emailFromRow(row: Record<string, unknown>): StoredEmail {
   return {
     id: Number(row.id),
     accountEmail: String(row.account_email),
     gmailId: String(row.gmail_id),
     threadId: row.thread_id === null ? null : String(row.thread_id),
+    threadKey: String(row.thread_key),
     fromAddress: String(row.from_address),
     toAddresses: String(row.to_addresses),
     subject: String(row.subject),
     messageDate: row.message_date === null ? null : String(row.message_date),
+    sortTime: Number(row.sort_time),
     snippet: String(row.snippet),
     bodyText: String(row.body_text),
     bodyHtml: row.body_html === null ? null : String(row.body_html),

@@ -2,7 +2,7 @@ import { PubSub, type Message, type Subscription } from '@google-cloud/pubsub';
 import type { DatabaseSync } from 'node:sqlite';
 import { queueGmailAccountWork } from './gmail-account-queue';
 import { createJevClassifier, type EmailClassifier } from './classifier';
-import { getDatabase, listAccounts, markArchived, setAccountHistoryId } from './db';
+import { getDatabase, listAccounts, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { getGmailMessage, googleApiRequest, GoogleApiError } from './google-api';
 import { ingestGmailPayload } from './ingest';
@@ -171,12 +171,13 @@ export async function processGmailNotification(
   const archivedMessageIds: string[] = [];
   for (const messageId of new Set(history.messages)) {
     const message = await fetchMessage(account, messageId, getMessage);
-    if (!message || message.labels?.includes('TRASH')) {
+    if (!message || message.labels?.some((label) => label === 'TRASH' || label === 'SPAM')) {
       deletedMessageIds.push(messageId);
-    } else if (message.labels?.includes('INBOX')) {
-      messages.push(message);
+    } else if (message.labels?.includes('DRAFT')) {
+      continue;
     } else {
-      archivedMessageIds.push(messageId);
+      messages.push(message);
+      if (!message.labels?.includes('INBOX')) archivedMessageIds.push(messageId);
     }
   }
 
@@ -192,7 +193,6 @@ export async function processGmailNotification(
     dependencies.classify,
     dependencies.extract ?? null
   );
-  markArchived(dependencies.database, account.email, archivedMessageIds);
   setAccountHistoryId(dependencies.database, account.email, history.historyId);
   account.historyId = history.historyId;
   return { ...result, archived: archivedMessageIds.length };

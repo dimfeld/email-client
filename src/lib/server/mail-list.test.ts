@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, markArchived, saveClassification, upsertEmails } from './db';
-import { listMail } from './mail-list';
+import { countMailFilters, listMail } from './mail-list';
 import type { Importance } from '$lib/categories';
 
 let database: DatabaseSync | undefined;
@@ -62,7 +62,7 @@ it('filters by effective importance, category, and missing classification in SQL
 it('counts every filter before the filter applies', () => {
   const db = setup();
   markArchived(db, 'one@example.com', ['c']);
-  expect(listMail(db, { search: '', filter: 'work', limit: 100 }).counts).toEqual({
+  expect(countMailFilters(db)).toEqual({
     all: 4,
     important: 2,
     useful: 3,
@@ -75,7 +75,7 @@ it('counts every filter before the filter applies', () => {
 
 it('counts messages with different levels in one auto category separately', () => {
   const db = setup();
-  expect(listMail(db, { search: '', filter: 'all', limit: 100 }).counts).toMatchObject({
+  expect(countMailFilters(db)).toMatchObject({
     important: 2,
     useful: 3,
     work: 2,
@@ -95,10 +95,10 @@ it('applies filters and counts to search results', () => {
   const db = setup();
   const result = listMail(db, { search: 'kiwi', filter: 'important', limit: 100 });
   expect(subjects(result).sort()).toEqual(['a', 'd']);
-  expect(result.counts.all).toBe(5);
+  expect(countMailFilters(db, undefined, 'kiwi').all).toBe(5);
   expect(listMail(db, { search: '***', filter: 'all', limit: 100 })).toEqual({
     emails: [],
     hasMore: false,
-    counts: { all: 0, important: 0, useful: 0, pending: 0 },
+    counts: {},
   });
 });

@@ -19,7 +19,8 @@ export async function ingestGmailPayload(
   extract: EmailExtractor | null = null
 ): Promise<{ stored: number; classified: number; extracted: number; deleted: number }> {
   markDeleted(database, payload.account, payload.deletedMessageIds);
-  const pending = upsertEmails(database, payload.account, payload.messages);
+  const messages = payload.messages.filter((email) => !email.labels?.includes('DRAFT'));
+  const pending = upsertEmails(database, payload.account, messages);
   let failures = 0;
   for (const email of pending) {
     try {
@@ -48,7 +49,7 @@ export async function ingestGmailPayload(
   }
   if (failures > 0) throw new Error(`Jev classification failed for ${failures} message(s).`);
   return {
-    stored: payload.messages.length,
+    stored: messages.length,
     classified: pending.length,
     extracted,
     deleted: payload.deletedMessageIds.length,
