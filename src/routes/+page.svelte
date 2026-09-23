@@ -2,6 +2,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
   import { showToast } from '$lib/toast.svelte';
+  import { onStateChange } from '$lib/state-change';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import { deserialize, enhance } from '$app/forms';
@@ -453,9 +454,10 @@
   });
 
   // Load messages before they open: the previous and next messages, and the row under the
-  // pointer. The remote query cache keeps an entry while its proxy object is alive, so the
-  // effect cleanup holds the proxies until the next run.
+  // pointer. The remote query cache keeps an entry while its proxy object is alive, so
+  // `preloaded` holds the proxies. Mail changes refresh them too.
   let hoveredId = $state<number | null>(null);
+  let preloaded: { refresh(): Promise<void> }[] = [];
   $effect(() => {
     const index = visibleEmails.findIndex((email) => email.id === selectedId);
     const ids = [
@@ -464,15 +466,37 @@
       hoveredId ?? undefined,
     ].filter((id): id is number => id !== undefined && id !== selectedId);
     const account = selectedAccount;
-    const queries = untrack(() =>
+    preloaded = untrack(() =>
       ids.map((id) => {
         const query = getSelectedMessage({ account, id });
         void query.current;
         return query;
       })
     );
-    return () => void queries;
   });
+
+  // Refresh only the queries for the kinds of data that changed on the server.
+  $effect(() =>
+    onStateChange((scopes) => {
+      const account = selectedAccount;
+      const tasks: Promise<void>[] = [];
+      if (scopes.has('mail') || scopes.has('categories')) {
+        tasks.push(getMailList({ account, search }).refresh());
+        if (selectedId !== null)
+          tasks.push(getSelectedMessage({ account, id: selectedId }).refresh());
+        tasks.push(...preloaded.map((query) => query.refresh()));
+      }
+      if (scopes.has('categories')) tasks.push(getMailCategories().refresh());
+      if (scopes.has('calendar')) {
+        tasks.push(
+          getMailCalendars().refresh(),
+          getMailEvents({ account, day: calendarDay }).refresh()
+        );
+      }
+      if (scopes.has('accounts')) tasks.push(getMailAccounts().refresh());
+      return Promise.all(tasks);
+    })
+  );
 
   // Keep the selected row visible when J and K move the selection.
   $effect(() => {

@@ -22,7 +22,7 @@ import type { CategoryLevel } from '$lib/server/types';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ setHeaders, depends }) => {
-  depends('app:state');
+  depends('app:categories', 'app:calendar', 'app:backfill', 'app:accounts');
   setHeaders({ 'cache-control': 'no-store' });
   const database = getDatabase();
   return {

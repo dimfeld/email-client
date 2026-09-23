@@ -1,19 +1,22 @@
+import type { StateScope } from './state-scopes';
+
 export function createStateRefresh(
-  refresh: () => Promise<void>,
+  refresh: (scopes: Set<StateScope>) => Promise<void>,
   onError: (error: unknown) => void = console.error
 ) {
   let running = false;
-  let pending = false;
+  const pending = new Set<StateScope>();
   let stopped = false;
   let paused = false;
 
   async function drain() {
     running = true;
     try {
-      while (pending && !stopped && !paused) {
-        pending = false;
+      while (pending.size > 0 && !stopped && !paused) {
+        const scopes = new Set(pending);
+        pending.clear();
         try {
-          await refresh();
+          await refresh(scopes);
         } catch (error) {
           onError(error);
         }
@@ -24,9 +27,10 @@ export function createStateRefresh(
   }
 
   return {
-    request() {
+    /** Queues a refresh. Scopes from requests during a running refresh merge into one. */
+    request(scopes: Iterable<StateScope> = ['all']) {
       if (stopped) return;
-      pending = true;
+      for (const scope of scopes) pending.add(scope);
       if (!running && !paused) void drain();
     },
     pause() {
@@ -34,7 +38,7 @@ export function createStateRefresh(
     },
     resume() {
       paused = false;
-      if (pending && !running && !stopped) void drain();
+      if (pending.size > 0 && !running && !stopped) void drain();
     },
     stop() {
       stopped = true;

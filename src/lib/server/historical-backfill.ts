@@ -120,7 +120,7 @@ export function createHistoricalBackfill(
       now.toISOString(),
       now.toISOString()
     );
-  publishStateChange();
+  publishStateChange('backfill');
   return id;
 }
 
@@ -142,7 +142,7 @@ export function setHistoricalBackfillPaused(
       new Date(now).toISOString(),
       id
     );
-  publishStateChange();
+  publishStateChange('backfill');
 }
 
 type MessagePage = { messages?: { id?: string }[]; nextPageToken?: string };
@@ -182,7 +182,7 @@ async function runStep({
     database
       .prepare(`UPDATE historical_backfills SET ${sql}, updated_at = ? WHERE id = ?`)
       .run(...params, new Date(now()).toISOString(), job.id);
-    publishStateChange();
+    publishStateChange('backfill');
   };
   if (!account?.enabled || !account.refreshToken) {
     update("status = 'failed', error = ?", [

@@ -172,7 +172,7 @@ export function saveDraft(
       new Date().toISOString(),
       id
     );
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 
@@ -319,7 +319,7 @@ export async function createDraft(
     database.exec('ROLLBACK');
     throw error;
   }
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 export function addDraftAttachment(
@@ -346,7 +346,7 @@ export function addDraftAttachment(
     database.exec('ROLLBACK');
     throw error;
   }
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 export function removeDraftAttachment(
@@ -362,13 +362,13 @@ export function removeDraftAttachment(
   database
     .prepare('UPDATE email_drafts SET version = version + 1, updated_at = ? WHERE id = ?')
     .run(new Date().toISOString(), id);
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 export function discardDraft(database: DatabaseSync, id: string, version: number) {
   checkEditable(database, id, version);
   database.prepare('DELETE FROM email_drafts WHERE id = ?').run(id);
-  publishStateChange();
+  publishStateChange('drafts');
 }
 
 export async function buildDraftMime(
@@ -452,7 +452,7 @@ export async function queueDraft(
     );
   if (!result.changes)
     throw new DraftError('The draft changed before it was queued. Review it and send again.', 409);
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 export function undoQueuedDraft(database: DatabaseSync, id: string): Draft {
@@ -463,7 +463,7 @@ export function undoQueuedDraft(database: DatabaseSync, id: string): Draft {
     .run(new Date().toISOString(), id);
   if (!result.changes)
     throw new DraftError('Sending has started. This message can no longer be recalled.', 409);
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 export function recoverInterruptedSends(database: DatabaseSync) {
@@ -492,7 +492,7 @@ export async function sendNextDraft(
         "UPDATE email_drafts SET status = 'failed', error = 'Reconnect and enable the sending account before sending again.' WHERE id = ? AND status = 'queued'"
       )
       .run(draft.id);
-    publishStateChange();
+    publishStateChange('drafts');
     return true;
   }
   const claimed = database
@@ -501,7 +501,7 @@ export async function sendNextDraft(
     )
     .run(draft.id);
   if (!claimed.changes) return true;
-  publishStateChange();
+  publishStateChange('drafts');
   try {
     const source = draft.sourceEmailId ? getEmail(database, draft.sourceEmailId) : null;
     const sameSubject = (a: string, b: string) =>
@@ -558,7 +558,7 @@ export async function sendNextDraft(
         draft.id
       );
   }
-  publishStateChange();
+  publishStateChange('drafts');
   return true;
 }
 export async function checkUncertainDraft(
@@ -586,7 +586,7 @@ export async function checkUncertainDraft(
     throw new DraftError(
       'No sent copy was found yet. Check Gmail Sent mail before choosing “Return to draft”. Search results can take time to update.'
     );
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }
 export function returnUncertainToDraft(database: DatabaseSync, id: string) {
@@ -595,6 +595,6 @@ export function returnUncertainToDraft(database: DatabaseSync, id: string) {
       "UPDATE email_drafts SET status = 'draft', raw_message = NULL, send_at = NULL, version = version + 1, error = NULL WHERE id = ? AND status = 'uncertain'"
     )
     .run(id);
-  publishStateChange();
+  publishStateChange('drafts');
   return getDraft(database, id);
 }

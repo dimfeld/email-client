@@ -18,6 +18,7 @@ import { composerSchema } from './composer-schema';
 import { historicalBackfillSchema } from './historical-backfill-schema';
 import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
+import type { StateScope } from '$lib/state-scopes';
 import { defaultCategories } from './default-categories';
 import type { RemoteImageRule } from '$lib/remote-images';
 
@@ -294,7 +295,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
     if (!columns.some((column) => column.name === 'response_status'))
       database.exec(`ALTER TABLE ${table} ADD COLUMN response_status TEXT`);
   }
-  withTransaction(database, () => {
+  withTransaction(database, 'all', () => {
     const exists = database
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'categories'")
       .get();
@@ -439,7 +440,7 @@ export function upsertAccount(
       $subscription: account.subscription ?? null,
       $now: now,
     });
-  publishStateChange();
+  publishStateChange('accounts');
 }
 
 export function listAccounts(database: DatabaseSync): Array<{
@@ -547,7 +548,7 @@ export function startGoogleOtherContactsSync(
   if (existing) return existing;
   const syncId = randomUUID();
   const startedAt = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'contacts', () => {
     database
       .prepare('DELETE FROM google_sync_other_contacts WHERE account_email = ?')
       .run(accountEmail);
@@ -577,7 +578,7 @@ export function startGoogleSync(
   const syncId = randomUUID();
   const startedAt = new Date().toISOString();
   const phase = syncType === 'contacts' ? 'contacts' : 'calendarList';
-  withTransaction(database, () => {
+  withTransaction(database, 'accounts', () => {
     if (syncType === 'contacts') {
       database
         .prepare('DELETE FROM google_sync_contacts WHERE account_email = ?')
@@ -691,7 +692,7 @@ export function getGoogleSyncState(
 }
 
 export function resetGoogleSyncState(database: DatabaseSync, accountEmail: string): void {
-  withTransaction(database, () => {
+  withTransaction(database, ['accounts', 'contacts', 'calendar'], () => {
     database.prepare('DELETE FROM google_sync_contacts WHERE account_email = ?').run(accountEmail);
     database
       .prepare('DELETE FROM google_sync_other_contacts WHERE account_email = ?')
@@ -723,7 +724,7 @@ export function applyContactsIncrementalSync(
   nextSyncToken: string
 ): void {
   const syncedAt = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'contacts', () => {
     const upsert = database.prepare(`INSERT INTO contacts
 			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -759,7 +760,7 @@ export function applyCalendarListIncrementalSync(
   nextSyncToken: string
 ): void {
   const syncedAt = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'calendar', () => {
     const remove = database.prepare(
       'DELETE FROM calendars WHERE account_email = ? AND calendar_id = ?'
     );
@@ -797,7 +798,7 @@ export function applyCalendarEventsIncrementalSync(
   replace: boolean
 ): void {
   const syncedAt = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'calendar', () => {
     if (replace)
       database
         .prepare('DELETE FROM calendar_events WHERE account_email = ? AND calendar_id = ?')
@@ -851,7 +852,7 @@ export function saveContactsSyncPage(
 ): boolean {
   const updatedAt = new Date().toISOString();
   let complete = false;
-  withTransaction(database, () => {
+  withTransaction(database, 'contacts', () => {
     const insert = database.prepare(`INSERT INTO google_sync_contacts
 			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -897,7 +898,7 @@ export function saveGoogleOtherContactsSyncPage(
 ): boolean {
   const updatedAt = new Date().toISOString();
   let complete = false;
-  withTransaction(database, () => {
+  withTransaction(database, 'contacts', () => {
     const insert = database.prepare(`INSERT INTO google_sync_other_contacts
 			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -942,7 +943,7 @@ export function applyGoogleOtherContactsIncrementalSync(
   nextSyncToken: string
 ): void {
   const syncedAt = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'contacts', () => {
     const upsert = database.prepare(`INSERT INTO other_contacts
 			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -999,7 +1000,7 @@ export function finalizeGoogleSync(database: DatabaseSync, accountEmail: string)
     );
   }
   const syncedAt = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, ['accounts', 'contacts', 'calendar'], () => {
     database.prepare('DELETE FROM contacts WHERE account_email = ?').run(accountEmail);
     database
       .prepare(`INSERT INTO contacts
@@ -1070,7 +1071,7 @@ export function saveCalendarListSyncPage(
 ): GoogleSyncProgress | null {
   const updatedAt = new Date().toISOString();
   let nextProgress: GoogleSyncProgress | null = null;
-  withTransaction(database, () => {
+  withTransaction(database, 'calendar', () => {
     const insert = database.prepare(`INSERT INTO google_sync_calendars
 			(account_email, sync_id, calendar_id, summary, time_zone, background_color, selected)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1139,7 +1140,7 @@ export function saveCalendarEventsSyncPage(
     throw new Error('Calendar event sync progress is missing its calendar id.');
   const updatedAt = new Date().toISOString();
   let nextProgress: GoogleSyncProgress | null = null;
-  withTransaction(database, () => {
+  withTransaction(database, 'calendar', () => {
     const insert = database.prepare(`INSERT INTO google_sync_calendar_events
 			(account_email, sync_id, calendar_id, event_id, summary, description, location, start_at, end_at,
 			 all_day, status, html_link, organizer, attendees_json, response_status)
@@ -1211,7 +1212,7 @@ export function replaceContacts(
   const insert = database.prepare(`INSERT INTO contacts
 		(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`);
-  withTransaction(database, () => {
+  withTransaction(database, 'contacts', () => {
     database.prepare('DELETE FROM contacts WHERE account_email = ?').run(accountEmail);
     for (const contact of contacts) {
       insert.run(
@@ -1276,7 +1277,7 @@ export function replaceCalendars(
 		(account_email, calendar_id, event_id, summary, description, location, start_at, end_at,
 		 all_day, status, html_link, organizer, attendees_json, response_status, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-  withTransaction(database, () => {
+  withTransaction(database, 'calendar', () => {
     database.prepare('DELETE FROM calendars WHERE account_email = ?').run(accountEmail);
     for (const calendar of calendars) {
       insertCalendar.run(
@@ -1380,7 +1381,7 @@ export function saveCalendarResponse(
       'UPDATE calendar_events SET response_status = ?, updated_at = ? WHERE account_email = ? AND calendar_id = ? AND event_id = ?'
     )
     .run(responseStatus, new Date().toISOString(), account, calendarId, eventId);
-  publishStateChange();
+  publishStateChange('calendar');
 }
 
 export function listCalendarEvents(
@@ -1431,7 +1432,7 @@ export function setAccountHistoryId(
   database
     .prepare('UPDATE accounts SET history_id = ?, updated_at = ? WHERE email = ?')
     .run(historyId, new Date().toISOString(), accountEmail);
-  publishStateChange();
+  publishStateChange('accounts');
 }
 
 export function setAccountLastBackfillAt(
@@ -1442,7 +1443,7 @@ export function setAccountLastBackfillAt(
   database
     .prepare('UPDATE accounts SET last_backfill_at = ?, updated_at = ? WHERE email = ?')
     .run(lastBackfillAt, new Date().toISOString(), accountEmail);
-  publishStateChange();
+  publishStateChange('accounts');
 }
 
 export function getEmailActionTarget(
@@ -1557,7 +1558,7 @@ export function upsertEmails(
       deleted_at = NULL
   `);
 
-  withTransaction(database, () => {
+  withTransaction(database, 'mail', () => {
     for (const email of emails) {
       const contentHash = hashEmail(email);
       const prior = existing.get(accountEmail, email.id) as {
@@ -1637,7 +1638,7 @@ export function saveClassification(
       $account: accountEmail,
       $gmailId: gmailId,
     });
-  publishStateChange();
+  publishStateChange('mail');
 }
 
 export function saveEmailExtraction(
@@ -1663,7 +1664,7 @@ export function saveEmailExtraction(
       $account: accountEmail,
       $gmailId: gmailId,
     });
-  publishStateChange();
+  publishStateChange('mail');
 }
 
 export function saveEmailExtractionError(
@@ -1681,7 +1682,7 @@ export function saveEmailExtractionError(
       accountEmail,
       gmailId
     );
-  publishStateChange();
+  publishStateChange('mail');
 }
 
 export function listEmailsNeedingExtraction(
@@ -1738,7 +1739,7 @@ export function saveClassificationError(
       accountEmail,
       gmailId
     );
-  publishStateChange();
+  publishStateChange('mail');
 }
 
 export function markDeleted(
@@ -1751,7 +1752,7 @@ export function markDeleted(
     'UPDATE emails SET deleted_at = ?, updated_at = ? WHERE account_email = ? AND gmail_id = ?'
   );
   const now = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'mail', () => {
     for (const gmailId of gmailIds) statement.run(now, now, accountEmail, gmailId);
   });
 }
@@ -1766,7 +1767,7 @@ export function markArchived(
     'UPDATE emails SET archived_at = ?, updated_at = ? WHERE account_email = ? AND gmail_id = ?'
   );
   const now = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'mail', () => {
     for (const gmailId of gmailIds) statement.run(now, now, accountEmail, gmailId);
   });
 }
@@ -1798,7 +1799,7 @@ function clearEmailTimestamp(
     `UPDATE emails SET ${column} = NULL, updated_at = ? WHERE account_email = ? AND gmail_id = ?`
   );
   const now = new Date().toISOString();
-  withTransaction(database, () => {
+  withTransaction(database, 'mail', () => {
     for (const gmailId of gmailIds) statement.run(now, accountEmail, gmailId);
   });
 }
@@ -1901,12 +1902,16 @@ export function emailFromRow(row: Record<string, unknown>): StoredEmail {
   };
 }
 
-function withTransaction(database: DatabaseSync, operation: () => void): void {
+function withTransaction(
+  database: DatabaseSync,
+  scope: StateScope | StateScope[],
+  operation: () => void
+): void {
   database.exec('BEGIN IMMEDIATE');
   try {
     operation();
     database.exec('COMMIT');
-    publishStateChange();
+    for (const item of Array.isArray(scope) ? scope : [scope]) publishStateChange(item);
   } catch (error) {
     database.exec('ROLLBACK');
     throw error;
@@ -1951,12 +1956,12 @@ export function saveCategory(
       .prepare('UPDATE emails SET classified_at = NULL WHERE category = ? AND importance IS NULL')
       .run(id);
   }
-  publishStateChange();
+  publishStateChange('categories');
   return id;
 }
 
 export function deleteCategory(database: DatabaseSync, id: string): void {
-  withTransaction(database, () => {
+  withTransaction(database, 'categories', () => {
     database
       .prepare(`UPDATE emails SET category = NULL, category_confidence = NULL,
 			category_probabilities_json = NULL, importance = NULL, importance_confidence = NULL,

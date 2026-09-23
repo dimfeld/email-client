@@ -5,26 +5,39 @@
   import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
-  import { afterNavigate, beforeNavigate, refreshAll } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, invalidate, refreshAll } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { createStateRefresh } from '$lib/state-refresh';
+  import { parseStateScopes, type StateScope } from '$lib/state-scopes';
+  import { dispatchStateChange } from '$lib/state-change';
 
-  const refresh = createStateRefresh(() => refreshAll());
+  // Load functions declare `depends('app:<scope>')`. Pages with remote queries listen for the
+  // state change event. `all` refreshes everything, for example after a reconnect.
+  const refresh = createStateRefresh(async (scopes) => {
+    if (scopes.has('all')) return refreshAll();
+    await Promise.all([
+      invalidate((url) => url.protocol === 'app:' && scopes.has(url.pathname as StateScope)),
+      dispatchStateChange(scopes),
+    ]);
+  });
   // A refresh of the old URL can cancel an active SvelteKit navigation.
   beforeNavigate(() => refresh.pause());
   afterNavigate(() => refresh.resume());
   onMount(() => {
     const events = new EventSource(resolve('/api/events'));
-    events.addEventListener('message', refresh.request);
-    window.addEventListener('focus', refresh.request);
-    window.addEventListener('online', refresh.request);
-    window.addEventListener('email:state', refresh.request);
+    const onMessage = (event: MessageEvent<string>) =>
+      refresh.request(parseStateScopes(event.data));
+    // The event stream sends `all` when it reconnects, so focus needs no refresh of its own.
+    const onOnline = () => refresh.request(['all']);
+    const onDrafts = () => refresh.request(['drafts']);
+    events.addEventListener('message', onMessage);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('email:state', onDrafts);
     return () => {
       refresh.stop();
       events.close();
-      window.removeEventListener('focus', refresh.request);
-      window.removeEventListener('online', refresh.request);
-      window.removeEventListener('email:state', refresh.request);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('email:state', onDrafts);
     };
   });
 

@@ -16,7 +16,7 @@ import { respondToCalendarInvite } from '$lib/server/calendar-response';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ url, depends, setHeaders }) => {
-  depends('app:state');
+  depends('app:calendar', 'app:accounts');
   setHeaders({ 'cache-control': 'no-store' });
   const requestedView = url.searchParams.get('view');
   const view = isCalendarView(requestedView) ? requestedView : defaultCalendarView;

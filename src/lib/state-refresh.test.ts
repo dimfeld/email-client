@@ -68,3 +68,21 @@ it('holds changes during navigation and refreshes them after navigation ends', a
   expect(calls).toBe(2);
   refresh.stop();
 });
+
+it('merges the scopes of requests made during a running refresh', async () => {
+  const first = Promise.withResolvers<void>();
+  const finished = Promise.withResolvers<void>();
+  const seen: string[][] = [];
+  const refresh = createStateRefresh(async (scopes) => {
+    seen.push([...scopes]);
+    if (seen.length === 1) await first.promise;
+    else finished.resolve();
+  });
+  refresh.request(['mail']);
+  refresh.request(['drafts']);
+  refresh.request(['calendar', 'drafts']);
+  first.resolve();
+  await finished.promise;
+  expect(seen).toEqual([['mail'], ['drafts', 'calendar']]);
+  refresh.stop();
+});
