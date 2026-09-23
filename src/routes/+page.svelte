@@ -262,9 +262,15 @@
 
   function moveSelection(offset: number) {
     if (visibleEmails.length === 0) return;
+    const focusedId = Number(
+      document.activeElement?.closest<HTMLElement>('.message')?.dataset.emailId
+    );
+    const focusedIndex = Number.isInteger(focusedId)
+      ? visibleEmails.findIndex((email) => email.id === focusedId)
+      : -1;
     const currentIndex = selectedEmail
       ? visibleEmails.findIndex((email) => email.id === selectedEmail.id)
-      : -1;
+      : focusedIndex;
     const nextIndex =
       currentIndex < 0
         ? offset > 0
@@ -295,6 +301,29 @@
     const url = new URL(anchor.href);
     if (['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) {
       window.open(url.href, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  function attachReadingContent(element: HTMLElement) {
+    readingContent = element;
+    if (focusReadingPaneOnLoad) {
+      focusReadingPaneOnLoad = false;
+      element.focus({ preventScroll: true });
+    }
+    return () => {
+      if (readingContent === element) readingContent = null;
+    };
+  }
+
+  async function focusMessage(emailId: number) {
+    focusReadingPaneOnLoad = true;
+    const href = mailboxHref({ message: emailId });
+    if (new URL(href, currentUrl).href !== currentUrl)
+      await goto(href, { keepFocus: true, noScroll: true });
+    await tick();
+    if (readingContent) {
+      focusReadingPaneOnLoad = false;
+      readingContent?.focus({ preventScroll: true });
     }
   }
 
@@ -372,9 +401,7 @@
       const emailId = Number.isInteger(rowId) && rowId > 0 ? rowId : selectedEmail?.id;
       if (emailId) {
         event.preventDefault();
-        updateMailboxUrl({ message: emailId });
-        await tick();
-        readingContent?.focus({ preventScroll: true });
+        await focusMessage(emailId);
       }
     } else if (key === 'j' || (event.key === 'ArrowDown' && inMessageList)) {
       event.preventDefault();
@@ -399,9 +426,7 @@
       if (event.key === 'Enter' && (event.target as Element | null)?.closest?.('.message')) return;
       if (selectedEmail || visibleEmails[0]) {
         event.preventDefault();
-        updateMailboxUrl({ message: (selectedEmail ?? visibleEmails[0]).id });
-        await tick();
-        readingContent?.focus({ preventScroll: true });
+        await focusMessage((selectedEmail ?? visibleEmails[0]).id);
       }
     } else if (
       key === 'u' ||
@@ -459,13 +484,7 @@
     });
   });
 
-  // Set before a navigation that should move focus into the new message.
   let focusReadingPaneOnLoad = false;
-  $effect(() => {
-    if (!readingContent || !focusReadingPaneOnLoad) return;
-    focusReadingPaneOnLoad = false;
-    readingContent.focus({ preventScroll: true });
-  });
 
   function actionError(result: ActionResult): string {
     if (result.type === 'failure' && typeof result.data?.error === 'string')
@@ -882,7 +901,7 @@
           <!-- $effect.pending() read at the <main> level froze the page during navigation. -->
           {#if $effect.pending() > 0}<div class="progress" aria-hidden="true"></div>{/if}
           <article
-            bind:this={readingContent}
+            {@attach attachReadingContent}
             {@attach markReadOnOpen(selectedEmail)}
             class="reading-content"
             aria-busy={$effect.pending() > 0}
