@@ -14,7 +14,7 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { effectiveImportance } from '$lib/categories';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
-  import { buildEmailDocument, hasRemoteImages } from '$lib/email-html';
+  import { buildEmailDocument, hasDarkModeStyles, hasRemoteImages } from '$lib/email-html';
   import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
   import {
     getMailAccounts,
@@ -1220,7 +1220,8 @@
                 {/if}
               </div>
               {#if selectedEmail.bodyHtml}
-                <div class="message-paper">
+                {@const nativeDarkMode = hasDarkModeStyles(selectedEmail.bodyHtml)}
+                <div class={['message-paper', nativeDarkMode ? 'native-dark' : 'inverted']}>
                   <iframe
                     class="html-message"
                     title="Email message content"
@@ -1228,7 +1229,8 @@
                     referrerpolicy="no-referrer"
                     srcdoc={buildEmailDocument(
                       selectedEmail.bodyHtml,
-                      remoteImagesAllowed(selectedEmail)
+                      remoteImagesAllowed(selectedEmail),
+                      !nativeDarkMode
                     )}
                     {@attach messageFrame}
                   ></iframe>
@@ -1804,14 +1806,23 @@
     padding: 16px;
     border-radius: var(--radius-md);
     background: var(--color-paper);
+    color-scheme: light;
+  }
+  /* Most email HTML has only light styles. Invert it to fit the dark app. */
+  .message-paper.inverted {
+    filter: invert(0.9) hue-rotate(180deg);
+  }
+  /* Emails with prefers-color-scheme styles get their own dark mode. */
+  .message-paper.native-dark {
+    background: var(--color-surface-sunken);
+    color-scheme: dark;
   }
   .html-message {
     display: block;
     width: 100%;
     height: 60dvh;
     border: 0;
-    background: var(--color-paper);
-    color-scheme: light;
+    background: Canvas;
     opacity: 0;
     transition: opacity var(--motion-fast) ease-out;
   }
