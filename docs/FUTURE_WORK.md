@@ -23,3 +23,19 @@ Build a native mobile client after the local API and authentication model are st
 Load the previous and next messages, and the row under the pointer, before the user opens them, so `J`, `K`, and clicks show a message without a wait.
 
 A first attempt kept extra `getSelectedMessage` query proxies alive. It was removed because a message that opened while its own preload request was still in flight never appeared in the reading pane: the page's `await` on the shared cache entry did not get the result. SvelteKit has no supported prefetch API for remote queries. Possible next steps: check a newer SvelteKit version for a fix or a prefetch API, or preload through a separate remote function with its own cache key and use that data only for the first render.
+
+## Swipe gestures in the message list
+
+Each row in the message list accepts swipe gestures. A long swipe to the left archives the thread. A short swipe to the left shows Archive and Delete buttons. A swipe to the right stars or unstars the thread.
+
+## Sticky message actions
+
+Keep the action buttons of the open message at the top of the detail pane while the message scrolls.
+
+## Settings subpages
+
+Give each settings group its own subpage, with a menu on the left to move between them.
+
+## Snooze
+
+Add Snooze to the right swipe. A long swipe to the right stars the thread. A short swipe to the right shows Star and Snooze buttons. Snooze opens a dialog with common times, a Custom option that shows a date and time picker, and a small text field at the top that accepts natural language, for example "3 hours".
