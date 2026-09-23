@@ -352,6 +352,8 @@
       return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     const key = event.key.toLowerCase();
+    const inMessageList =
+      event.target instanceof Element && !!event.target.closest('.message-list');
     if (key === 'c') {
       event.preventDefault();
       openComposer({ mode: 'new', account: data.selectedAccount ?? undefined });
@@ -364,10 +366,10 @@
     } else if (key === 'f' && selectedEmail) {
       event.preventDefault();
       openComposer({ mode: 'forward', sourceEmailId: selectedEmail.id });
-    } else if (key === 'j') {
+    } else if (key === 'j' || (event.key === 'ArrowDown' && inMessageList)) {
       event.preventDefault();
       moveSelection(1);
-    } else if (key === 'k') {
+    } else if (key === 'k' || (event.key === 'ArrowUp' && inMessageList)) {
       event.preventDefault();
       moveSelection(-1);
     } else if (key === 'e' && selectedEmail && archiveForm) {
@@ -1110,11 +1112,11 @@
           <dd>Forward the selected message</dd>
         </div>
         <div>
-          <dt><kbd>J</kbd></dt>
+          <dt><kbd>J</kbd> <kbd>↓</kbd></dt>
           <dd>Next message</dd>
         </div>
         <div>
-          <dt><kbd>K</kbd></dt>
+          <dt><kbd>K</kbd> <kbd>↑</kbd></dt>
           <dd>Previous message</dd>
         </div>
         <div>
