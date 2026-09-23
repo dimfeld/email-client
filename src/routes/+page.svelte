@@ -2069,11 +2069,17 @@
     grid-column: 1 / -1;
     margin-top: 0;
   }
+  /* The actions stay at the top of the pane while their message is on screen. */
   .message-actions {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 20px;
+    margin: 10px -24px 0;
+    padding: 10px 24px;
+    background: var(--color-surface);
   }
   .message-actions button {
     border: 1px solid var(--color-accent);

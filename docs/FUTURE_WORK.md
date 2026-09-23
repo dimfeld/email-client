@@ -24,10 +24,6 @@ Load the previous and next messages, and the row under the pointer, before the u
 
 A first attempt kept extra `getSelectedMessage` query proxies alive. It was removed because a message that opened while its own preload request was still in flight never appeared in the reading pane: the page's `await` on the shared cache entry did not get the result. SvelteKit has no supported prefetch API for remote queries. Possible next steps: check a newer SvelteKit version for a fix or a prefetch API, or preload through a separate remote function with its own cache key and use that data only for the first render.
 
-## Sticky message actions
-
-Keep the action buttons of the open message at the top of the detail pane while the message scrolls.
-
 ## Settings subpages
 
 Give each settings group its own subpage, with a menu on the left to move between them.
