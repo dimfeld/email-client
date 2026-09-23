@@ -54,13 +54,19 @@
     window.dispatchEvent(new Event('email:state'));
     return result;
   }
+  // The owner chose a 1-second pause after the last change before an autosave. Blur, close,
+  // and send save at once.
+  const AUTOSAVE_DELAY_MS = 1000;
+  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
   function changed() {
     dirty = true;
-    queueMicrotask(() => {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(() => {
       if (!savePromise && !busy) void save();
-    });
+    }, AUTOSAVE_DELAY_MS);
   }
   function save(): Promise<boolean> {
+    clearTimeout(autosaveTimer);
     if (savePromise) return savePromise;
     if (!draft || !editable || !dirty) return Promise.resolve(true);
     savePromise = (async () => {
@@ -188,6 +194,7 @@
       window.removeEventListener('email:drafts', list);
       window.removeEventListener('beforeunload', unload);
       clearInterval(clock);
+      clearTimeout(autosaveTimer);
     };
   });
   $effect(() => {
@@ -241,6 +248,9 @@
     role="dialog"
     aria-modal="false"
     aria-label="Email composer"
+    onfocusout={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) void save();
+    }}
   >
     <header>
       <strong>{draft.subject || 'New message'}</strong><span class="save-status" aria-live="polite"
