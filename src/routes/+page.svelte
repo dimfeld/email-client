@@ -69,9 +69,35 @@
   let categoryLevels = $derived(
     new Map(data.categories.map((category) => [category.id, category.level]))
   );
+  // Read derived values into locals before a loop. A derived read inside a per-email callback
+  // can check or recompute its whole dependency chain on every call, which froze the inbox.
+  let importanceById = $derived.by(() => {
+    const levels = categoryLevels;
+    return new Map(
+      data.emails.map((email) => [
+        email.id,
+        effectiveImportance(levels.get(email.category ?? ''), email.importance),
+      ])
+    );
+  });
   function importance(email: EmailSummary | StoredEmail) {
-    return effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance);
+    return (
+      importanceById.get(email.id) ??
+      effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance)
+    );
   }
+  let filterCounts = $derived.by(() => {
+    const counts = new Map<string, number>();
+    const add = (key: string) => counts.set(key, (counts.get(key) ?? 0) + 1);
+    const levels = importanceById;
+    for (const email of data.emails) {
+      const level = levels.get(email.id);
+      add(email.category ?? 'pending');
+      if (level === 'important') add('important');
+      if (level === 'important' || level === 'useful') add('useful');
+    }
+    return counts;
+  });
   let activeFilter = $derived.by(() => {
     const requested = new URL(currentUrl).searchParams.get('category') ?? 'all';
     return filters.some((filter) => filter.category === requested) ? requested : 'all';
@@ -87,39 +113,32 @@
   let messageList = $state<HTMLElement | null>(null);
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
-  let useful = $derived(
-    data.emails.filter(
-      (email) => importance(email) === 'important' || importance(email) === 'useful'
-    )
-  );
   let filters = $derived([
     { category: 'all' as const, label: 'All mail', count: data.emails.length },
-    {
-      category: 'important',
-      label: 'All important',
-      count: data.emails.filter((email) => importance(email) === 'important').length,
-    },
-    { category: 'useful' as const, label: 'Useful now', count: useful.length },
+    { category: 'important', label: 'All important', count: filterCounts.get('important') ?? 0 },
+    { category: 'useful' as const, label: 'Useful now', count: filterCounts.get('useful') ?? 0 },
     ...data.categories.map((category) => ({
       category: category.id,
       label: category.name,
-      count: data.emails.filter((email) => email.category === category.id).length,
+      count: filterCounts.get(category.id) ?? 0,
     })),
     {
       category: 'pending',
       label: 'Needs classification',
-      count: data.emails.filter((email) => email.category === null).length,
+      count: filterCounts.get('pending') ?? 0,
     },
   ]);
-  let visibleEmails = $derived(
-    data.emails.filter((email) => {
-      if (activeFilter === 'all') return true;
-      if (activeFilter === 'useful')
-        return importance(email) === 'important' || importance(email) === 'useful';
-      if (activeFilter === 'important') return importance(email) === 'important';
-      return (email.category ?? 'pending') === activeFilter;
-    })
-  );
+  let visibleEmails = $derived.by(() => {
+    const filter = activeFilter;
+    const levels = importanceById;
+    return data.emails.filter((email) => {
+      if (filter === 'all') return true;
+      const level = levels.get(email.id);
+      if (filter === 'useful') return level === 'important' || level === 'useful';
+      if (filter === 'important') return level === 'important';
+      return (email.category ?? 'pending') === filter;
+    });
+  });
   let selectedEmail = $derived(selectedId === null ? null : selectedMessage);
   let remoteImagesAllowed = $derived(
     selectedEmail !== null &&
