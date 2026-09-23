@@ -498,6 +498,41 @@
     })
   );
 
+  // Keep the rows on screen in place when rows above them are added or removed, for example
+  // when new mail arrives. Safari has no native scroll anchoring, so this is done here: each
+  // scroll records the top visible row, and each list change scrolls that row back into place.
+  let scrollAnchor: { id: string; offset: number } | null = null;
+  function recordScrollAnchor() {
+    const list = messageList;
+    if (!list || list.scrollTop === 0) {
+      scrollAnchor = null;
+      return;
+    }
+    const row = [...list.querySelectorAll<HTMLElement>('.message')].find(
+      (item) => item.offsetTop + item.offsetHeight > list.scrollTop
+    );
+    scrollAnchor = row?.dataset.emailId
+      ? { id: row.dataset.emailId, offset: row.offsetTop - list.scrollTop }
+      : null;
+  }
+  // A new filter, search, or account shows a different list, so it starts at the top.
+  $effect.pre(() => {
+    void [activeFilter, search, selectedAccount];
+    scrollAnchor = null;
+    untrack(() => messageList?.scrollTo({ top: 0 }));
+  });
+  $effect(() => {
+    void visibleEmails;
+    untrack(() => {
+      const list = messageList;
+      const anchor = scrollAnchor;
+      if (!list || !anchor) return;
+      const row = list.querySelector<HTMLElement>(`[data-email-id="${anchor.id}"]`);
+      if (row) list.scrollTop = row.offsetTop - anchor.offset;
+      recordScrollAnchor();
+    });
+  });
+
   // Keep the selected row visible when J and K move the selection.
   $effect(() => {
     if (selectedId === null || !messageList) return;
@@ -633,7 +668,7 @@
       {#if data.query}<p class="search-summary">
           Search results · Best match first · Includes archived mail
         </p>{/if}
-      <div class="message-list" bind:this={messageList}>
+      <div class="message-list" bind:this={messageList} onscroll={recordScrollAnchor}>
         {#if visibleEmails.length > 0}
           <ul aria-label="Messages">
             {#each visibleEmails as email (email.id)}
@@ -1196,7 +1231,9 @@
     font-size: 0.75rem;
   }
   .message-list {
+    position: relative;
     overflow-y: auto;
+    overflow-anchor: none;
     flex: 1;
   }
   .message-list ul {
