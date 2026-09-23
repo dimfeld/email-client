@@ -156,6 +156,8 @@
     filters.find((filter) => filter.category === activeFilter)?.count ?? visibleEmails.length
   );
   let selectedEmail = $derived(selectedId === null ? null : selectedMessage);
+  // The list row that J and K move to while the reading pane is closed.
+  let cursorId = $state<number | null>(null);
   let remoteImagesAllowed = $derived(
     selectedEmail !== null &&
       (remoteImagesFor === selectedEmail.id ||
@@ -260,17 +262,20 @@
     ).format(date);
   }
 
-  function moveSelection(offset: number) {
-    if (visibleEmails.length === 0) return;
+  // The row that has focus, or else the list cursor.
+  function listCursorId(): number | null {
     const focusedId = Number(
       document.activeElement?.closest<HTMLElement>('.message')?.dataset.emailId
     );
-    const focusedIndex = Number.isInteger(focusedId)
-      ? visibleEmails.findIndex((email) => email.id === focusedId)
-      : -1;
-    const currentIndex = selectedEmail
-      ? visibleEmails.findIndex((email) => email.id === selectedEmail.id)
-      : focusedIndex;
+    return Number.isInteger(focusedId) && focusedId > 0 ? focusedId : cursorId;
+  }
+
+  // J and K change the open message when the reading pane is open. When it is closed,
+  // they move the list cursor and the pane stays closed.
+  async function moveSelection(offset: number) {
+    if (visibleEmails.length === 0) return;
+    const currentId = selectedEmail ? selectedEmail.id : listCursorId();
+    const currentIndex = visibleEmails.findIndex((email) => email.id === currentId);
     const nextIndex =
       currentIndex < 0
         ? offset > 0
@@ -278,7 +283,16 @@
           : visibleEmails.length - 1
         : Math.max(0, Math.min(visibleEmails.length - 1, currentIndex + offset));
     if (nextIndex === currentIndex && offset > 0 && data.hasMore) pageCount += 1;
-    updateMailboxUrl({ message: visibleEmails[nextIndex].id });
+    const nextId = visibleEmails[nextIndex].id;
+    if (selectedId !== null) {
+      updateMailboxUrl({ message: nextId });
+      return;
+    }
+    cursorId = nextId;
+    await tick();
+    messageList
+      ?.querySelector<HTMLElement>(`[data-email-id="${nextId}"]`)
+      ?.focus({ preventScroll: true });
   }
 
   function isInteractiveTarget(target: EventTarget | null): boolean {
@@ -424,9 +438,10 @@
     } else if (key === 'o' || event.key === 'Enter') {
       // Enter on a focused message row follows that row's link.
       if (event.key === 'Enter' && (event.target as Element | null)?.closest?.('.message')) return;
-      if (selectedEmail || visibleEmails[0]) {
+      const emailId = selectedEmail?.id ?? listCursorId() ?? visibleEmails[0]?.id;
+      if (emailId) {
         event.preventDefault();
-        await focusMessage((selectedEmail ?? visibleEmails[0]).id);
+        await focusMessage(emailId);
       }
     } else if (
       key === 'u' ||
@@ -440,6 +455,7 @@
         const href = mailboxHref({ message: null });
         if (new URL(href, currentUrl).href !== currentUrl)
           await goto(href, { keepFocus: true, noScroll: true });
+        if (emailId) cursorId = emailId;
         await tick();
         if (emailId) {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -667,10 +683,12 @@
     });
   });
 
-  // Keep the selected row visible when J and K move the selection.
+  // Keep the selected row or the list cursor visible when J and K move them.
   $effect(() => {
-    const id = selectedId;
+    const id = selectedId ?? cursorId;
     const list = messageList;
+    // An open message replaces the list cursor.
+    if (selectedId !== null) untrack(() => (cursorId = null));
     if (id === null || !list) return;
     untrack(() => {
       const index = visibleEmails.findIndex((email) => email.id === id);
