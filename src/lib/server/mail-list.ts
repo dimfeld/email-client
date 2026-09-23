@@ -51,14 +51,20 @@ function filterCondition(filter: MailFilter): { sql: string; params: SQLInputVal
 function countByFilter(database: DatabaseSync, source: EmailSource): Record<MailFilter, number> {
   const rows = database
     .prepare(
-      `SELECT e.category AS category, ${effectiveImportanceSql} AS level, COUNT(*) AS total
+      // The alias differs from `c.level`, which GROUP BY would otherwise use.
+      `SELECT e.category AS category, ${effectiveImportanceSql} AS effective_level,
+         COUNT(*) AS total
        FROM ${source.from} LEFT JOIN categories c ON c.id = e.category
-       WHERE ${source.where.join(' AND ')} GROUP BY e.category, level`
+       WHERE ${source.where.join(' AND ')} GROUP BY e.category, effective_level`
     )
-    .all(...source.params) as { category: string | null; level: string | null; total: number }[];
+    .all(...source.params) as {
+    category: string | null;
+    effective_level: string | null;
+    total: number;
+  }[];
   const counts: Record<MailFilter, number> = { all: 0, important: 0, useful: 0, pending: 0 };
   const add = (key: MailFilter, total: number) => (counts[key] = (counts[key] ?? 0) + total);
-  for (const { category, level, total } of rows) {
+  for (const { category, effective_level: level, total } of rows) {
     add('all', total);
     add(category ?? 'pending', total);
     if (level === 'important') add('important', total);

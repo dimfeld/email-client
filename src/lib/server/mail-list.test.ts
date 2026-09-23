@@ -73,6 +73,15 @@ it('counts every filter before the filter applies', () => {
   });
 });
 
+it('counts messages with different levels in one auto category separately', () => {
+  const db = setup();
+  expect(listMail(db, { search: '', filter: 'all', limit: 100 }).counts).toMatchObject({
+    important: 2,
+    useful: 3,
+    work: 2,
+  });
+});
+
 it('returns one page and says whether more rows exist', () => {
   const db = setup();
   const first = listMail(db, { search: '', filter: 'all', limit: 2 });

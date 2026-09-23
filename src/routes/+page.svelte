@@ -734,7 +734,7 @@
             >
           </div>
         {/if}
-        <span>{filterLabel} · {visibleEmails.length}</span>
+        <span>{filterLabel} · {listSize}</span>
       </header>
       {#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
       {#if data.query}<p class="search-summary">
