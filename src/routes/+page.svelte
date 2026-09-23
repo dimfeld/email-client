@@ -183,10 +183,13 @@
     return `${url.pathname}${url.search}${url.hash}`;
   }
 
-  function updateMailboxUrl(changes: { category?: Filter; message?: number | null }) {
+  async function updateMailboxUrl(changes: {
+    category?: Filter;
+    message?: number | null;
+  }): Promise<void> {
     const href = mailboxHref(changes);
     if (new URL(href, currentUrl).href !== currentUrl)
-      void goto(href, { keepFocus: true, noScroll: true });
+      await goto(href, { keepFocus: true, noScroll: true });
   }
 
   function selectFilter(filter: Filter) {
@@ -515,10 +518,9 @@
     return 'The action failed.';
   }
 
-  async function postMessageAction(
-    action: 'unarchive' | 'undelete' | 'markRead',
-    id: number
-  ): Promise<ActionResult> {
+  type MessageAction = 'archive' | 'delete' | 'unarchive' | 'undelete' | 'markRead';
+
+  async function postMessageAction(action: MessageAction, id: number): Promise<ActionResult> {
     const body = new FormData();
     body.set('id', String(id));
     const response = await fetch(`?/${action}`, {
@@ -557,32 +559,42 @@
     if (typeof result.data?.message === 'string') showToast(result.data.message);
   }
 
-  const submitMessageAction: SubmitFunction = ({ formData, cancel, action: url }) => {
-    const id = Number(formData.get('id'));
-    const action = url.search === '?/delete' ? 'delete' : 'archive';
-    if (removedIds.has(id)) {
-      cancel();
+  let mailTransition = Promise.resolve();
+  function queueMailTransition<T>(run: () => Promise<T>): Promise<T> {
+    const result = mailTransition.then(run, run);
+    mailTransition = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
+  async function submitMessageAction(event: SubmitEvent, action: 'archive' | 'delete') {
+    event.preventDefault();
+    const id = Number(new FormData(event.currentTarget as HTMLFormElement).get('id'));
+    const navigation = queueMailTransition(async () => {
+      if (removedIds.has(id)) return false;
+      // Open the next message, as most mail clients do, so E can process mail row by row.
+      const index = visibleEmails.findIndex((email) => email.id === id);
+      const next =
+        index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
+      removedIds.add(id);
+      focusReadingPaneOnLoad = next !== null;
+      await updateMailboxUrl({ message: next?.id ?? null });
+      return true;
+    });
+    if (!(await navigation)) return;
+    const result = await postMessageAction(action, id);
+    if (result.type === 'success') {
+      // Gmail Trash and archive are recoverable, so Undo replaces a confirmation step.
+      showToast(action === 'archive' ? 'Message archived.' : 'Message moved to Trash.', {
+        action: { label: 'Undo', run: () => void undoMessageAction(id, action) },
+      });
       return;
     }
-    // Open the next message, as most mail clients do, so E can process mail row by row.
-    const index = visibleEmails.findIndex((email) => email.id === id);
-    const next = index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
-    removedIds.add(id);
-    focusReadingPaneOnLoad = next !== null;
-    updateMailboxUrl({ message: next?.id ?? null });
-    return async ({ result }) => {
-      if (result.type === 'success') {
-        // Gmail Trash and archive are recoverable, so Undo replaces a confirmation step.
-        showToast(action === 'archive' ? 'Message archived.' : 'Message moved to Trash.', {
-          action: { label: 'Undo', run: () => void undoMessageAction(id, action) },
-        });
-        await getMailList(mailListArgs()).refresh();
-        return;
-      }
-      removedIds.delete(id);
-      showToast(actionError(result), { tone: 'error' });
-    };
-  };
+    removedIds.delete(id);
+    showToast(actionError(result), { tone: 'error' });
+  }
 
   const saveRemoteImageRule: SubmitFunction =
     ({ formData }) =>
@@ -604,15 +616,21 @@
   // Refresh only the queries for the kinds of data that changed on the server.
   $effect(() =>
     onStateChange((scopes) => {
-      const account = selectedAccount;
       const tasks: Promise<void>[] = [];
       if (scopes.has('mail') || scopes.has('categories')) {
-        tasks.push(getMailList(mailListArgs()).refresh());
-        if (selectedId !== null)
-          tasks.push(getSelectedMessage({ account, id: selectedId }).refresh());
+        tasks.push(
+          queueMailTransition(async () => {
+            const account = selectedAccount;
+            const id = selectedId;
+            const refreshes = [getMailList(mailListArgs()).refresh()];
+            if (id !== null) refreshes.push(getSelectedMessage({ account, id }).refresh());
+            await Promise.all(refreshes);
+          })
+        );
       }
       if (scopes.has('categories')) tasks.push(getMailCategories().refresh());
       if (scopes.has('calendar')) {
+        const account = selectedAccount;
         tasks.push(
           getMailCalendars().refresh(),
           getMailEvents({ account, day: calendarDay }).refresh()
@@ -922,13 +940,10 @@
       </header>
       {#if selectedEmail}
         {#key selectedEmail.id}
-          <!-- $effect.pending() read at the <main> level froze the page during navigation. -->
-          {#if $effect.pending() > 0}<div class="progress" aria-hidden="true"></div>{/if}
           <article
             {@attach attachReadingContent}
             {@attach markReadOnOpen(selectedEmail)}
             class="reading-content"
-            aria-busy={$effect.pending() > 0}
             tabindex="-1"
           >
             <h2>{selectedEmail.subject || '(No subject)'}</h2>
@@ -1036,7 +1051,7 @@
                 bind:this={archiveForm}
                 method="POST"
                 action="?/archive"
-                use:enhance={submitMessageAction}
+                onsubmit={(event) => void submitMessageAction(event, 'archive')}
               >
                 <input type="hidden" name="id" value={selectedEmail.id} />
                 <button type="submit">Archive</button>
@@ -1045,7 +1060,7 @@
                 bind:this={deleteForm}
                 method="POST"
                 action="?/delete"
-                use:enhance={submitMessageAction}
+                onsubmit={(event) => void submitMessageAction(event, 'delete')}
               >
                 <input type="hidden" name="id" value={selectedEmail.id} />
                 <button type="submit" class="delete-button">Delete</button>
@@ -1565,35 +1580,6 @@
     padding: 24px;
     overflow-y: auto;
     overflow-wrap: anywhere;
-  }
-  .detail-pane {
-    position: relative;
-  }
-  .progress {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
-    background-size: 50% 100%;
-    background-repeat: no-repeat;
-    animation: progress 1s linear infinite;
-  }
-  @keyframes progress {
-    from {
-      background-position: -50% 0;
-    }
-    to {
-      background-position: 150% 0;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .progress {
-      animation: none;
-      background: var(--color-accent);
-    }
   }
   /* Focus moves here by script so keys act on the message; it is not a control. */
   .reading-content:focus {
