@@ -603,8 +603,7 @@
   <title>Email Check — {data.selectedAccount ?? 'All accounts'}</title>
 </svelte:head>
 
-<main aria-busy={$effect.pending() > 0}>
-  {#if $effect.pending() > 0}<div class="progress" aria-hidden="true"></div>{/if}
+<main>
   <header class="masthead">
     <div class="brand">
       <button
@@ -811,10 +810,13 @@
       </header>
       {#if selectedEmail}
         {#key selectedEmail.id}
+          <!-- $effect.pending() read at the <main> level froze the page during navigation. -->
+          {#if $effect.pending() > 0}<div class="progress" aria-hidden="true"></div>{/if}
           <article
             bind:this={readingContent}
             class="reading-content"
             class:stale={$effect.pending() > 0}
+            aria-busy={$effect.pending() > 0}
             tabindex="-1"
           >
             <h2>{selectedEmail.subject || '(No subject)'}</h2>
@@ -1445,12 +1447,15 @@
     opacity: 0.5;
     transition: opacity 150ms ease-out;
   }
+  .detail-pane {
+    position: relative;
+  }
   .progress {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    z-index: 40;
+    z-index: 1;
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
     background-size: 50% 100%;
