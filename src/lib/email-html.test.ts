@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'bun:test';
-import { buildEmailDocument, hasDarkModeStyles, hasRemoteImages } from './email-html';
+import {
+  buildEmailDocument,
+  emailColorMode,
+  hasDarkModeStyles,
+  hasRemoteImages,
+} from './email-html';
 
 describe('email HTML documents', () => {
   it('keeps email head styles after the compatibility and security rules', () => {
     const document = buildEmailDocument(
       '<html><head><style>.message{color:red}</style></head><body class="message">Hello</body></html>',
       false,
-      true
+      'inverted'
     );
 
     expect(document.indexOf('Content-Security-Policy')).toBeLessThan(
@@ -17,7 +22,7 @@ describe('email HTML documents', () => {
   });
 
   it('wraps fragments and permits remote images only after approval', () => {
-    const document = buildEmailDocument('<p>Hello</p>', true, true);
+    const document = buildEmailDocument('<p>Hello</p>', true, 'inverted');
 
     expect(document).toStartWith('<!doctype html>');
     expect(document).toContain('img-src data: https: http:');
@@ -33,19 +38,29 @@ describe('email HTML documents', () => {
   });
 
   it('inverts media again only for inverted emails', () => {
-    expect(buildEmailDocument('<p>Hello</p>', false, true)).toContain('img,video,canvas');
-    expect(buildEmailDocument('<p>Hello</p>', false, false)).not.toContain('img,video,canvas');
+    expect(buildEmailDocument('<p>Hello</p>', false, 'inverted')).toContain('img,video,canvas');
+    expect(buildEmailDocument('<p>Hello</p>', false, 'dark')).not.toContain('img,video,canvas');
+    expect(buildEmailDocument('<p>Hello</p>', false, 'light')).not.toContain('img,video,canvas');
   });
 
-  it('always applies dark color scheme queries', () => {
-    const document = buildEmailDocument(
-      '<style>@media screen and (prefers-color-scheme: dark){body{color:#fff}}</style><picture><source media="(prefers-color-scheme: light)" srcset="a.png"></picture>',
-      false,
-      false
-    );
+  it('applies the color scheme queries for the color mode', () => {
+    const html =
+      '<style>@media screen and (prefers-color-scheme: dark){body{color:#fff}}</style><picture><source media="(prefers-color-scheme: light)" srcset="a.png"></picture>';
+    const dark = buildEmailDocument(html, false, 'dark');
+    const light = buildEmailDocument(html, false, 'light');
 
-    expect(document).toContain('@media screen and (min-width: 0px){');
-    expect(document).toContain('media="(max-width: 0px) and (min-width: 1px)"');
+    expect(dark).toContain('@media screen and (min-width: 0px){');
+    expect(dark).toContain('media="(max-width: 0px) and (min-width: 1px)"');
+    expect(light).toContain('@media screen and (max-width: 0px) and (min-width: 1px){');
+    expect(light).toContain('media="(min-width: 0px)"');
+  });
+
+  it('chooses the color mode', () => {
+    const darkStyles = '<style>@media (prefers-color-scheme: dark){body{color:#fff}}</style>';
+    expect(emailColorMode('<p>Hello</p>', false)).toBe('inverted');
+    expect(emailColorMode(darkStyles, false)).toBe('dark');
+    expect(emailColorMode(darkStyles, true)).toBe('light');
+    expect(emailColorMode('<p>Hello</p>', true)).toBe('light');
   });
 
   it('detects emails with their own dark mode styles', () => {

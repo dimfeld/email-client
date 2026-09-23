@@ -14,6 +14,12 @@
     settings:
       'M20 7h-9M14 17H5M17 20a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM7 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
     today: 'M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0',
+    reply: 'M9 17l-5-5 5-5M20 18v-2a4 4 0 0 0-4-4H4',
+    'reply-all': 'M7 17l-5-5 5-5M12 17l-5-5 5-5M22 18v-2a4 4 0 0 0-4-4H7',
+    forward: 'M15 17l5-5-5-5M4 18v-2a4 4 0 0 1 4-4h12',
+    archive: 'M3 3h18v5H3zM5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8M10 12h4',
+    trash: 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+    more: 'M5 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M19 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
   } as const;
   export type IconName = keyof typeof paths;
 </script>

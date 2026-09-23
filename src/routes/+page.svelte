@@ -14,7 +14,7 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { effectiveImportance } from '$lib/categories';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
-  import { buildEmailDocument, hasDarkModeStyles, hasRemoteImages } from '$lib/email-html';
+  import { buildEmailDocument, emailColorMode, hasRemoteImages } from '$lib/email-html';
   import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
   import {
     getMailAccounts,
@@ -146,6 +146,7 @@
   let messageList = $state<HTMLElement | null>(null);
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
+  const originalColorIds = new SvelteSet<number>();
   let filters = $derived([
     { category: 'all' as const, label: 'All inbox', count: filterCounts.all ?? 0 },
     { category: 'important', label: 'All important', count: filterCounts.important ?? 0 },
@@ -1144,18 +1145,27 @@
               {#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
               <div class="message-actions">
                 <button
+                  class="icon-action"
+                  aria-label="Reply"
+                  title="Reply"
                   onclick={() => openComposer({ mode: 'reply', sourceEmailId: selectedEmail!.id })}
-                  >Reply</button
+                  ><Icon name="reply" /></button
                 >
                 <button
+                  class="icon-action"
+                  aria-label="Reply all"
+                  title="Reply all"
                   onclick={() =>
                     openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail!.id })}
-                  >Reply all</button
+                  ><Icon name="reply-all" /></button
                 >
                 <button
+                  class="icon-action"
+                  aria-label="Forward"
+                  title="Forward"
                   onclick={() =>
                     openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}
-                  >Forward</button
+                  ><Icon name="forward" /></button
                 >
                 {#if selectedThread.some((member) => member.labels.includes('INBOX'))}<form
                     bind:this={archiveForm}
@@ -1164,7 +1174,9 @@
                     onsubmit={(event) => void submitMessageAction(event, 'archive')}
                   >
                     <input type="hidden" name="id" value={selectedEmail.id} />
-                    <button type="submit">Archive</button>
+                    <button type="submit" class="icon-action" aria-label="Archive" title="Archive"
+                      ><Icon name="archive" /></button
+                    >
                   </form>{/if}
                 <form
                   bind:this={deleteForm}
@@ -1173,8 +1185,38 @@
                   onsubmit={(event) => void submitMessageAction(event, 'delete')}
                 >
                   <input type="hidden" name="id" value={selectedEmail.id} />
-                  <button type="submit" class="delete-button">Delete</button>
+                  <button
+                    type="submit"
+                    class="icon-action delete-button"
+                    aria-label="Delete"
+                    title="Delete"><Icon name="trash" /></button
+                  >
                 </form>
+                {#if selectedEmail.bodyHtml}
+                  {@const menuId = `message-options-${selectedEmail.id}`}
+                  <button
+                    type="button"
+                    class="icon-action"
+                    aria-label="More actions"
+                    title="More actions"
+                    popovertarget={menuId}><Icon name="more" /></button
+                  >
+                  <div id={menuId} class="action-menu message-options" popover="auto">
+                    <button
+                      type="button"
+                      popovertarget={menuId}
+                      popovertargetaction="hide"
+                      onclick={() => {
+                        if (originalColorIds.has(selectedEmail.id))
+                          originalColorIds.delete(selectedEmail.id);
+                        else originalColorIds.add(selectedEmail.id);
+                      }}
+                      >{originalColorIds.has(selectedEmail.id)
+                        ? 'Show in dark mode'
+                        : 'Show original colors'}</button
+                    >
+                  </div>
+                {/if}
                 {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed(selectedEmail)}
                   <div class="remote-images-control">
                     <button
@@ -1190,7 +1232,7 @@
                       aria-label="Remote image options"
                       popovertarget="remote-images-options"><Icon name="chevron-down" /></button
                     >
-                    <div id="remote-images-options" class="remote-images-options" popover="auto">
+                    <div id="remote-images-options" class="action-menu" popover="auto">
                       {#if senderAddress(selectedEmail.fromAddress)}
                         <form
                           method="POST"
@@ -1220,8 +1262,11 @@
                 {/if}
               </div>
               {#if selectedEmail.bodyHtml}
-                {@const nativeDarkMode = hasDarkModeStyles(selectedEmail.bodyHtml)}
-                <div class={['message-paper', nativeDarkMode ? 'native-dark' : 'inverted']}>
+                {@const colorMode = emailColorMode(
+                  selectedEmail.bodyHtml,
+                  originalColorIds.has(selectedEmail.id)
+                )}
+                <div class={['message-paper', colorMode]}>
                   <iframe
                     class="html-message"
                     title="Email message content"
@@ -1230,7 +1275,7 @@
                     srcdoc={buildEmailDocument(
                       selectedEmail.bodyHtml,
                       remoteImagesAllowed(selectedEmail),
-                      !nativeDarkMode
+                      colorMode
                     )}
                     {@attach messageFrame}
                   ></iframe>
@@ -1813,7 +1858,7 @@
     filter: invert(0.9) hue-rotate(180deg);
   }
   /* Emails with prefers-color-scheme styles get their own dark mode. */
-  .message-paper.native-dark {
+  .message-paper.dark {
     background: var(--color-surface-sunken);
     color-scheme: dark;
   }
@@ -1861,9 +1906,18 @@
     font-size: 0.8rem;
     font-weight: 650;
   }
+  .message-actions .icon-action {
+    padding: 8px;
+    border-color: var(--color-border-strong);
+    background: transparent;
+    color: var(--color-accent-text);
+  }
+  .message-actions .icon-action:hover {
+    border-color: var(--color-border-hover);
+    background: var(--color-surface-hover);
+  }
   .message-actions .delete-button {
     border-color: var(--color-danger-border);
-    background: transparent;
     color: var(--color-danger);
   }
   .remote-images-control {
@@ -1891,7 +1945,7 @@
   .remote-images-menu:focus-visible {
     outline: 2px solid var(--color-accent);
   }
-  .remote-images-options[popover] {
+  .action-menu[popover] {
     position-area: block-end span-inline-end;
     inset: auto;
     margin: 4px 0 0;
@@ -1904,7 +1958,10 @@
     color: inherit;
     box-shadow: 0 8px 24px var(--color-shadow);
   }
-  .message-actions .remote-images-options button {
+  .message-options[popover] {
+    position-area: block-end span-inline-start;
+  }
+  .message-actions .action-menu button {
     width: 100%;
     padding: 9px 10px;
     border: 0;
@@ -1913,10 +1970,10 @@
     text-align: left;
     overflow-wrap: anywhere;
   }
-  .message-actions .remote-images-options button:hover {
+  .message-actions .action-menu button:hover {
     background: var(--color-border-strong);
   }
-  .remote-images-options p {
+  .action-menu p {
     padding: 8px;
     color: var(--color-text-muted);
     font-size: 0.8rem;

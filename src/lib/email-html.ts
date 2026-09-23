@@ -22,16 +22,31 @@ const lightSchemeQuery = /\(\s*prefers-color-scheme\s*:\s*light\s*\)/gi;
 const alwaysTrueQuery = '(min-width: 0px)';
 const alwaysFalseQuery = '(max-width: 0px) and (min-width: 1px)';
 
+/*
+ * - inverted: light-only email, inverted to fit the dark app.
+ * - dark: the email's own dark mode styles.
+ * - light: the original light colors, when the reader asks for them.
+ */
+export type EmailColorMode = 'inverted' | 'dark' | 'light';
+
 export function hasDarkModeStyles(html: string): boolean {
   return /@media[^{]*prefers-color-scheme\s*:\s*dark/i.test(html);
 }
 
+export function emailColorMode(html: string, originalColors: boolean): EmailColorMode {
+  if (originalColors) return 'light';
+  return hasDarkModeStyles(html) ? 'dark' : 'inverted';
+}
+
 /*
- * The app is always dark, but the browser gives the iframe the system preference.
- * Replace the color scheme queries so that dark styles and dark <picture> sources always apply.
+ * The browser gives the iframe the system preference, not the app color scheme.
+ * Replace the color scheme queries so that the styles and <picture> sources for the scheme always apply.
  */
-function forceDarkScheme(html: string): string {
-  return html.replace(darkSchemeQuery, alwaysTrueQuery).replace(lightSchemeQuery, alwaysFalseQuery);
+function forceColorScheme(html: string, scheme: 'dark' | 'light'): string {
+  const dark = scheme === 'dark';
+  return html
+    .replace(darkSchemeQuery, dark ? alwaysTrueQuery : alwaysFalseQuery)
+    .replace(lightSchemeQuery, dark ? alwaysFalseQuery : alwaysTrueQuery);
 }
 
 export function hasRemoteImages(html: string): boolean {
@@ -43,18 +58,22 @@ export function hasRemoteImages(html: string): boolean {
 export function buildEmailDocument(
   html: string,
   allowRemoteImages: boolean,
-  invertColors: boolean
+  colorMode: EmailColorMode
 ): string {
   const imageSources = allowRemoteImages ? 'data: https: http:' : 'data:';
-  const colorStyles = invertColors
-    ? `html{color-scheme:light}${invertedMediaStyles}`
-    : 'html{color-scheme:dark}';
+  /*
+   * An inverted email renders light but looks dark. It takes the dark <picture> sources,
+   * because media is inverted again and shows as designed on the dark result.
+   */
+  const queryScheme = colorMode === 'light' ? 'light' : 'dark';
+  const canvasScheme = colorMode === 'dark' ? 'dark' : 'light';
+  const colorStyles = `html{color-scheme:${canvasScheme}}${colorMode === 'inverted' ? invertedMediaStyles : ''}`;
   const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; font-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="referrer" content="no-referrer"><style>${compatibilityStyles}${colorStyles}</style>`;
-  const darkHtml = forceDarkScheme(html);
+  const schemeHtml = forceColorScheme(html, queryScheme);
 
-  if (/<head\b[^>]*>/i.test(darkHtml))
-    return darkHtml.replace(/<head\b[^>]*>/i, (tag) => `${tag}${head}`);
-  if (/<html\b[^>]*>/i.test(darkHtml))
-    return darkHtml.replace(/<html\b[^>]*>/i, (tag) => `${tag}<head>${head}</head>`);
-  return `<!doctype html><html><head>${head}</head><body>${darkHtml}</body></html>`;
+  if (/<head\b[^>]*>/i.test(schemeHtml))
+    return schemeHtml.replace(/<head\b[^>]*>/i, (tag) => `${tag}${head}`);
+  if (/<html\b[^>]*>/i.test(schemeHtml))
+    return schemeHtml.replace(/<html\b[^>]*>/i, (tag) => `${tag}<head>${head}</head>`);
+  return `<!doctype html><html><head>${head}</head><body>${schemeHtml}</body></html>`;
 }
