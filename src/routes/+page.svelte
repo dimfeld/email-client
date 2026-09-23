@@ -353,8 +353,7 @@
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     const key = event.key.toLowerCase();
     const eventTarget = event.target instanceof Element ? event.target : null;
-    const inMessageList =
-      !!eventTarget?.closest('.message-list');
+    const inMessageList = !!eventTarget?.closest('.message-list');
     if (key === 'c') {
       event.preventDefault();
       openComposer({ mode: 'new', account: data.selectedAccount ?? undefined });
@@ -367,10 +366,7 @@
     } else if (key === 'f' && selectedEmail) {
       event.preventDefault();
       openComposer({ mode: 'forward', sourceEmailId: selectedEmail.id });
-    } else if (
-      inMessageList &&
-      (event.key === 'Enter' || event.key === 'ArrowRight')
-    ) {
+    } else if (inMessageList && (event.key === 'Enter' || event.key === 'ArrowRight')) {
       const row = eventTarget?.closest<HTMLElement>('.message');
       const rowId = Number(row?.dataset.emailId);
       const emailId = Number.isInteger(rowId) && rowId > 0 ? rowId : selectedEmail?.id;
