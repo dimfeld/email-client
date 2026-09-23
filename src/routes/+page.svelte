@@ -352,8 +352,9 @@
       return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     const key = event.key.toLowerCase();
+    const eventTarget = event.target instanceof Element ? event.target : null;
     const inMessageList =
-      event.target instanceof Element && !!event.target.closest('.message-list');
+      !!eventTarget?.closest('.message-list');
     if (key === 'c') {
       event.preventDefault();
       openComposer({ mode: 'new', account: data.selectedAccount ?? undefined });
@@ -366,6 +367,19 @@
     } else if (key === 'f' && selectedEmail) {
       event.preventDefault();
       openComposer({ mode: 'forward', sourceEmailId: selectedEmail.id });
+    } else if (
+      inMessageList &&
+      (event.key === 'Enter' || event.key === 'ArrowRight')
+    ) {
+      const row = eventTarget?.closest<HTMLElement>('.message');
+      const rowId = Number(row?.dataset.emailId);
+      const emailId = Number.isInteger(rowId) && rowId > 0 ? rowId : selectedEmail?.id;
+      if (emailId) {
+        event.preventDefault();
+        updateMailboxUrl({ message: emailId });
+        await tick();
+        readingContent?.focus({ preventScroll: true });
+      }
     } else if (key === 'j' || (event.key === 'ArrowDown' && inMessageList)) {
       event.preventDefault();
       moveSelection(1);
@@ -393,10 +407,23 @@
         await tick();
         readingContent?.focus({ preventScroll: true });
       }
-    } else if (key === 'u' || event.key === 'Escape') {
+    } else if (
+      key === 'u' ||
+      event.key === 'Escape' ||
+      (event.key === 'ArrowLeft' && selectedEmail)
+    ) {
       event.preventDefault();
       if (showShortcuts) showShortcuts = false;
-      else updateMailboxUrl({ message: null });
+      else {
+        const emailId = selectedEmail?.id;
+        updateMailboxUrl({ message: null });
+        if (emailId) {
+          await tick();
+          messageList
+            ?.querySelector<HTMLElement>(`[data-email-id="${emailId}"]`)
+            ?.focus({ preventScroll: true });
+        }
+      }
     } else if (event.key === '/') {
       event.preventDefault();
       searchInput?.focus();
@@ -1128,11 +1155,11 @@
           <dd>Move selected message to Trash</dd>
         </div>
         <div>
-          <dt><kbd>O</kbd> <kbd>Enter</kbd></dt>
+          <dt><kbd>O</kbd> <kbd>Enter</kbd> <kbd>→</kbd></dt>
           <dd>Open selected message</dd>
         </div>
         <div>
-          <dt><kbd>U</kbd> <kbd>Esc</kbd></dt>
+          <dt><kbd>U</kbd> <kbd>Esc</kbd> <kbd>←</kbd></dt>
           <dd>Return to the message list</dd>
         </div>
         <div>
