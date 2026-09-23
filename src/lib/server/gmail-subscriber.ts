@@ -191,7 +191,8 @@ export async function processGmailNotification(
       messages,
     },
     dependencies.classify,
-    dependencies.extract ?? null
+    dependencies.extract ?? null,
+    request
   );
   setAccountHistoryId(dependencies.database, account.email, history.historyId);
   account.historyId = history.historyId;

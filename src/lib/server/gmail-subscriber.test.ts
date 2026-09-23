@@ -123,6 +123,10 @@ describe('Gmail notification processing', () => {
       listAccounts(database).find((item) => item.email === 'two@example.com')?.historyId
     ).toBeNull();
     expect(urls[0]).toEndWith('/history');
+    expect(urls).toContain(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages/inbox-message/modify'
+    );
+    expect(listEmails(database)[0].labels).toContain('STARRED');
   });
 
   it('bootstraps an existing watch cursor and ignores its immediate notification', async () => {

@@ -2,7 +2,12 @@ import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountLastBackfillAt } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
-import { getGmailMessage, listGmailMessageIds, listGmailMessages } from './google-api';
+import {
+  getGmailMessage,
+  googleApiRequest,
+  listGmailMessageIds,
+  listGmailMessages,
+} from './google-api';
 import { ingestGmailPayload } from './ingest';
 import { gmailMessageArrivalStats } from './message-arrival-stats';
 import type { IncomingEmail } from './types';
@@ -18,6 +23,7 @@ type GmailBackfillDependencies = {
   listMessages?: typeof listGmailMessages;
   listMessageIds?: typeof listGmailMessageIds;
   getMessage?: typeof getGmailMessage;
+  request?: typeof googleApiRequest;
   now?: () => Date;
   intervalMs?: number;
 };
@@ -71,7 +77,8 @@ async function backfillAccount(
       messages,
     },
     dependencies.classify,
-    dependencies.extract ?? null
+    dependencies.extract ?? null,
+    dependencies.request
   );
   gmailMessageArrivalStats.recordAndLog(account.email, 'backfill', ingested.stored);
   setAccountLastBackfillAt(dependencies.database, account.email, now.toISOString());
@@ -125,6 +132,7 @@ export function startGmailBackfill({
   listMessages,
   listMessageIds,
   getMessage,
+  request,
   classify,
   extract,
   intervalMs = GMAIL_BACKFILL_INTERVAL_MS,
@@ -143,6 +151,7 @@ export function startGmailBackfill({
         listMessages,
         listMessageIds,
         getMessage,
+        request,
         classify: classify ?? createJevClassifier(),
         extract: extract === undefined ? createOpenAIEmailExtractor() : extract,
       });

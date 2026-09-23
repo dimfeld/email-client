@@ -77,6 +77,49 @@ test('saves each message, resumes after reopen, and does not put archived histor
   expect(searchEmails(database, 'History')).toHaveLength(2);
 });
 
+test('stars an important message during a classified historical import', async () => {
+  upsertAccount(database, { email: 'owner@test.com', refreshToken: 'test' });
+  createHistoricalBackfill(
+    database,
+    { account: 'owner@test.com', query: 'from:example.com', classify: true, delayMs: 250 },
+    new Date(0)
+  );
+  const requests: { url: string; options: unknown }[] = [];
+  const request = (async (_account, url, options) => {
+    requests.push({ url, options });
+    return url.endsWith('/messages') ? { messages: [{ id: 'important' }] } : {};
+  }) as typeof googleApiRequest;
+  let now = 0;
+  const dependencies = {
+    database,
+    request,
+    now: () => now,
+    getMessage: async () => ({ id: 'important', subject: 'Reply', labels: ['INBOX'] }),
+    classify: async () => ({
+      category: 'action',
+      importance: null,
+      hasActionItem: false,
+      actionItemProbability: 0,
+      hasReminder: false,
+      reminderProbability: 0,
+      model: 'test',
+      categoryConfidence: 1,
+      importanceConfidence: null,
+      categoryProbabilities: { action: 1 },
+      importanceProbabilities: {},
+    }),
+  };
+  await runHistoricalBackfillStep(dependencies);
+  now = 250;
+  await runHistoricalBackfillStep(dependencies);
+
+  expect(requests).toContainEqual({
+    url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/important/modify',
+    options: { method: 'POST', data: { addLabelIds: ['STARRED'] } },
+  });
+  expect(listEmails(database)[0].labels).toContain('STARRED');
+});
+
 test('honors Retry-After, keeps the cursor, and can pause during a request', async () => {
   let now = 0;
   const id = create();

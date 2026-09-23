@@ -7,10 +7,10 @@ import {
   getIncomingEmail,
   listAccounts,
   markDeleted,
-  saveClassification,
   saveClassificationError,
   upsertEmails,
 } from './db';
+import { saveGmailClassification } from './gmail-classification';
 import {
   getGmailMessage,
   googleApiRequest,
@@ -233,11 +233,12 @@ async function runStep({
           : upsertEmails(database, account.email, [email]);
         if (job.classify && pending.length) {
           try {
-            saveClassification(
+            await saveGmailClassification(
               database,
-              account.email,
+              account,
               id,
-              await (classify ?? createJevClassifier())(email, account.email)
+              await (classify ?? createJevClassifier())(email, account.email),
+              request
             );
           } catch (error) {
             saveClassificationError(database, account.email, id, error);
