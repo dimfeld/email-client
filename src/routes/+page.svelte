@@ -7,7 +7,7 @@
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import { deserialize, enhance } from '$app/forms';
-  import { goto } from '$app/navigation';
+  import { goto, onNavigate } from '$app/navigation';
   import { page } from '$app/state';
   import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
   import { tick, untrack } from 'svelte';
@@ -380,6 +380,29 @@
       showShortcuts = !showShortcuts;
     }
   }
+
+  // On phones (the 760px layout breakpoint below) the list and the message are separate
+  // views. Slide between them, unless the viewer asks for reduced motion or the browser has
+  // no view transitions.
+  onNavigate((navigation) => {
+    const opens = navigation.to?.url.searchParams.has('message') ?? false;
+    const closes = navigation.from?.url.searchParams.has('message') ?? false;
+    if (
+      opens === closes ||
+      !document.startViewTransition ||
+      !matchMedia('(max-width: 760px)').matches ||
+      matchMedia('(prefers-reduced-motion: reduce)').matches
+    )
+      return;
+    document.documentElement.dataset.navDirection = opens ? 'forward' : 'back';
+    return new Promise<void>((resolve) => {
+      const transition = document.startViewTransition(async () => {
+        resolve();
+        await navigation.complete;
+      });
+      void transition.finished.finally(() => delete document.documentElement.dataset.navDirection);
+    });
+  });
 
   // Set before a navigation that should move focus into the new message.
   let focusReadingPaneOnLoad = false;
@@ -1444,7 +1467,7 @@
   /* The old message stays visible, dimmed, while the next one loads. */
   .reading-content.stale {
     opacity: 0.5;
-    transition: opacity 150ms ease-out;
+    transition: opacity var(--motion-fast) ease-out;
   }
   .detail-pane {
     position: relative;
@@ -1584,7 +1607,7 @@
     background: var(--color-paper);
     color-scheme: light;
     opacity: 0;
-    transition: opacity 150ms ease-out;
+    transition: opacity var(--motion-fast) ease-out;
   }
   .html-message:global([data-loaded]) {
     opacity: 1;

@@ -55,6 +55,9 @@
   --radius-md: 6px;
   --radius-lg: 10px;
 
+  /* One short duration for UI motion, so fades and slides match. */
+  --motion-fast: 150ms;
+
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -98,4 +101,30 @@ textarea {
     min-width: 44px;
     min-height: 44px;
   }
+}
+
+/* The mobile list and message views slide as one page moves over the other. */
+@keyframes slide-out-left {
+  to {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+}
+@keyframes slide-in-right {
+  from {
+    transform: translateX(30%);
+    opacity: 0;
+  }
+}
+:root[data-nav-direction='forward']::view-transition-old(root) {
+  animation: var(--motion-fast) ease-out both slide-out-left;
+}
+:root[data-nav-direction='forward']::view-transition-new(root) {
+  animation: var(--motion-fast) ease-out both slide-in-right;
+}
+:root[data-nav-direction='back']::view-transition-old(root) {
+  animation: var(--motion-fast) ease-out both reverse slide-in-right;
+}
+:root[data-nav-direction='back']::view-transition-new(root) {
+  animation: var(--motion-fast) ease-out both reverse slide-out-left;
 }
