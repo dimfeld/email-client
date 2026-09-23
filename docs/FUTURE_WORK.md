@@ -2,17 +2,9 @@
 
 These ideas are not part of the first MVP. They are possible next steps after normal use shows which workflows need more support.
 
-## Backfill
-
-Periodically check for messages that pubsub may have missed and backfill them.
-
 ## Full API support
 
 Add a versioned application API for accounts, messages, categories, classifications, watch health, imports, and future message actions. Keep the API separate from Google API details so other clients do not depend on the local process design.
-
-## Full-text search with BM25
-
-Add SQLite FTS5 indexes for subject, sender, recipients, snippet, and body. Use BM25 ranking for fast local keyword search. Keep the FTS rows in sync with the main email records through explicit repository operations or SQLite triggers.
 
 ## Semantic search with dense vectors
 
@@ -25,15 +17,6 @@ Expose safe read operations through an MCP server. Initial tools could list rais
 ## Native mobile app
 
 Build a native mobile client after the local API and authentication model are stable. The first mobile version could show raised messages, categories, search results, and classification status. A later version could add notifications and safe Gmail actions.
-
-## Respond to calendar invites
-
-Add a safe workflow for accepting, declining, or marking Google Calendar invites as tentative from the app.
-
-## Agent email search
-
-Given an LLM tools to search through email and ask it questions. The search can find various candidates and then use a
-Jev classifier to further select which are relevant to the question.
 
 ## Preload messages before they open
 
