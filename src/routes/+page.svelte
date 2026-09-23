@@ -385,6 +385,12 @@
         return;
       }
     }
+    if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
+    if (event.key === '`' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat) {
+      event.preventDefault();
+      showChat = !showChat;
+      return;
+    }
     if (
       isInteractiveTarget(event.target) ||
       event.metaKey ||
@@ -393,7 +399,6 @@
       event.repeat
     )
       return;
-    if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     const key = event.key.toLowerCase();
     const eventTarget = event.target instanceof Element ? event.target : null;
     const inMessageList = !!eventTarget?.closest('.message-list');
@@ -471,9 +476,6 @@
     } else if (event.key === '?') {
       event.preventDefault();
       showShortcuts = !showShortcuts;
-    } else if (event.key === '`') {
-      event.preventDefault();
-      showChat = true;
     }
   }
 
