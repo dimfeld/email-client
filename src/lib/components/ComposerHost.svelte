@@ -68,8 +68,10 @@
   function save(): Promise<boolean> {
     clearTimeout(autosaveTimer);
     if (savePromise) return savePromise;
-    if (!draft || !editable || !dirty) return Promise.resolve(true);
+    if (!draft || !editable || !dirty) return (uploadPromise ?? Promise.resolve()).then(() => true);
     savePromise = (async () => {
+      // A save and an upload both change the draft version, so a save waits for the upload.
+      await uploadPromise;
       if (!draft || !editable) return true;
       saving = true;
       try {
@@ -148,26 +150,43 @@
       busy = false;
     }
   }
+  // Files upload while the fields stay editable. Text typed during an upload saves after it.
+  let uploading = $state<string[]>([]);
+  let uploadPromise: Promise<void> | undefined;
   async function attach(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const files = [...(input.files ?? [])];
     input.value = '';
-    if (!draft || !(await save())) return;
-    busy = true;
-    try {
-      for (const file of files) {
-        const fields = new FormData();
-        fields.set('id', draft.id);
-        fields.set('version', String(draft.version));
-        fields.set('file', file);
-        draft = await request(fields);
+    if (!draft || uploadPromise || !(await save())) return;
+    uploading = files.map((file) => file.name);
+    uploadPromise = (async () => {
+      try {
+        for (const file of files) {
+          if (!draft) break;
+          const id: string = draft.id;
+          const fields = new FormData();
+          fields.set('id', id);
+          fields.set('version', String(draft.version));
+          fields.set('file', file);
+          const saved = await request(fields);
+          // Keep the text typed during the upload. Take only what the upload changed.
+          if (draft?.id === id) {
+            draft.version = saved.version;
+            draft.attachments = saved.attachments;
+            draft.status = saved.status;
+            draft.updatedAt = saved.updatedAt;
+          }
+          uploading = uploading.slice(1);
+        }
+      } catch (failure) {
+        error = failure instanceof Error ? failure.message : 'Attachment upload failed.';
+      } finally {
+        uploading = [];
+        uploadPromise = undefined;
       }
-    } catch (failure) {
-      error = failure instanceof Error ? failure.message : 'Attachment upload failed.';
-    } finally {
-      busy = false;
-      if (dirty) void save();
-    }
+    })();
+    await uploadPromise;
+    if (dirty) void save();
   }
   async function close() {
     if (!(await save())) return;
@@ -326,6 +345,11 @@
                 >
               </li>{/each}
           </ul>{/if}
+        {#if uploading.length}<ul class="attachments" aria-live="polite">
+            {#each uploading as name}<li class="uploading">
+                <span>Uploading {name}…</span>
+              </li>{/each}
+          </ul>{/if}
       {:else if draft.status === 'queued'}
         <div class="send-status" role="status">
           <h2>Ready to send</h2>
@@ -365,7 +389,12 @@
         <button class="primary" disabled={busy || saving} onclick={() => action('queue')}
           >Send</button
         ><span>Undo for {UNDO_SEND_SECONDS} seconds</span><label class="attach"
-          >Attach files<input type="file" multiple disabled={busy} onchange={attach} /></label
+          >Attach files<input
+            type="file"
+            multiple
+            disabled={busy || uploading.length > 0}
+            onchange={attach}
+          /></label
         ><button
           disabled={busy}
           onclick={() => {
@@ -507,6 +536,9 @@
     list-style: none;
     padding: 0 14px;
     font-size: 0.75rem;
+  }
+  .attachments .uploading {
+    color: var(--color-text-muted);
   }
   .attachments li {
     display: flex;
