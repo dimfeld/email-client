@@ -8,7 +8,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { effectiveImportance } from '$lib/categories';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
@@ -452,6 +452,28 @@
     else if (!showShortcuts && shortcutDialog.open) shortcutDialog.close();
   });
 
+  // Load messages before they open: the previous and next messages, and the row under the
+  // pointer. The remote query cache keeps an entry while its proxy object is alive, so the
+  // effect cleanup holds the proxies until the next run.
+  let hoveredId = $state<number | null>(null);
+  $effect(() => {
+    const index = visibleEmails.findIndex((email) => email.id === selectedId);
+    const ids = [
+      visibleEmails[index - 1]?.id,
+      index < 0 ? undefined : visibleEmails[index + 1]?.id,
+      hoveredId ?? undefined,
+    ].filter((id): id is number => id !== undefined && id !== selectedId);
+    const account = selectedAccount;
+    const queries = untrack(() =>
+      ids.map((id) => {
+        const query = getSelectedMessage({ account, id });
+        void query.current;
+        return query;
+      })
+    );
+    return () => void queries;
+  });
+
   // Keep the selected row visible when J and K move the selection.
   $effect(() => {
     if (selectedId === null || !messageList) return;
@@ -601,6 +623,7 @@
                   class:unread={email.labels.includes('UNREAD')}
                   class:selected={selectedEmail?.id === email.id}
                   aria-current={selectedEmail?.id === email.id ? 'true' : undefined}
+                  onpointerenter={() => (hoveredId = email.id)}
                 >
                   <span class="sender-avatar" aria-hidden="true"
                     >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
