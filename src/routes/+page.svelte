@@ -321,6 +321,28 @@
 
   async function handleKeydown(event: KeyboardEvent) {
     if (
+      event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      /^[1-9]$/.test(event.key)
+    ) {
+      const accountIndex = Number(event.key) - 2;
+      const account = event.key === '1' ? null : data.accounts[accountIndex]?.email;
+      if (event.key === '1' || account) {
+        event.preventDefault();
+        const url = new URL(currentUrl);
+        if (account) url.searchParams.set('account', account);
+        else url.searchParams.delete('account');
+        url.searchParams.delete('message');
+        void goto(`${url.pathname}${url.search}${url.hash}`, {
+          keepFocus: true,
+          noScroll: true,
+        });
+        return;
+      }
+    }
+    if (
       isInteractiveTarget(event.target) ||
       event.metaKey ||
       event.ctrlKey ||
@@ -378,6 +400,9 @@
     } else if (event.key === '?') {
       event.preventDefault();
       showShortcuts = !showShortcuts;
+    } else if (event.key === '`') {
+      event.preventDefault();
+      showChat = true;
     }
   }
 
@@ -670,13 +695,6 @@
     >
     <button class="text-button" aria-pressed={showChat} onclick={() => (showChat = !showChat)}
       >Chat</button
-    >
-    <button
-      class="text-button shortcuts-button"
-      type="button"
-      onclick={() => {
-        showShortcuts = true;
-      }}>Shortcuts <kbd>?</kbd></button
     >
     <form method="GET" class="account-picker">
       <label for="account">Account</label>
@@ -1061,6 +1079,18 @@
         >
       </div>
       <dl>
+        <div>
+          <dt><kbd>Ctrl</kbd> + <kbd>1</kbd></dt>
+          <dd>Show all accounts</dd>
+        </div>
+        <div>
+          <dt><kbd>Ctrl</kbd> + <kbd>2–9</kbd></dt>
+          <dd>Select an account by its position in the account list</dd>
+        </div>
+        <div>
+          <dt><kbd>`</kbd></dt>
+          <dd>Open chat</dd>
+        </div>
         <div>
           <dt><kbd>C</kbd></dt>
           <dd>Compose a new message</dd>
@@ -1835,8 +1865,7 @@
     }
   }
   @media (max-width: 1100px) {
-    .account-picker label,
-    .shortcuts-button {
+    .account-picker label {
       display: none;
     }
     .mailbox > :global(aside) {
@@ -1863,8 +1892,7 @@
     .account-picker {
       margin-left: auto;
     }
-    .account-picker label,
-    .shortcuts-button {
+    .account-picker label {
       display: none;
     }
     .mailbox,
