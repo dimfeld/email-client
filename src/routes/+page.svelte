@@ -471,7 +471,8 @@
   <title>Email Check — {data.selectedAccount ?? 'All accounts'}</title>
 </svelte:head>
 
-<main>
+<main aria-busy={$effect.pending() > 0}>
+  {#if $effect.pending() > 0}<div class="progress" aria-hidden="true"></div>{/if}
   <header class="masthead">
     <div class="brand">
       <button
@@ -668,7 +669,12 @@
       </header>
       {#if selectedEmail}
         {#key selectedEmail.id}
-          <article bind:this={readingContent} class="reading-content" tabindex="-1">
+          <article
+            bind:this={readingContent}
+            class="reading-content"
+            class:stale={$effect.pending() > 0}
+            tabindex="-1"
+          >
             <h2>{selectedEmail.subject || '(No subject)'}</h2>
             <dl class="message-metadata">
               <div>
@@ -1289,6 +1295,37 @@
     padding: 24px;
     overflow-y: auto;
     overflow-wrap: anywhere;
+  }
+  /* The old message stays visible, dimmed, while the next one loads. */
+  .reading-content.stale {
+    opacity: 0.5;
+    transition: opacity 150ms ease-out;
+  }
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+    background-size: 50% 100%;
+    background-repeat: no-repeat;
+    animation: progress 1s linear infinite;
+  }
+  @keyframes progress {
+    from {
+      background-position: -50% 0;
+    }
+    to {
+      background-position: 150% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .progress {
+      animation: none;
+      background: var(--color-accent);
+    }
   }
   /* Focus moves here by script so keys act on the message; it is not a control. */
   .reading-content:focus {
