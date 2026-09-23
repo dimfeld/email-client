@@ -2,6 +2,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
   import { showToast } from '$lib/toast.svelte';
+  import { MAIL_PAGE_SIZE } from '$lib/mail-list';
   import { onStateChange } from '$lib/state-change';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
@@ -48,7 +49,27 @@
   let calendarEvents = $derived(
     await getMailEvents({ account: selectedAccount, day: calendarDay })
   );
-  let mailList = $derived(await getMailList({ account: selectedAccount, search }));
+  // The URL filter is valid when it is a fixed filter or a category that exists.
+  let activeFilter = $derived.by(() => {
+    const requested = new URL(currentUrl).searchParams.get('category') ?? 'all';
+    const fixed = ['all', 'important', 'useful', 'pending'];
+    return fixed.includes(requested) || categories.some((category) => category.id === requested)
+      ? requested
+      : 'all';
+  });
+  // Pages of the list that are loaded. A new list starts again at one page.
+  let pageCount = $derived.by(() => {
+    void [selectedAccount, search, activeFilter];
+    return 1;
+  });
+  let mailList = $derived(
+    await getMailList({
+      account: selectedAccount,
+      search,
+      filter: activeFilter,
+      limit: pageCount * MAIL_PAGE_SIZE,
+    })
+  );
   let selectedMessage = $derived(
     selectedId === null
       ? null
@@ -96,22 +117,17 @@
       effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance)
     );
   }
-  let filterCounts = $derived.by(() => {
-    const counts = new Map<string, number>();
-    const add = (key: string) => counts.set(key, (counts.get(key) ?? 0) + 1);
-    const levels = importanceById;
-    for (const email of emails) {
-      const level = levels.get(email.id);
-      add(email.category ?? 'pending');
-      if (level === 'important') add('important');
-      if (level === 'important' || level === 'useful') add('useful');
-    }
-    return counts;
-  });
-  let activeFilter = $derived.by(() => {
-    const requested = new URL(currentUrl).searchParams.get('category') ?? 'all';
-    return filters.some((filter) => filter.category === requested) ? requested : 'all';
-  });
+  function mailListArgs() {
+    return {
+      account: selectedAccount,
+      search,
+      filter: activeFilter,
+      limit: pageCount * MAIL_PAGE_SIZE,
+    };
+  }
+
+  // The server filters the list and counts each filter over the whole mailbox.
+  let filterCounts = $derived(data.counts);
   let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
   let showChat = $state(false);
   let showCategories = $state(false);
@@ -124,31 +140,21 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   let filters = $derived([
-    { category: 'all' as const, label: 'All mail', count: emails.length },
-    { category: 'important', label: 'All important', count: filterCounts.get('important') ?? 0 },
-    { category: 'useful' as const, label: 'Useful now', count: filterCounts.get('useful') ?? 0 },
+    { category: 'all' as const, label: 'All mail', count: filterCounts.all ?? 0 },
+    { category: 'important', label: 'All important', count: filterCounts.important ?? 0 },
+    { category: 'useful' as const, label: 'Useful now', count: filterCounts.useful ?? 0 },
     ...data.categories.map((category) => ({
       category: category.id,
       label: category.name,
-      count: filterCounts.get(category.id) ?? 0,
+      count: filterCounts[category.id] ?? 0,
     })),
-    {
-      category: 'pending',
-      label: 'Needs classification',
-      count: filterCounts.get('pending') ?? 0,
-    },
+    { category: 'pending', label: 'Needs classification', count: filterCounts.pending ?? 0 },
   ]);
-  let visibleEmails = $derived.by(() => {
-    const filter = activeFilter;
-    const levels = importanceById;
-    return emails.filter((email) => {
-      if (filter === 'all') return true;
-      const level = levels.get(email.id);
-      if (filter === 'useful') return level === 'important' || level === 'useful';
-      if (filter === 'important') return level === 'important';
-      return (email.category ?? 'pending') === filter;
-    });
-  });
+  let visibleEmails = $derived(emails);
+  // The whole list size, for screen readers, since only some rows are in the page.
+  let listSize = $derived(
+    filters.find((filter) => filter.category === activeFilter)?.count ?? visibleEmails.length
+  );
   let selectedEmail = $derived(selectedId === null ? null : selectedMessage);
   let remoteImagesAllowed = $derived(
     selectedEmail !== null &&
@@ -265,6 +271,7 @@
           ? 0
           : visibleEmails.length - 1
         : Math.max(0, Math.min(visibleEmails.length - 1, currentIndex + offset));
+    if (nextIndex === currentIndex && offset > 0 && data.hasMore) pageCount += 1;
     updateMailboxUrl({ message: visibleEmails[nextIndex].id });
   }
 
@@ -402,7 +409,7 @@
       showToast(actionError(result), { tone: 'error' });
       return;
     }
-    await getMailList({ account: selectedAccount, search }).refresh();
+    await getMailList(mailListArgs()).refresh();
     removedIds.delete(id);
     focusReadingPaneOnLoad = true;
     updateMailboxUrl({ message: id });
@@ -428,7 +435,7 @@
         showToast(action === 'archive' ? 'Message archived.' : 'Message moved to Trash.', {
           action: { label: 'Undo', run: () => void undoMessageAction(id, action) },
         });
-        await getMailList({ account: selectedAccount, search }).refresh();
+        await getMailList(mailListArgs()).refresh();
         return;
       }
       removedIds.delete(id);
@@ -481,7 +488,7 @@
       const account = selectedAccount;
       const tasks: Promise<void>[] = [];
       if (scopes.has('mail') || scopes.has('categories')) {
-        tasks.push(getMailList({ account, search }).refresh());
+        tasks.push(getMailList(mailListArgs()).refresh());
         if (selectedId !== null)
           tasks.push(getSelectedMessage({ account, id: selectedId }).refresh());
         tasks.push(...preloaded.map((query) => query.refresh()));
@@ -498,27 +505,57 @@
     })
   );
 
+  // The list renders only the rows near the viewport: the visible rows and one screen height
+  // above and below. All rows have one height, so each position comes from the row index.
+  let listScrollTop = $state(0);
+  let listHeight = $state(0);
+  let rowHeight = $state(40);
+  let rowWindow = $derived.by(() => {
+    const count = visibleEmails.length;
+    // Before the list is measured (and on the server), render every loaded row.
+    if (listHeight === 0) return { start: 0, end: count };
+    return {
+      start: Math.max(0, Math.floor((listScrollTop - listHeight) / rowHeight)),
+      end: Math.min(count, Math.ceil((listScrollTop + 2 * listHeight) / rowHeight)),
+    };
+  });
+  // Rows are taller on small screens, so measure a rendered row when the layout changes.
+  $effect(() => {
+    void [listHeight, visibleEmails.length];
+    const row = untrack(() => messageList)?.querySelector<HTMLElement>('.message');
+    if (row && row.offsetHeight > 0) rowHeight = row.offsetHeight;
+  });
+  // Load the next page when the rendered rows reach the end of the loaded rows.
+  $effect(() => {
+    if (data.hasMore && listHeight > 0 && rowWindow.end >= visibleEmails.length) {
+      untrack(() => (pageCount += 1));
+    }
+  });
+
   // Keep the rows on screen in place when rows above them are added or removed, for example
   // when new mail arrives. Safari has no native scroll anchoring, so this is done here: each
   // scroll records the top visible row, and each list change scrolls that row back into place.
-  let scrollAnchor: { id: string; offset: number } | null = null;
+  let scrollAnchor: { id: number; offset: number } | null = null;
+  function handleListScroll() {
+    if (!messageList) return;
+    listScrollTop = messageList.scrollTop;
+    recordScrollAnchor();
+  }
   function recordScrollAnchor() {
     const list = messageList;
     if (!list || list.scrollTop === 0) {
       scrollAnchor = null;
       return;
     }
-    const row = [...list.querySelectorAll<HTMLElement>('.message')].find(
-      (item) => item.offsetTop + item.offsetHeight > list.scrollTop
-    );
-    scrollAnchor = row?.dataset.emailId
-      ? { id: row.dataset.emailId, offset: row.offsetTop - list.scrollTop }
-      : null;
+    const index = Math.floor(list.scrollTop / rowHeight);
+    const email = visibleEmails[index];
+    scrollAnchor = email ? { id: email.id, offset: index * rowHeight - list.scrollTop } : null;
   }
   // A new filter, search, or account shows a different list, so it starts at the top.
   $effect.pre(() => {
     void [activeFilter, search, selectedAccount];
     scrollAnchor = null;
+    listScrollTop = 0;
     untrack(() => messageList?.scrollTo({ top: 0 }));
   });
   $effect(() => {
@@ -527,19 +564,33 @@
       const list = messageList;
       const anchor = scrollAnchor;
       if (!list || !anchor) return;
-      const row = list.querySelector<HTMLElement>(`[data-email-id="${anchor.id}"]`);
-      if (row) list.scrollTop = row.offsetTop - anchor.offset;
+      const index = visibleEmails.findIndex((email) => email.id === anchor.id);
+      if (index >= 0) list.scrollTop = index * rowHeight - anchor.offset;
+      listScrollTop = list.scrollTop;
       recordScrollAnchor();
     });
   });
 
   // Keep the selected row visible when J and K move the selection.
   $effect(() => {
-    if (selectedId === null || !messageList) return;
-    const row = messageList.querySelector<HTMLElement>(`[data-email-id="${selectedId}"]`);
-    row?.scrollIntoView({ block: 'nearest' });
-    // When a row has focus, focus follows the selection.
-    if (row && document.activeElement?.closest('.message')) row.focus({ preventScroll: true });
+    const id = selectedId;
+    const list = messageList;
+    if (id === null || !list) return;
+    untrack(() => {
+      const index = visibleEmails.findIndex((email) => email.id === id);
+      if (index < 0) return;
+      const top = index * rowHeight;
+      if (top < list.scrollTop) list.scrollTop = top;
+      else if (top + rowHeight > list.scrollTop + list.clientHeight)
+        list.scrollTop = top + rowHeight - list.clientHeight;
+      listScrollTop = list.scrollTop;
+      // When a row has focus, focus follows the selection.
+      if (document.activeElement?.closest('.message')) {
+        void tick().then(() =>
+          list.querySelector<HTMLElement>(`[data-email-id="${id}"]`)?.focus({ preventScroll: true })
+        );
+      }
+    });
   });
 
   $effect(() => {
@@ -652,7 +703,7 @@
         {#if !showCategories}
           <div class="mail-tabs">
             <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
-              >All mail <small>{emails.length}</small></button
+              >All mail <small>{filterCounts.all ?? 0}</small></button
             ><button
               class:tab-active={activeFilter === 'important'}
               onclick={() => selectFilter('important')}>Important</button
@@ -668,11 +719,20 @@
       {#if data.query}<p class="search-summary">
           Search results · Best match first · Includes archived mail
         </p>{/if}
-      <div class="message-list" bind:this={messageList} onscroll={recordScrollAnchor}>
+      <div
+        class="message-list"
+        bind:this={messageList}
+        bind:clientHeight={listHeight}
+        onscroll={handleListScroll}
+      >
         {#if visibleEmails.length > 0}
-          <ul aria-label="Messages">
-            {#each visibleEmails as email (email.id)}
-              <li>
+          <ul
+            aria-label="Messages"
+            style:padding-top="{rowWindow.start * rowHeight}px"
+            style:padding-bottom="{(visibleEmails.length - rowWindow.end) * rowHeight}px"
+          >
+            {#each visibleEmails.slice(rowWindow.start, rowWindow.end) as email, index (email.id)}
+              <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
                 <a
                   class="message"
                   href={mailboxHref({ message: email.id })}
@@ -713,14 +773,14 @@
             <h3>
               {data.accounts.length === 0
                 ? 'No accounts yet'
-                : data.emails.length === 0
+                : !data.query && (filterCounts.all ?? 0) === 0
                   ? 'No downloaded email'
                   : 'No messages here'}
             </h3>
             <p>
               {data.accounts.length === 0
                 ? 'Connect an account to see your mail.'
-                : data.emails.length === 0
+                : !data.query && (filterCounts.all ?? 0) === 0
                   ? 'Messages will appear after your account syncs.'
                   : 'Try another search or category.'}
             </p>

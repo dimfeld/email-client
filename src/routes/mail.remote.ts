@@ -8,13 +8,18 @@ import {
   listCalendars,
   listCalendarEventsBetween,
   listCategories,
-  listEmailSummaries,
   listRemoteImageRules,
 } from '$lib/server/db';
-import { searchEmailSummaries, SearchQueryError } from '$lib/server/email-search';
+import { SearchQueryError } from '$lib/server/email-search';
+import { listMail, type MailList } from '$lib/server/mail-list';
 
 const accountInput = z.string().nullable();
-const listInput = z.object({ account: accountInput, search: z.string() });
+const listInput = z.object({
+  account: accountInput,
+  search: z.string(),
+  filter: z.string(),
+  limit: z.number().int().positive(),
+});
 const eventsInput = z.object({ account: accountInput, day: z.string().refine(isDateKey) });
 const messageInput = z.object({ account: accountInput, id: z.number().int().positive() });
 
@@ -37,18 +42,18 @@ export const getMailEvents = query(eventsInput, ({ account, day }) =>
   )
 );
 
-export const getMailList = query(listInput, ({ account, search }) => {
-  const database = getDatabase();
+export const getMailList = query(listInput, ({ account, search, filter, limit }) => {
   try {
-    return {
-      emails: search
-        ? searchEmailSummaries(database, search, account ?? undefined)
-        : listEmailSummaries(database, account ?? undefined),
-      searchError: null as string | null,
-    };
+    const list = listMail(getDatabase(), { account: account ?? undefined, search, filter, limit });
+    return { ...list, searchError: null as string | null };
   } catch (error) {
     if (!(error instanceof SearchQueryError)) throw error;
-    return { emails: [] as ReturnType<typeof listEmailSummaries>, searchError: error.message };
+    return {
+      emails: [] as MailList['emails'],
+      hasMore: false,
+      counts: {} as MailList['counts'],
+      searchError: error.message,
+    };
   }
 });
 

@@ -93,15 +93,18 @@ export function parseSearchQuery(query: string) {
   };
 }
 
-function searchEmailRows(
-  database: DatabaseSync,
-  query: string,
-  account?: string,
-  page?: { offset: number; limit: number },
-  summary = false
-) {
+/** The FROM, WHERE, and ORDER BY parts of a search, for callers that add filters or paging. */
+export type EmailSource = {
+  from: string;
+  where: string[];
+  params: SQLInputValue[];
+  orderBy: string;
+};
+
+/** Returns null when the query has no searchable terms. */
+export function searchEmailSource(query: string, account?: string): EmailSource | null {
   const parsed = parseSearchQuery(query);
-  if (parsed.empty) return [];
+  if (parsed.empty) return null;
   const where = ['e.deleted_at IS NULL'];
   const params: SQLInputValue[] = [];
   if (account) {
@@ -123,11 +126,29 @@ function searchEmailRows(
       params.push(Date.parse(`${value}T00:00:00Z`));
     }
   }
+  return {
+    from: `emails e${parsed.match ? ' JOIN email_fts ON email_fts.rowid = e.id' : ''}`,
+    where,
+    params,
+    orderBy: `${parsed.match ? 'bm25(email_fts), ' : ''}email_search_date(e.message_date) DESC, e.id DESC`,
+  };
+}
+
+function searchEmailRows(
+  database: DatabaseSync,
+  query: string,
+  account?: string,
+  page?: { offset: number; limit: number },
+  summary = false
+) {
+  const source = searchEmailSource(query, account);
+  if (!source) return [];
+  const params = [...source.params];
   const pagination = page ? ' LIMIT ? OFFSET ?' : '';
   if (page) params.push(page.limit, page.offset);
   return database
-    .prepare(`SELECT ${summary ? emailSummaryColumns : 'e.*'} FROM emails e ${parsed.match ? 'JOIN email_fts ON email_fts.rowid = e.id' : ''}
-		WHERE ${where.join(' AND ')} ORDER BY ${parsed.match ? 'bm25(email_fts), ' : ''}email_search_date(e.message_date) DESC, e.id DESC${pagination}`)
+    .prepare(`SELECT ${summary ? emailSummaryColumns : 'e.*'} FROM ${source.from}
+		WHERE ${source.where.join(' AND ')} ORDER BY ${source.orderBy}${pagination}`)
     .all(...params);
 }
 
