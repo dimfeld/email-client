@@ -837,7 +837,6 @@
             bind:this={readingContent}
             {@attach markReadOnOpen(selectedEmail)}
             class="reading-content"
-            class:stale={$effect.pending() > 0}
             aria-busy={$effect.pending() > 0}
             tabindex="-1"
           >
@@ -1463,11 +1462,6 @@
     padding: 24px;
     overflow-y: auto;
     overflow-wrap: anywhere;
-  }
-  /* The old message stays visible, dimmed, while the next one loads. */
-  .reading-content.stale {
-    opacity: 0.5;
-    transition: opacity var(--motion-fast) ease-out;
   }
   .detail-pane {
     position: relative;
