@@ -31,8 +31,12 @@ describe('configurable Jev categories', () => {
       let categories: Category[] = [
         { id: 'custom', name: 'Travel', description: 'Flights and hotels.', level: 'important' },
       ];
-      const classify = createJevClassifier('test-key', () => categories);
-      const result = await classify({ id: 'message' });
+      const classify = createJevClassifier(
+        'test-key',
+        () => categories,
+        () => 'Casey Morgan'
+      );
+      const result = await classify({ id: 'message' }, 'casey@example.com');
       expect(result.category).toBe('custom');
       expect(result.importance).toBeNull();
       expect(result).toMatchObject({
@@ -41,6 +45,24 @@ describe('configurable Jev categories', () => {
         hasReminder: false,
         reminderProbability: 0.3,
       });
+      expect(request.mock.calls[0][0].state).toMatchObject({
+        ownerName: 'Casey Morgan',
+        ownerEmail: 'casey@example.com',
+      });
+      expect(request.mock.calls[0][0].questions.actionItem).toEqual(
+        expect.objectContaining({
+          criteria: expect.objectContaining({
+            false: expect.stringContaining('clearly addressed to another person'),
+          }),
+        })
+      );
+      expect(request.mock.calls[0][0].questions.reminder).toEqual(
+        expect.objectContaining({
+          criteria: expect.objectContaining({
+            false: expect.stringContaining('clearly addressed only to another person'),
+          }),
+        })
+      );
       expect(Object.keys(request.mock.calls[0][0].questions)).toEqual([
         'category',
         'actionItem',

@@ -20,7 +20,7 @@ describe('OpenAI email extraction', () => {
       } as never;
     });
     const generate = generateMock as unknown as typeof generateObject;
-    const extract = createOpenAIEmailExtractor('test-key', generate);
+    const extract = createOpenAIEmailExtractor('test-key', generate, () => 'Casey Morgan');
 
     const result = await extract!(
       {
@@ -29,7 +29,8 @@ describe('OpenAI email extraction', () => {
         subject: 'Plan',
         bodyText: 'Please reply. The plan starts September 25.',
       },
-      { actionItems: false, reminders: true }
+      { actionItems: false, reminders: true },
+      'casey@example.com'
     );
 
     expect(result).toEqual({
@@ -47,11 +48,13 @@ describe('OpenAI email extraction', () => {
       'Each returned item must be self-contained in its title and details'
     );
     expect(String(request?.instructions)).toContain('Reply to the email with feedback');
+    expect(String(request?.instructions)).toContain('clearly addressed to another person');
     expect(String(request?.instructions)).toContain(
       'If the email does not provide enough context to write a self-contained item, omit that item'
     );
     expect(JSON.parse(String(request?.prompt))).toMatchObject({
       extract: { actionItems: false, reminders: true },
+      owner: { name: 'Casey Morgan', email: 'casey@example.com' },
       email: { subject: 'Plan' },
     });
   });

@@ -13,6 +13,8 @@ import {
   listCalendarEventsBetween,
   listEmailSummaries,
   listEmails,
+  populateAccountDisplayName,
+  setAccountDisplayName,
   upsertAccount,
   upsertEmails,
 } from './db';
@@ -116,6 +118,24 @@ describe('email classification storage', () => {
 });
 
 describe('Google OAuth account migration', () => {
+  it('adds a name to existing accounts and keeps a name set by the user', () => {
+    directory = mkdtempSync(join(tmpdir(), 'email-check-account-name-migration-'));
+    const path = join(directory, 'test.sqlite');
+    database = createDatabase(path);
+    upsertAccount(database, { email: 'owner@example.com', refreshToken: 'token' });
+    database.exec('ALTER TABLE accounts DROP COLUMN display_name');
+    database.close();
+
+    database = createDatabase(path);
+    expect(listAccounts(database)[0].displayName).toBeNull();
+    populateAccountDisplayName(database, 'owner@example.com', 'Google Name');
+    expect(listAccounts(database)[0].displayName).toBe('Google Name');
+    setAccountDisplayName(database, 'owner@example.com', 'Preferred Name');
+    upsertAccount(database, { email: 'owner@example.com', displayName: 'Changed Google Name' });
+    populateAccountDisplayName(database, 'owner@example.com', 'Changed Google Name');
+    expect(listAccounts(database)[0].displayName).toBe('Preferred Name');
+  });
+
   it('adds refresh-token storage to a database created by the gog integration', () => {
     directory = mkdtempSync(join(tmpdir(), 'email-check-oauth-migration-'));
     const path = join(directory, 'test.sqlite');

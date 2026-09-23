@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { getDatabase, listAccounts } from './db';
-import { googleApiRequest } from './google-api';
+import { getDatabase, listAccounts, populateAccountDisplayName } from './db';
+import { fetchGoogleAccountName, googleApiRequest } from './google-api';
 import { syncGoogleAccount, type GoogleSyncOptions } from './google-sync';
 
 // Match the existing Gmail reconciliation interval so Google data has one refresh cadence.
@@ -34,6 +34,14 @@ export async function syncGoogleData({
   const results = await Promise.all(
     accounts.map(async (account) => {
       try {
+        if (account.displayName === null) {
+          try {
+            const name = await fetchGoogleAccountName(account, request);
+            if (name) populateAccountDisplayName(database, account.email, name);
+          } catch {
+            // A saved grant might not allow access to the Google profile.
+          }
+        }
         const result = await syncGoogleAccount(database, account, request, syncOptions);
         return { ok: true, deferred: Boolean(result.deferred) };
       } catch {

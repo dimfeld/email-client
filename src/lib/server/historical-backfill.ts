@@ -236,7 +236,7 @@ async function runStep({
               database,
               account.email,
               id,
-              await (classify ?? createJevClassifier())(email)
+              await (classify ?? createJevClassifier())(email, account.email)
             );
           } catch (error) {
             saveClassificationError(database, account.email, id, error);

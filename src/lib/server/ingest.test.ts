@@ -89,6 +89,29 @@ describe('Gmail ingestion', () => {
     expect(email.importanceConfidence).toBe(0.9);
   });
 
+  it('passes the account to classification and extraction', async () => {
+    database = createDatabase(':memory:');
+    const seen: string[] = [];
+    await ingestGmailPayload(
+      database,
+      {
+        source: 'gmail',
+        account: 'owner@example.com',
+        deletedMessageIds: [],
+        messages: [{ id: 'message', subject: 'Reply requested' }],
+      },
+      async (email, account) => {
+        seen.push(`classify:${account}`);
+        return classify(email);
+      },
+      async (_email, _targets, account) => {
+        seen.push(`extract:${account}`);
+        return { actionItems: [], reminders: [], model: 'test' };
+      }
+    );
+    expect(seen).toEqual(['classify:owner@example.com', 'extract:owner@example.com']);
+  });
+
   it('extracts and stores the action items and reminders selected by Jev', async () => {
     database = createDatabase(':memory:');
     let targets: Parameters<EmailExtractor>[1] | undefined;

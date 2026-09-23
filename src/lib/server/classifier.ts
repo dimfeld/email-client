@@ -1,8 +1,11 @@
 import { choice, noul, TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Category, Classification, IncomingEmail } from './types';
-import { getDatabase, listCategories } from './db';
+import { getAccountDisplayName, getDatabase, listCategories } from './db';
 
-export type EmailClassifier = (email: IncomingEmail) => Promise<Classification>;
+export type EmailClassifier = (
+  email: IncomingEmail,
+  accountEmail?: string
+) => Promise<Classification>;
 
 export const JEV_BODY_MAX_LENGTH = 16_000;
 
@@ -22,19 +25,21 @@ const actionItemQuestion = noul(
   {
     true: 'Choose true only when the email gives the owner a concrete, owner-relevant task, decision, or follow-up that they are likely to track as a todo. The requested action and its subject should be clear enough to identify a specific task. A request or question alone is not enough.',
     false:
-      'Choose false for routine questions or requests, generic requests to reply or follow up, optional suggestions, marketing calls to action, notifications, information that only needs reading, tasks for someone else, or anything the owner is not likely to add as a specific todo.',
+      'Choose false for routine questions or requests, generic requests to reply or follow up, optional suggestions, marketing calls to action, notifications, information that only needs reading, tasks for someone else, or anything the owner is not likely to add as a specific todo. Use ownerName and ownerEmail in the state to identify the owner. An ask clearly addressed to another person is not an action item for the owner, even if the owner received the email. Do not exclude an ask when its addressee is unclear.',
   }
 );
 
 const reminderQuestion = noul('Is this email likely to make the owner add a specific reminder?', {
   true: 'Choose true only when the email contains a concrete, owner-relevant future event, deadline, appointment, renewal, expiration, or follow-up that the owner is likely to track with a reminder. The reminder topic and timing should be clear enough to identify a specific reminder.',
   false:
-    'Choose false for incidental dates, historical information, general schedules, marketing offers, newsletters, routine notifications, or vague future information that the owner is not likely to track as a specific reminder.',
+    'Choose false for incidental dates, historical information, general schedules, marketing offers, newsletters, routine notifications, or vague future information that the owner is not likely to track as a specific reminder. Use ownerName and ownerEmail in the state to identify the owner. A task or deadline clearly addressed only to another person is not a reminder for the owner.',
 });
 
 export function createJevClassifier(
   apiKey = process.env.TYPESAFE_API_KEY,
-  getCategories: () => Category[] = () => listCategories(getDatabase())
+  getCategories: () => Category[] = () => listCategories(getDatabase()),
+  getOwnerName: (accountEmail: string) => string | null = (accountEmail) =>
+    getAccountDisplayName(getDatabase(), accountEmail)
 ): EmailClassifier {
   if (!apiKey) throw new Error('Set TYPESAFE_API_KEY before classifying email.');
   const client = new TypeSafeClient({
@@ -42,7 +47,7 @@ export function createJevClassifier(
     defaultModel: process.env.TYPESAFE_MODEL ?? 'jev-latest',
   });
 
-  return async (email) => {
+  return async (email, accountEmail) => {
     const categories = getCategories();
     if (categories.length === 0)
       throw new Error('Add a category in Settings before classifying email.');
@@ -50,6 +55,8 @@ export function createJevClassifier(
       categories.map((category) => [category.id, `${category.name}: ${category.description}`])
     );
     const state = {
+      ownerName: accountEmail ? (getOwnerName(accountEmail) ?? '') : '',
+      ownerEmail: accountEmail ?? '',
       from: email.from ?? '',
       to: email.to ?? '',
       subject: email.subject ?? '',

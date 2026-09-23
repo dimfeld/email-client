@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createDatabase, listContacts, upsertAccount } from './db';
+import { createDatabase, listAccounts, listContacts, upsertAccount } from './db';
 import type { GoogleAccount } from './google-api';
 import { syncGoogleData } from './google-auto-sync';
 
@@ -11,6 +11,7 @@ describe('automatic Google data sync', () => {
     upsertAccount(database, { email: 'disconnected@example.com' });
     const request = async <T>(account: GoogleAccount, url: string): Promise<T> => {
       if (account.email === 'bad@example.com') throw new Error('Unavailable');
+      if (url.endsWith('/people/me')) return { names: [{ displayName: 'Good Owner' }] } as T;
       if (url.includes('connections'))
         return {
           connections: [{ resourceName: 'people/one', names: [{ displayName: 'One' }] }],
@@ -24,6 +25,9 @@ describe('automatic Google data sync', () => {
     expect(listContacts(database).map((contact) => contact.accountEmail)).toEqual([
       'good@example.com',
     ]);
+    expect(
+      listAccounts(database).find((account) => account.email === 'good@example.com')?.displayName
+    ).toBe('Good Owner');
     database.close();
   });
 });

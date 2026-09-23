@@ -53,6 +53,7 @@ describe('Google OAuth setup', () => {
       expect(params.get('redirect_uri')).toBe('http://127.0.0.1:3000/auth/google/callback');
       expect(params.get('code_challenge_method')).toBe('S256');
       expect(params.get('code_challenge')).toBeTruthy();
+      expect(params.get('scope')).toContain('https://www.googleapis.com/auth/userinfo.profile');
       expect(request.codeVerifier).toBeTruthy();
     } finally {
       rmSync(directory, { recursive: true, force: true });

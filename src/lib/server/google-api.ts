@@ -9,6 +9,7 @@ export const GOOGLE_OAUTH_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile',
 ];
 
 export type GoogleAccount = { email: string; refreshToken: string | null };
@@ -218,15 +219,31 @@ export async function createGoogleAuthorizationRequest(
 export async function exchangeGoogleAuthorizationCode(
   code: string,
   codeVerifier?: string
-): Promise<{ email: string; refreshToken: string | null }> {
+): Promise<{ email: string; name: string | null; refreshToken: string | null }> {
   const client = createGoogleOAuthClient();
   const { tokens } = await client.getToken({ code, codeVerifier });
   client.setCredentials(tokens);
-  const response = await client.request<{ email?: string }>({
+  const response = await client.request<{ email?: string; name?: string }>({
     url: 'https://www.googleapis.com/oauth2/v2/userinfo',
   });
   if (!response.data.email) throw new Error('Google did not return the account email address.');
-  return { email: response.data.email, refreshToken: tokens.refresh_token ?? null };
+  return {
+    email: response.data.email,
+    name: response.data.name?.trim() || null,
+    refreshToken: tokens.refresh_token ?? null,
+  };
+}
+
+export async function fetchGoogleAccountName(
+  account: GoogleAccount,
+  request: typeof googleApiRequest = googleApiRequest
+): Promise<string | null> {
+  const profile = await request<{ names?: Array<{ displayName?: string }> }>(
+    account,
+    'https://people.googleapis.com/v1/people/me',
+    { params: { personFields: 'names' } }
+  );
+  return profile.names?.find((name) => name.displayName?.trim())?.displayName?.trim() ?? null;
 }
 
 function messageFromError(error: unknown): { message: string; status: number | undefined } {

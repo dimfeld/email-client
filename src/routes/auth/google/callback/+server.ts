@@ -29,6 +29,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
   }
   upsertAccount(getDatabase(), {
     email: credential.email,
+    displayName: credential.name,
     refreshToken: credential.refreshToken ?? undefined,
   });
   redirect(303, '/settings?google=connected');

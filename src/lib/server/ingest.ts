@@ -23,7 +23,7 @@ export async function ingestGmailPayload(
   let failures = 0;
   for (const email of pending) {
     try {
-      const classification = await classify(email);
+      const classification = await classify(email, payload.account);
       saveClassification(database, payload.account, email.id, classification);
     } catch (error) {
       failures += 1;
@@ -34,7 +34,11 @@ export async function ingestGmailPayload(
   if (extract) {
     for (const pendingExtraction of listEmailsNeedingExtraction(database, payload.account)) {
       try {
-        const extraction = await extract(pendingExtraction.email, pendingExtraction.targets);
+        const extraction = await extract(
+          pendingExtraction.email,
+          pendingExtraction.targets,
+          payload.account
+        );
         saveEmailExtraction(database, payload.account, pendingExtraction.email.id, extraction);
         extracted += 1;
       } catch (error) {

@@ -30,6 +30,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS accounts (
   email TEXT PRIMARY KEY,
+  display_name TEXT,
   google_refresh_token TEXT,
   topic TEXT,
   subscription TEXT,
@@ -248,6 +249,9 @@ export function createDatabase(path = defaultPath): DatabaseSync {
   const accountColumns = database.prepare('PRAGMA table_info(accounts)').all() as Array<{
     name: string;
   }>;
+  if (!accountColumns.some((column) => column.name === 'display_name')) {
+    database.exec('ALTER TABLE accounts ADD COLUMN display_name TEXT');
+  }
   if (!accountColumns.some((column) => column.name === 'history_id')) {
     database.exec('ALTER TABLE accounts ADD COLUMN history_id TEXT');
   }
@@ -417,6 +421,7 @@ export function upsertAccount(
   database: DatabaseSync,
   account: {
     email: string;
+    displayName?: string | null;
     refreshToken?: string;
     topic?: string | null;
     subscription?: string | null;
@@ -425,16 +430,18 @@ export function upsertAccount(
   const now = new Date().toISOString();
   database
     .prepare(
-      `INSERT INTO accounts (email, google_refresh_token, topic, subscription, created_at, updated_at)
-			 VALUES ($email, $refreshToken, $topic, $subscription, $now, $now)
+      `INSERT INTO accounts (email, display_name, google_refresh_token, topic, subscription, created_at, updated_at)
+			 VALUES ($email, $displayName, $refreshToken, $topic, $subscription, $now, $now)
 			 ON CONFLICT(email) DO UPDATE SET
 			   google_refresh_token = COALESCE(excluded.google_refresh_token, accounts.google_refresh_token),
+         display_name = COALESCE(accounts.display_name, excluded.display_name),
          topic = COALESCE(excluded.topic, accounts.topic),
          subscription = COALESCE(excluded.subscription, accounts.subscription),
          updated_at = excluded.updated_at`
     )
     .run({
       $email: account.email,
+      $displayName: account.displayName?.trim() || null,
       $refreshToken: account.refreshToken ?? null,
       $topic: account.topic ?? null,
       $subscription: account.subscription ?? null,
@@ -443,8 +450,38 @@ export function upsertAccount(
   publishStateChange('accounts');
 }
 
+export function setAccountDisplayName(database: DatabaseSync, email: string, name: string): void {
+  const result = database
+    .prepare('UPDATE accounts SET display_name = ?, updated_at = ? WHERE email = ?')
+    .run(name.trim(), new Date().toISOString(), email);
+  if (!result.changes) throw new Error('The Google account was not found.');
+  publishStateChange('accounts');
+}
+
+export function populateAccountDisplayName(
+  database: DatabaseSync,
+  email: string,
+  name: string
+): void {
+  if (!name.trim()) return;
+  const result = database
+    .prepare(
+      'UPDATE accounts SET display_name = ?, updated_at = ? WHERE email = ? AND display_name IS NULL'
+    )
+    .run(name.trim(), new Date().toISOString(), email);
+  if (result.changes) publishStateChange('accounts');
+}
+
+export function getAccountDisplayName(database: DatabaseSync, email: string): string | null {
+  const row = database.prepare('SELECT display_name FROM accounts WHERE email = ?').get(email) as
+    | { display_name: string | null }
+    | undefined;
+  return row?.display_name ?? null;
+}
+
 export function listAccounts(database: DatabaseSync): Array<{
   email: string;
+  displayName: string | null;
   refreshToken: string | null;
   topic: string | null;
   subscription: string | null;
@@ -456,11 +493,12 @@ export function listAccounts(database: DatabaseSync): Array<{
 }> {
   const rows = database
     .prepare(
-      'SELECT email, google_refresh_token, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
+      'SELECT email, display_name, google_refresh_token, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
     )
     .all() as Array<Record<string, unknown>>;
   return rows.map((row) => ({
     email: String(row.email),
+    displayName: row.display_name === null ? null : String(row.display_name),
     refreshToken: row.google_refresh_token === null ? null : String(row.google_refresh_token),
     topic: row.topic === null ? null : String(row.topic),
     subscription: row.subscription === null ? null : String(row.subscription),

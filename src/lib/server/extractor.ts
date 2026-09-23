@@ -2,6 +2,7 @@ import { createOpenAI, type OpenAIResponsesProviderOptions } from '@ai-sdk/opena
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import type { EmailExtraction, IncomingEmail } from './types';
+import { getAccountDisplayName, getDatabase } from './db';
 
 export type ExtractionTargets = {
   actionItems: boolean;
@@ -10,7 +11,8 @@ export type ExtractionTargets = {
 
 export type EmailExtractor = (
   email: IncomingEmail,
-  targets: ExtractionTargets
+  targets: ExtractionTargets,
+  accountEmail?: string
 ) => Promise<EmailExtraction>;
 
 function isFlexResourceUnavailableError(error: unknown): boolean {
@@ -67,12 +69,14 @@ const extractionSchema = z.object({
 
 export function createOpenAIEmailExtractor(
   apiKey = process.env.OPENAI_API_KEY,
-  generate: typeof generateObject = generateObject
+  generate: typeof generateObject = generateObject,
+  getOwnerName: (accountEmail: string) => string | null = (accountEmail) =>
+    getAccountDisplayName(getDatabase(), accountEmail)
 ): EmailExtractor | null {
   if (!apiKey) return null;
   const openai = createOpenAI({ apiKey });
 
-  return async (email, targets) => {
+  return async (email, targets, accountEmail) => {
     const generateExtraction = (serviceTier: 'flex' | 'auto') =>
       generate({
         model: openai.responses('gpt-6-luna'),
@@ -89,9 +93,14 @@ export function createOpenAIEmailExtractor(
 Each returned item must be self-contained in its title and details. Write it so a person can understand what it is without seeing the email. Include concrete context from the email, such as names, the subject, project, event, product, deadline, or reason. Do not use generic text such as "Reply to the email with feedback", "Follow up", or "Remember this" when it does not identify the subject. If the email does not provide enough context to write a self-contained item, omit that item.
 Return an action item only when the email states what the owner must do, decide, reply to, review, schedule, or follow up on. Return a reminder only when the email states what the owner should remember and why. Do not rely on another message, a missing thread, an attachment, a link, or outside context.
 Return action items only when action item extraction is requested. Return reminders only when reminder extraction is requested.
+Use the owner's name and email address to decide who an ask is for. Omit action items and task reminders clearly addressed to another person, even when the owner received the email. If the addressee is unclear, use the other evidence in the message.
 Use null for a date or time that the email does not state clearly.`,
         prompt: JSON.stringify({
           extract: targets,
+          owner: {
+            name: accountEmail ? getOwnerName(accountEmail) : null,
+            email: accountEmail ?? null,
+          },
           email: {
             from: email.from ?? '',
             to: email.to ?? '',
