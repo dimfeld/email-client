@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import ComposerHost from '$lib/components/ComposerHost.svelte';
+  import Toaster from '$lib/components/Toaster.svelte';
   import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
   import { onMount } from 'svelte';
@@ -47,3 +48,4 @@
 
 {@render children()}
 <ComposerHost data={data.composer} />
+<Toaster />

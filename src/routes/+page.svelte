@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
+  import { showToast } from '$lib/toast.svelte';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import { enhance } from '$app/forms';
@@ -369,6 +370,7 @@
     async ({ result, update }) => {
       await update({ invalidateAll: false });
       if (result.type === 'success') {
+        if (typeof result.data?.message === 'string') showToast(result.data.message);
         updateMailboxUrl({ message: null });
         await getMailList({ account: selectedAccount, search }).refresh();
       }
@@ -379,6 +381,7 @@
     async ({ result, update }) => {
       await update({ invalidateAll: false });
       if (result.type === 'success') {
+        if (typeof result.data?.message === 'string') showToast(result.data.message);
         await getRemoteImageRules().refresh();
         remoteImagesFor = Number(formData.get('id'));
       }
