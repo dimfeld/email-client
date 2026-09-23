@@ -1,5 +1,6 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
 import { applyGmailThreadAction } from '$lib/server/gmail-actions';
+import { cancelSnooze, snoozeThread, snoozeWorker } from '$lib/server/snooze';
 import {
   getDatabase,
   getEmail,
@@ -11,6 +12,23 @@ import { senderAddress, senderDomain } from '$lib/remote-images';
 import type { GmailMessageAction } from '$lib/server/gmail-actions';
 import type { Actions } from './$types';
 
+// The messages that an Undo reverses. Null when the field is missing or invalid.
+function undoIds(fields: FormData): number[] | null {
+  try {
+    const parsed: unknown = JSON.parse(String(fields.get('succeededIds') ?? 'null'));
+    return Array.isArray(parsed) && parsed.every((item) => Number.isInteger(item) && item > 0)
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function messageAccount(database: ReturnType<typeof getDatabase>, emailId: number) {
+  const email = getEmail(database, emailId);
+  return email && listAccounts(database).find((item) => item.email === email.accountEmail);
+}
+
 async function changeMessage({ request }: RequestEvent, action: GmailMessageAction) {
   const fields = await request.formData();
   const emailId = Number(fields.get('id'));
@@ -18,20 +36,12 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
     return fail(400, { error: 'The message ID is invalid.' });
 
   const database = getDatabase();
-  const undoIds = fields.get('succeededIds');
   let succeededIds: number[] | undefined;
-  if (undoIds && (action === 'unarchive' || action === 'undelete')) {
-    try {
-      const parsed: unknown = JSON.parse(String(undoIds));
-      if (!Array.isArray(parsed) || !parsed.every((item) => Number.isInteger(item) && item > 0))
-        return fail(400, { error: 'The Undo message IDs are invalid.' });
-      succeededIds = parsed as number[];
-    } catch {
-      return fail(400, { error: 'The Undo message IDs are invalid.' });
-    }
+  if (action === 'unarchive' || action === 'undelete') {
+    succeededIds = undoIds(fields) ?? undefined;
+    if (!succeededIds)
+      return fail(400, { error: 'Undo requires the messages changed by the original action.' });
   }
-  if ((action === 'unarchive' || action === 'undelete') && !succeededIds)
-    return fail(400, { error: 'Undo requires the messages changed by the original action.' });
   const targets = getThreadActionTargets(database, emailId, action, succeededIds);
   if (!targets.length) return fail(404, { error: 'The thread is no longer available.' });
   const account = listAccounts(database).find((item) => item.email === targets[0].accountEmail);
@@ -69,6 +79,51 @@ export const actions: Actions = {
   markRead: (event) => changeMessage(event, 'markRead'),
   star: (event) => changeMessage(event, 'star'),
   unstar: (event) => changeMessage(event, 'unstar'),
+  snooze: async ({ request }) => {
+    const fields = await request.formData();
+    const emailId = Number(fields.get('id'));
+    const until = Date.parse(String(fields.get('until') ?? ''));
+    if (!Number.isInteger(emailId) || emailId <= 0)
+      return fail(400, { error: 'The message ID is invalid.' });
+    if (!Number.isFinite(until) || until <= Date.now())
+      return fail(400, { error: 'Choose a snooze time in the future.' });
+    const database = getDatabase();
+    const account = messageAccount(database, emailId);
+    if (!account) return fail(404, { error: 'The thread is no longer available.' });
+    try {
+      const result = await snoozeThread(database, account, emailId, until);
+      if (result.total === 0) return fail(409, { error: 'The thread is not in the inbox.' });
+      if (result.error && result.succeededIds.length === 0)
+        return fail(502, { error: result.error });
+      snoozeWorker().wake();
+      return {
+        message: result.error
+          ? `${result.succeededIds.length} of ${result.total} messages snoozed.`
+          : 'Thread snoozed.',
+        succeededIds: result.succeededIds,
+        error: result.error,
+      };
+    } catch (error) {
+      return fail(502, { error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  unsnooze: async ({ request }) => {
+    const fields = await request.formData();
+    const emailId = Number(fields.get('id'));
+    const succeededIds = undoIds(fields);
+    if (!Number.isInteger(emailId) || emailId <= 0 || !succeededIds)
+      return fail(400, { error: 'Undo requires the messages changed by the snooze.' });
+    const database = getDatabase();
+    const account = messageAccount(database, emailId);
+    if (!account) return fail(404, { error: 'The thread is no longer available.' });
+    try {
+      const result = await cancelSnooze(database, account, emailId, succeededIds);
+      if (result.error) return fail(502, { error: result.error });
+      return { message: 'Message moved back to the inbox.' };
+    } catch (error) {
+      return fail(502, { error: error instanceof Error ? error.message : String(error) });
+    }
+  },
   saveRemoteImageRule: async ({ request }) => {
     const fields = await request.formData();
     const id = Number(fields.get('id'));

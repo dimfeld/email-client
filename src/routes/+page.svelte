@@ -7,6 +7,8 @@
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import SwipeRow, { type SwipeActions } from '$lib/components/SwipeRow.svelte';
+  import SnoozeDialog from '$lib/components/SnoozeDialog.svelte';
+  import { formatSnoozeTime } from '$lib/snooze';
   import type { SwipeSide } from '$lib/swipe';
   import { deserialize, enhance } from '$app/forms';
   import { goto, onNavigate } from '$app/navigation';
@@ -448,6 +450,7 @@
         return;
       }
     }
+    if (snoozeTarget) return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     if (event.key === '`' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat) {
       event.preventDefault();
@@ -581,16 +584,19 @@
     | 'undelete'
     | 'markRead'
     | 'star'
-    | 'unstar';
+    | 'unstar'
+    | 'snooze'
+    | 'unsnooze';
 
   async function postMessageAction(
     action: MessageAction,
     id: number,
-    succeededIds?: number[]
+    options: { succeededIds?: number[]; until?: Date } = {}
   ): Promise<ActionResult> {
     const body = new FormData();
     body.set('id', String(id));
-    if (succeededIds) body.set('succeededIds', JSON.stringify(succeededIds));
+    if (options.succeededIds) body.set('succeededIds', JSON.stringify(options.succeededIds));
+    if (options.until) body.set('until', options.until.toISOString());
     const response = await fetch(`?/${action}`, {
       method: 'POST',
       body,
@@ -620,18 +626,16 @@
     };
   }
 
+  const undoActions = { archive: 'unarchive', delete: 'undelete', snooze: 'unsnooze' } as const;
+
   async function undoMessageAction(
     id: number,
-    action: 'archive' | 'delete',
+    action: ThreadAction,
     succeededIds: number[],
     rowId: number,
     wasOpen: boolean
   ) {
-    const result = await postMessageAction(
-      action === 'archive' ? 'unarchive' : 'undelete',
-      id,
-      succeededIds
-    );
+    const result = await postMessageAction(undoActions[action], id, { succeededIds });
     if (result.type !== 'success') {
       showToast(actionError(result), { tone: 'error' });
       return;
@@ -667,8 +671,10 @@
     await runThreadAction(id, rowId, action);
   }
 
-  // Archives or deletes the thread of message `id`, which the list shows as row `rowId`.
-  async function runThreadAction(id: number, rowId: number, action: 'archive' | 'delete') {
+  type ThreadAction = 'archive' | 'delete' | 'snooze';
+
+  // Archives, deletes, or snoozes the thread of message `id`, which the list shows as row `rowId`.
+  async function runThreadAction(id: number, rowId: number, action: ThreadAction, until?: Date) {
     // When the thread is open, the next message opens after it leaves the list.
     const wasOpen =
       selectedId !== null && (selectedSummary === null || selectedSummary.id === rowId);
@@ -687,7 +693,7 @@
       return true;
     });
     if (!(await navigation)) return;
-    const result = await postMessageAction(action, id);
+    const result = await postMessageAction(action, id, { until });
     if (
       result.type === 'success' &&
       Array.isArray(result.data?.succeededIds) &&
@@ -699,7 +705,9 @@
           ? result.data.message
           : action === 'archive'
             ? 'Thread archived.'
-            : 'Thread moved to Trash.',
+            : action === 'snooze' && until
+              ? `Thread snoozed until ${formatSnoozeTime(until)}.`
+              : 'Thread moved to Trash.',
         {
           action: {
             label: 'Undo',
@@ -742,6 +750,9 @@
     });
   }
 
+  // The row that the snooze dialog is open for.
+  let snoozeTarget = $state<EmailSummary | null>(null);
+
   // The list row that shows its swipe buttons. Only one row is open at a time.
   let swipeOpen = $state<{ id: number; side: SwipeSide } | null>(null);
   function swipeActions(email: EmailSummary, canArchive: boolean, starred: boolean) {
@@ -763,11 +774,21 @@
       tone: 'star',
       run: () => void toggleStar(email),
     } as const;
+    const snooze = {
+      label: 'Snooze',
+      icon: 'clock',
+      tone: 'snooze',
+      run: () => (snoozeTarget = email),
+    } as const;
+    // Snooze returns a thread to the inbox, so it needs the same rows as Archive.
     return {
       left: (canArchive
         ? { buttons: [archive, remove], long: archive }
         : { buttons: [remove] }) satisfies SwipeActions,
-      right: { buttons: [], long: star } satisfies SwipeActions,
+      right: {
+        buttons: canArchive ? [star, snooze] : [],
+        long: star,
+      } satisfies SwipeActions,
     };
   }
 
@@ -1421,6 +1442,13 @@
         account={data.selectedAccount}
         close={() => (showChat = false)}
       />{/key}{/if}
+  {#if snoozeTarget}
+    {@const target = snoozeTarget}
+    <SnoozeDialog
+      onSnooze={(until) => void runThreadAction(target.id, target.id, 'snooze', until)}
+      onClose={() => (snoozeTarget = null)}
+    />
+  {/if}
   <!-- A click on the dialog element itself is a click on its backdrop. -->
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
   <dialog
