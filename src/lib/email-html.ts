@@ -1,5 +1,6 @@
 const compatibilityStyles = `
 html,body{margin:0;min-width:0}
+html{overflow-y:hidden!important}
 body{padding:20px;background:#fff;color:#111;overflow-wrap:anywhere}
 img{max-width:100%!important;height:auto!important}
 table{max-width:100%!important}

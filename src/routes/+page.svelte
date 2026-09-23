@@ -197,8 +197,12 @@
     try {
       // A reset lets the frame shrink. Later fits only follow content growth, such as images.
       if (reset) frame.style.height = '0px';
-      const document = frame.contentDocument;
-      if (document) frame.style.height = `${document.documentElement.scrollHeight}px`;
+      const root = frame.contentDocument?.documentElement;
+      if (!root) return;
+      frame.style.height = `${root.scrollHeight}px`;
+      // A horizontal scrollbar takes height from the frame. Add that height back.
+      const scrollbarHeight = root.scrollHeight - root.clientHeight;
+      if (scrollbarHeight > 0) frame.style.height = `${root.scrollHeight + scrollbarHeight}px`;
     } catch {
       frame.style.removeProperty('height');
     }
