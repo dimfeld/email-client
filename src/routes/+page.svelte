@@ -659,16 +659,21 @@
     return result;
   }
 
-  async function submitMessageAction(event: SubmitEvent, action: 'archive' | 'delete') {
-    event.preventDefault();
-    const id = Number(new FormData(event.currentTarget as HTMLFormElement).get('id'));
+  // The list row of the open thread that contains message `id`.
+  function openThreadRowId(id: number): number {
     const target = selectedThread.find((member) => member.id === id);
-    const rowId =
+    return (
       visibleEmails.find(
         (email) =>
           email.threadKey === target?.threadKey && email.accountEmail === target?.accountEmail
-      )?.id ?? id;
-    await runThreadAction(id, rowId, action);
+      )?.id ?? id
+    );
+  }
+
+  async function submitMessageAction(event: SubmitEvent, action: 'archive' | 'delete') {
+    event.preventDefault();
+    const id = Number(new FormData(event.currentTarget as HTMLFormElement).get('id'));
+    await runThreadAction(id, openThreadRowId(id), action);
   }
 
   type ThreadAction = 'archive' | 'delete' | 'snooze';
@@ -751,7 +756,7 @@
   }
 
   // The row that the snooze dialog is open for.
-  let snoozeTarget = $state<EmailSummary | null>(null);
+  let snoozeTarget = $state<{ id: number; rowId: number } | null>(null);
 
   // The list row that shows its swipe buttons. Only one row is open at a time.
   let swipeOpen = $state<{ id: number; side: SwipeSide } | null>(null);
@@ -778,7 +783,7 @@
       label: 'Snooze',
       icon: 'clock',
       tone: 'snooze',
-      run: () => (snoozeTarget = email),
+      run: () => (snoozeTarget = { id: email.id, rowId: email.id }),
     } as const;
     // Snooze returns a thread to the inbox, so it needs the same rows as Archive.
     return {
@@ -1313,7 +1318,18 @@
                     <button type="submit" class="icon-action" aria-label="Archive" title="Archive"
                       ><Icon name="archive" /></button
                     >
-                  </form>{/if}
+                  </form>
+                  <button
+                    type="button"
+                    class="icon-action"
+                    aria-label="Snooze"
+                    title="Snooze"
+                    onclick={() =>
+                      (snoozeTarget = {
+                        id: selectedEmail.id,
+                        rowId: openThreadRowId(selectedEmail.id),
+                      })}><Icon name="clock" /></button
+                  >{/if}
                 <form
                   bind:this={deleteForm}
                   method="POST"
@@ -1445,7 +1461,7 @@
   {#if snoozeTarget}
     {@const target = snoozeTarget}
     <SnoozeDialog
-      onSnooze={(until) => void runThreadAction(target.id, target.id, 'snooze', until)}
+      onSnooze={(until) => void runThreadAction(target.id, target.rowId, 'snooze', until)}
       onClose={() => (snoozeTarget = null)}
     />
   {/if}
