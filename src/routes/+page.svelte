@@ -415,13 +415,16 @@
       event.preventDefault();
       if (showShortcuts) showShortcuts = false;
       else {
-        const emailId = selectedEmail?.id;
-        updateMailboxUrl({ message: null });
+        const emailId = selectedEmail?.id ?? selectedId;
+        const href = mailboxHref({ message: null });
+        if (new URL(href, currentUrl).href !== currentUrl)
+          await goto(href, { keepFocus: true, noScroll: true });
+        await tick();
         if (emailId) {
-          await tick();
-          messageList
-            ?.querySelector<HTMLElement>(`[data-email-id="${emailId}"]`)
-            ?.focus({ preventScroll: true });
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          const row = messageList?.querySelector<HTMLElement>(`[data-email-id="${emailId}"]`);
+          if (row?.isConnected && row.getClientRects().length > 0)
+            row.focus({ preventScroll: true });
         }
       }
     } else if (event.key === '/') {
