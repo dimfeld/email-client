@@ -9,6 +9,7 @@
   import { page } from '$app/state';
   import type { SubmitFunction } from '@sveltejs/kit';
   import { tick } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { effectiveImportance } from '$lib/categories';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
   import { buildEmailDocument, hasRemoteImages } from '$lib/email-html';
@@ -63,6 +64,13 @@
     ...mailList,
   });
 
+  // Messages archived or deleted here leave the list at once, before Gmail confirms.
+  const removedIds = new SvelteSet<number>();
+  let emails = $derived.by(() => {
+    const removed = new Set(removedIds);
+    return data.emails.filter((email) => !removed.has(email.id));
+  });
+
   type Filter = string;
   let labels = $derived(
     Object.fromEntries(data.categories.map((category) => [category.id, category.name]))
@@ -75,7 +83,7 @@
   let importanceById = $derived.by(() => {
     const levels = categoryLevels;
     return new Map(
-      data.emails.map((email) => [
+      emails.map((email) => [
         email.id,
         effectiveImportance(levels.get(email.category ?? ''), email.importance),
       ])
@@ -91,7 +99,7 @@
     const counts = new Map<string, number>();
     const add = (key: string) => counts.set(key, (counts.get(key) ?? 0) + 1);
     const levels = importanceById;
-    for (const email of data.emails) {
+    for (const email of emails) {
       const level = levels.get(email.id);
       add(email.category ?? 'pending');
       if (level === 'important') add('important');
@@ -115,7 +123,7 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   let filters = $derived([
-    { category: 'all' as const, label: 'All mail', count: data.emails.length },
+    { category: 'all' as const, label: 'All mail', count: emails.length },
     { category: 'important', label: 'All important', count: filterCounts.get('important') ?? 0 },
     { category: 'useful' as const, label: 'Useful now', count: filterCounts.get('useful') ?? 0 },
     ...data.categories.map((category) => ({
@@ -132,7 +140,7 @@
   let visibleEmails = $derived.by(() => {
     const filter = activeFilter;
     const levels = importanceById;
-    return data.emails.filter((email) => {
+    return emails.filter((email) => {
       if (filter === 'all') return true;
       const level = levels.get(email.id);
       if (filter === 'useful') return level === 'important' || level === 'useful';
@@ -365,16 +373,42 @@
     }
   }
 
-  const submitMessageAction: SubmitFunction =
-    () =>
-    async ({ result, update }) => {
-      await update({ invalidateAll: false });
+  // Set before a navigation that should move focus into the new message.
+  let focusReadingPaneOnLoad = false;
+  $effect(() => {
+    if (!readingContent || !focusReadingPaneOnLoad) return;
+    focusReadingPaneOnLoad = false;
+    readingContent.focus({ preventScroll: true });
+  });
+
+  const submitMessageAction: SubmitFunction = ({ formData, cancel }) => {
+    const id = Number(formData.get('id'));
+    if (removedIds.has(id)) {
+      cancel();
+      return;
+    }
+    // Open the next message, as most mail clients do, so E can process mail row by row.
+    const index = visibleEmails.findIndex((email) => email.id === id);
+    const next = index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
+    removedIds.add(id);
+    focusReadingPaneOnLoad = next !== null;
+    updateMailboxUrl({ message: next?.id ?? null });
+    return async ({ result }) => {
       if (result.type === 'success') {
         if (typeof result.data?.message === 'string') showToast(result.data.message);
-        updateMailboxUrl({ message: null });
         await getMailList({ account: selectedAccount, search }).refresh();
+        return;
       }
+      removedIds.delete(id);
+      const message =
+        result.type === 'failure' && typeof result.data?.error === 'string'
+          ? result.data.error
+          : result.type === 'error'
+            ? String(result.error?.message ?? result.error)
+            : 'The action failed.';
+      showToast(message, { tone: 'error' });
     };
+  };
 
   const saveRemoteImageRule: SubmitFunction =
     ({ formData }) =>
@@ -511,7 +545,7 @@
         {#if !showCategories}
           <div class="mail-tabs">
             <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
-              >All mail <small>{data.emails.length}</small></button
+              >All mail <small>{emails.length}</small></button
             ><button
               class:tab-active={activeFilter === 'important'}
               onclick={() => selectFilter('important')}>Important</button
@@ -1233,6 +1267,10 @@
     padding: 24px;
     overflow-y: auto;
     overflow-wrap: anywhere;
+  }
+  /* Focus moves here by script so keys act on the message; it is not a control. */
+  .reading-content:focus {
+    outline: none;
   }
   .reading-content h2 {
     font-size: 1.05rem;
