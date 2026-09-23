@@ -36,6 +36,19 @@ const commands = z.discriminatedUnion('action', [
     sourceEmailId: z.number().int().positive().optional(),
     to: z.string().optional(),
   }),
+  z.object({
+    action: z.literal('preview'),
+    mode: z.enum(['new', 'reply', 'replyAll', 'forward']),
+    account: z.string().optional(),
+    sourceEmailId: z.number().int().positive().optional(),
+  }),
+  z.object({
+    action: z.literal('saveNew'),
+    mode: z.enum(['new', 'reply', 'replyAll', 'forward']),
+    account: z.string().optional(),
+    sourceEmailId: z.number().int().positive().optional(),
+    input: inputSchema,
+  }),
   z.object({ action: z.literal('save'), id: idSchema, version: versionSchema, input: inputSchema }),
   z.object({ action: z.literal('discard'), id: idSchema, version: versionSchema }),
   z.object({ action: z.literal('queue'), id: idSchema, version: versionSchema }),
@@ -88,6 +101,13 @@ export const POST: RequestHandler = async ({ request, url }) => {
         draft = await createDraft(db, command);
         if (command.to && command.mode === 'new')
           draft = saveDraft(db, draft.id, draft.version, { ...draft, to: command.to });
+        break;
+      case 'preview':
+        draft = await createDraft(db, command, undefined, false);
+        break;
+      case 'saveNew':
+        draft = await createDraft(db, command);
+        draft = saveDraft(db, draft.id, draft.version, command.input);
         break;
       case 'save':
         draft = saveDraft(db, command.id, command.version, command.input);

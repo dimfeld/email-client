@@ -24,6 +24,8 @@
   let showDrafts = $state(false);
   let error = $state('');
   let dirty = $state(false);
+  let persisted = $state(false);
+  let editorKey = $state(0);
   let saving = $state(false);
   let busy = $state(false);
   let now = $state(Date.now());
@@ -65,6 +67,23 @@
       if (!savePromise && !busy) void save();
     }, AUTOSAVE_DELAY_MS);
   }
+  function draftInput(value: Draft): DraftInput {
+    return {
+      accountEmail: value.accountEmail,
+      to: value.to,
+      cc: value.cc,
+      bcc: value.bcc,
+      subject: value.subject,
+      html: value.html,
+      text: value.text,
+    };
+  }
+  async function persistPreview(): Promise<boolean> {
+    if (persisted) return true;
+    if (!draft) return false;
+    dirty = true;
+    return save();
+  }
   function save(): Promise<boolean> {
     clearTimeout(autosaveTimer);
     if (savePromise) return savePromise;
@@ -75,16 +94,25 @@
       if (!draft || !editable) return true;
       saving = true;
       try {
+        if (!persisted) {
+          const id = draft.id;
+          const input = draftInput(draft);
+          dirty = false;
+          const saved = await request({
+            action: 'saveNew',
+            mode: draft.mode,
+            account: draft.accountEmail,
+            sourceEmailId: draft.sourceEmailId ?? undefined,
+            input,
+          });
+          if (draft?.id === id) {
+            const currentInput = draftInput(draft);
+            draft = { ...saved, ...currentInput };
+            persisted = true;
+          }
+        }
         while (dirty && draft) {
-          const input: DraftInput = {
-            accountEmail: draft.accountEmail,
-            to: draft.to,
-            cc: draft.cc,
-            bcc: draft.bcc,
-            subject: draft.subject,
-            html: draft.html,
-            text: draft.text,
-          };
+          const input = draftInput(draft);
           const id: string = draft.id;
           dirty = false;
           const saved = await request({ action: 'save', id, version: draft.version, input });
@@ -117,8 +145,13 @@
         const result = await response.json();
         if (!response.ok) throw new Error(result.error);
         draft = result;
-      } else draft = await request({ action: 'create', ...input });
+        persisted = true;
+      } else {
+        draft = await request({ action: 'preview', ...input });
+        persisted = false;
+      }
       dirty = false;
+      editorKey++;
       minimized = false;
       showDrafts = false;
     } catch (failure) {
@@ -129,6 +162,11 @@
   }
   async function action(name: string, extra: Record<string, unknown> = {}) {
     if (!draft || busy || !(await save())) return;
+    if (name === 'discard' && !persisted) {
+      draft = null;
+      return;
+    }
+    if (!persisted && !(await persistPreview())) return;
     busy = true;
     try {
       const result = await request({
@@ -157,7 +195,7 @@
     const input = event.currentTarget as HTMLInputElement;
     const files = [...(input.files ?? [])];
     input.value = '';
-    if (!draft || uploadPromise || !(await save())) return;
+    if (!draft || uploadPromise || !(await save()) || !(await persistPreview())) return;
     uploading = files.map((file) => file.name);
     uploadPromise = (async () => {
       try {
@@ -191,6 +229,7 @@
   async function close() {
     if (!(await save())) return;
     draft = null;
+    persisted = false;
   }
   onMount(() => {
     const compose = (event: Event) => void open((event as CustomEvent<ComposeRequest>).detail);
@@ -277,9 +316,11 @@
           ? 'Saving…'
           : dirty
             ? 'Unsaved changes'
-            : draft.status === 'draft'
-              ? 'Draft saved'
-              : draft.status}</span
+            : !persisted
+              ? 'Not saved'
+              : draft.status === 'draft'
+                ? 'Draft saved'
+                : draft.status}</span
       ><button
         aria-label={minimized ? 'Restore composer' : 'Minimize composer'}
         onclick={() => (minimized = !minimized)}><Icon name="minimize" /></button
@@ -323,7 +364,7 @@
               oninput={changed}
             />
           </div>
-          {#key draft.id}<RichTextEditor
+          {#key editorKey}<RichTextEditor
               html={draft.html}
               disabled={busy}
               onchange={(html, text) => {

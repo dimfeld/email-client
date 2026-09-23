@@ -211,7 +211,8 @@ async function forwardAttachments(
 export async function createDraft(
   database: DatabaseSync,
   input: { mode: ComposeMode; account?: string; sourceEmailId?: number },
-  request = googleApiRequest
+  request = googleApiRequest,
+  persist = true
 ): Promise<Draft> {
   const accounts = listAccounts(database);
   let source = input.sourceEmailId ? getEmail(database, input.sourceEmailId) : null;
@@ -291,6 +292,32 @@ export async function createDraft(
   }
   const id = randomUUID();
   const now = new Date().toISOString();
+  if (!persist) {
+    return {
+      id,
+      accountEmail: account.email,
+      to,
+      cc,
+      bcc: '',
+      subject,
+      html,
+      text,
+      mode: input.mode,
+      sourceEmailId: source?.id ?? null,
+      version: 0,
+      status: 'draft',
+      sendAt: null,
+      error: null,
+      messageId: null,
+      updatedAt: now,
+      attachments: files.map((file) => ({
+        id: randomUUID(),
+        filename: file.filename,
+        contentType: file.contentType,
+        size: file.content.byteLength,
+      })),
+    };
+  }
   database.exec('BEGIN IMMEDIATE');
   try {
     database
