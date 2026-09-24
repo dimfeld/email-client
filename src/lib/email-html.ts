@@ -1,6 +1,6 @@
 const compatibilityStyles = `
 html,body{margin:0;min-width:0}
-html{overflow-y:hidden!important}
+html{overflow-y:hidden!important;font-family:ui-sans-serif,system-ui,sans-serif}
 body{padding:20px;background:Canvas;color:CanvasText;overflow-wrap:anywhere}
 img{max-width:100%!important;height:auto!important}
 table{max-width:100%!important}
