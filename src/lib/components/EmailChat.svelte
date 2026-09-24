@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import {
     linkMessageReferences,
     type ChatAnswer,
@@ -29,9 +29,14 @@
   let pending = $state(false);
   let error = $state('');
   let questionField: HTMLTextAreaElement;
+  let conversation: HTMLDivElement;
   let controller: AbortController | undefined;
   onMount(() => questionField.focus());
   onDestroy(() => controller?.abort());
+  async function scrollToBottom() {
+    await tick();
+    if (conversation) conversation.scrollTop = conversation.scrollHeight;
+  }
   async function ask(content: string) {
     if (!content.trim() || pending) return;
     content = content.trim();
@@ -46,6 +51,7 @@
     ];
     messages.push({ role: 'user', content });
     pending = true;
+    void scrollToBottom();
     controller = new AbortController();
     try {
       const response = await fetch('/api/chat', {
@@ -65,8 +71,12 @@
           const index = progress.findIndex((item) => item.id === update.id);
           if (index < 0) progress = [...progress, update];
           else progress = progress.map((item, position) => (position === index ? update : item));
+          void scrollToBottom();
         },
-        (text) => (draftAnswer = text)
+        (text) => {
+          draftAnswer = text;
+          void scrollToBottom();
+        }
       );
       messages.push({
         role: 'assistant',
@@ -89,6 +99,7 @@
       question = content;
     } finally {
       pending = false;
+      void scrollToBottom();
     }
   }
   function newChat() {
@@ -108,7 +119,7 @@
     </div>
     <button onclick={close} aria-label="Close email chat"><Icon name="close" /></button>
   </header>
-  <div class="conversation" aria-live="polite" aria-busy={pending}>
+  <div class="conversation" bind:this={conversation} aria-live="polite" aria-busy={pending}>
     {#if messages.length === 0}<p class="help">
         Ask about your downloaded mail. Find decisions, dates, or messages to review. Relevant email
         content is sent to OpenAI and, when configured, Jev.
