@@ -1020,9 +1020,6 @@
       onclick={() => openComposer({ mode: 'new', account: data.selectedAccount ?? undefined })}
       >Compose</button
     >
-    <button class="text-button" onclick={() => window.dispatchEvent(new Event('email:drafts'))}
-      >Drafts</button
-    >
     <button class="text-button" aria-pressed={showChat} onclick={() => (showChat = !showChat)}
       >Chat</button
     >
@@ -1068,6 +1065,9 @@
           class="filter"
           class:active={mailView === 'snoozed'}
           onclick={() => selectView('snoozed')}>Snoozed</button
+        >
+        <button class="filter" onclick={() => window.dispatchEvent(new Event('email:drafts'))}
+          >Drafts</button
         >
         {#if mailView === 'inbox'}{#each filters as filter}
             <button
