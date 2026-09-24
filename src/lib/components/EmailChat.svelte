@@ -116,14 +116,14 @@
     {#each messages as message}
       <article class:user={message.role === 'user'}>
         <strong>{message.role === 'user' ? 'You' : 'Email assistant'}</strong>
+        {#if message.progress?.length}<ul class="progress-list">
+            {#each message.progress as item}<li>{item.text}</li>{/each}
+          </ul>{/if}
         <p>
           {#each linkMessageReferences(message.content, message.references ?? []) as part}{#if part.href}<a
                 href={part.href}>{part.text}</a
               >{:else}{part.text}{/if}{/each}
         </p>
-        {#if message.progress?.length}<ul class="progress-list">
-            {#each message.progress as item}<li>{item.text}</li>{/each}
-          </ul>{/if}
         {#if message.sources?.length}<ul>
             {#each message.sources as source}<li>
                 <a href={source.href}>[{source.id}] {source.subject}</a><small>{source.from}</small>
@@ -141,15 +141,15 @@
           </ul>{/if}
       </article>
     {/each}
-    {#if pending && draftAnswer}<article aria-live="off">
-        <strong>Email assistant</strong>
-        <p>{draftAnswer}</p>
-      </article>{/if}
     {#if pending || progress.length}<div class="help" role="status">
         {#if progress.length}<ul class="progress-list">
             {#each progress as item (item.id)}<li>{item.text}</li>{/each}
           </ul>{:else}<p>Working on your request…</p>{/if}
       </div>{/if}
+    {#if pending && draftAnswer}<article aria-live="off">
+        <strong>Email assistant</strong>
+        <p>{draftAnswer}</p>
+      </article>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </div>
   <form
