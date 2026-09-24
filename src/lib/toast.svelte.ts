@@ -22,6 +22,8 @@ export function showToast(
   message: string,
   options: { tone?: Toast['tone']; action?: ToastAction } = {}
 ): number {
+  for (const previous of [...toasts]) dismissToast(previous.id);
+
   const toast: Toast = {
     id: nextId++,
     message,
