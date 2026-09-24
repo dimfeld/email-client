@@ -88,7 +88,6 @@ describe('Gmail backfill', () => {
     const result = await backfillGmail({
       database,
       classify,
-      request: async <T>() => ({}) as T,
       now: () => now,
       listMessages: async (account, query) => {
         queries.set(account.email, query);
@@ -122,7 +121,6 @@ describe('Gmail backfill', () => {
       bodyText: 'Working',
       bodyHtml: '<p>Working</p>',
     });
-    expect(listEmails(database)[0].labels).toContain('STARRED');
   });
 
   it('recognizes common Gmail rate-limit errors', () => {
