@@ -32,5 +32,5 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     displayName: credential.name,
     refreshToken: credential.refreshToken ?? undefined,
   });
-  redirect(303, '/settings/google?google=connected');
+  redirect(303, `/settings/accounts/${encodeURIComponent(credential.email)}`);
 };

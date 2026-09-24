@@ -1,19 +1,27 @@
 <script lang="ts">
   import { page } from '$app/state';
   import type { Snippet } from 'svelte';
+  import type { LayoutData } from './$types';
 
-  let { children }: { children: Snippet } = $props();
+  let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
   const sections = [
-    { href: '/settings/google', label: 'Google data sync' },
-    { href: '/settings/names', label: 'Your names' },
-    { href: '/settings/account-labels', label: 'Account labels' },
     { href: '/settings/remote-images', label: 'Remote images' },
     { href: '/settings/calendars', label: 'Mail sidebar calendars' },
     { href: '/settings/import', label: 'Historical import' },
     { href: '/settings/categories', label: 'Categories' },
   ];
-  let active = $derived(sections.find((section) => section.href === page.url.pathname));
+  let accountLinks = $derived(
+    data.settingsAccounts.map((account) => ({
+      href: `/settings/accounts/${encodeURIComponent(account.email)}`,
+      label: account.alias ?? account.email,
+    }))
+  );
+  let active = $derived(
+    [{ href: '/settings/accounts', label: 'Accounts' }, ...accountLinks, ...sections].find(
+      (section) => section.href === page.url.pathname
+    )
+  );
   let form = $derived(page.form as { error?: string; message?: string } | null);
 </script>
 
@@ -28,6 +36,20 @@
   </header>
   <div class="settings-body">
     <nav class="sections" aria-label="Settings">
+      <a
+        href="/settings/accounts"
+        aria-current={active?.href === '/settings/accounts' ? 'page' : undefined}
+        data-sveltekit-noscroll>Accounts</a
+      >
+      {#each accountLinks as account (account.href)}
+        <a
+          class="sub"
+          href={account.href}
+          title={account.label}
+          aria-current={active?.href === account.href ? 'page' : undefined}
+          data-sveltekit-noscroll>{account.label}</a
+        >
+      {/each}
       {#each sections as section (section.href)}
         <a
           href={section.href}
@@ -86,6 +108,12 @@
     color: var(--color-text-secondary);
     font-size: var(--text-sm);
     text-decoration: none;
+  }
+  .sections a.sub {
+    padding-left: 24px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .sections a:hover {
     background: var(--color-surface-raised);
@@ -189,6 +217,16 @@
       color: var(--color-bg);
       padding: 10px 16px;
       border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    a.button-link {
+      display: inline-block;
+      color: var(--color-bg);
+      background: var(--color-accent);
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      text-decoration: none;
       font-size: 0.85rem;
       font-weight: 600;
     }
