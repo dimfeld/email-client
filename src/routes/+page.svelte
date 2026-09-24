@@ -41,9 +41,12 @@
     accounts.some((account) => account.email === requestedAccount) ? requestedAccount : null
   );
   let search = $derived(new URL(currentUrl).searchParams.get('q')?.trim() ?? '');
-  let mailView = $derived(
-    new URL(currentUrl).searchParams.get('view') === 'sent' ? ('sent' as const) : ('inbox' as const)
-  );
+  const mailViews = { inbox: 'Inbox', sent: 'Sent', snoozed: 'Snoozed' } as const;
+  type MailView = keyof typeof mailViews;
+  let mailView = $derived.by((): MailView => {
+    const view = new URL(currentUrl).searchParams.get('view');
+    return view === 'sent' || view === 'snoozed' ? view : 'inbox';
+  });
   let requestedDay = $derived(new URL(currentUrl).searchParams.get('day'));
   let calendarDay = $derived(isDateKey(requestedDay) ? requestedDay : dateKeyFromDate(new Date()));
   let selectedId = $derived.by(() => {
@@ -83,7 +86,7 @@
     selectedId === null ? [] : await getSelectedThread({ account: selectedAccount, id: selectedId })
   );
   let counts = $derived(
-    mailView === 'sent' && !search ? {} : await getMailCounts({ account: selectedAccount, search })
+    mailView !== 'inbox' && !search ? {} : await getMailCounts({ account: selectedAccount, search })
   );
   let data = $derived({
     accounts,
@@ -167,7 +170,7 @@
   let visibleEmails = $derived(emails);
   // The whole list size, for screen readers, since only some rows are in the page.
   let listSize = $derived(
-    mailView === 'sent'
+    mailView !== 'inbox'
       ? visibleEmails.length
       : (filters.find((filter) => filter.category === activeFilter)?.count ?? visibleEmails.length)
   );
@@ -222,7 +225,7 @@
   function selectFilter(filter: Filter) {
     updateMailboxUrl({ category: filter, message: null });
   }
-  function selectView(view: 'inbox' | 'sent') {
+  function selectView(view: MailView) {
     const url = new URL(currentUrl);
     if (view === 'inbox') url.searchParams.delete('view');
     else url.searchParams.set('view', view);
@@ -952,7 +955,7 @@
         aria-expanded={showCategories}
         onclick={() => (showCategories = !showCategories)}><Icon name="menu" /></button
       >
-      <h1>{mailView === 'sent' ? 'Sent' : 'Inbox'}</h1>
+      <h1>{mailViews[mailView]}</h1>
     </div>
     <form method="GET" class="search-form">
       {#if data.selectedAccount}<input
@@ -1019,6 +1022,11 @@
       <button class="filter" class:active={mailView === 'sent'} onclick={() => selectView('sent')}
         >Sent</button
       >
+      <button
+        class="filter"
+        class:active={mailView === 'snoozed'}
+        onclick={() => selectView('snoozed')}>Snoozed</button
+      >
       {#if mailView === 'inbox'}{#each filters as filter}
           <button
             class="filter"
@@ -1052,7 +1060,7 @@
             >
           </div>
         {/if}
-        <span>{mailView === 'sent' ? 'Sent' : filterLabel} · {listSize}</span>
+        <span>{mailView === 'inbox' ? filterLabel : mailViews[mailView]} · {listSize}</span>
       </header>
       {#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
       {#if data.query}<p class="search-summary">
@@ -1109,19 +1117,26 @@
                         — {email.snippet || 'No preview text.'}</span
                       ></span
                     >
-                    {#if mailView === 'inbox'}<span class="category-tag"
+                    {#if mailView !== 'sent'}<span class="category-tag"
                         >{email.category ? labels[email.category] : 'Pending'}</span
                       >{:else}<span></span>{/if}
                     <span class="star" aria-label={starred ? 'Starred' : undefined}
                       >{starred ? '★' : ''}</span
                     >
-                    <time title={email.accountEmail}
-                      >{formatDate(
-                        email.latestSortTime
-                          ? new Date(email.latestSortTime).toISOString()
-                          : email.messageDate
-                      )}</time
-                    >
+                    {#if email.snoozedUntil}
+                      {@const until = new Date(email.snoozedUntil)}
+                      <time class="snoozed-until" title={`Snoozed until ${formatSnoozeTime(until)}`}
+                        >{formatDate(until.toISOString())}</time
+                      >
+                    {:else}
+                      <time title={email.accountEmail}
+                        >{formatDate(
+                          email.latestSortTime
+                            ? new Date(email.latestSortTime).toISOString()
+                            : email.messageDate
+                        )}</time
+                      >
+                    {/if}
                   </a>
                 </SwipeRow>
               </li>
@@ -1828,6 +1843,9 @@
   }
   .star {
     color: var(--color-star);
+  }
+  .snoozed-until {
+    color: var(--color-caution);
   }
   time {
     text-align: right;

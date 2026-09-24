@@ -108,6 +108,7 @@ export type EmailSummary = Pick<
   latestSortTime?: number;
   unread?: boolean;
   starred?: boolean;
+  snoozedUntil?: number;
 };
 
 export type SyncedContact = {

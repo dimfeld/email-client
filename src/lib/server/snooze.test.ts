@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, listEmails, upsertAccount, upsertEmails } from './db';
 import type { googleApiRequest } from './google-api';
+import { listMail } from './mail-list';
 import { cancelSnooze, snoozeThread, wakeDueSnoozes } from './snooze';
 
 let database: DatabaseSync | undefined;
@@ -44,7 +45,35 @@ test('archives a snoozed thread and returns it to the inbox when the snooze ends
   expect(inboxIds()).toEqual([]);
   await wakeDueSnoozes(database!, 1_000, succeed);
   expect(inboxIds()).toEqual(['first', 'second']);
+  expect(listEmails(database!).filter((email) => email.labels.includes('STARRED'))).toHaveLength(1);
   expect(snoozeRows()).toEqual([]);
+});
+
+test('lists snoozed threads by the time their snooze ends', async () => {
+  const id = setup();
+  upsertEmails(database!, account.email, [{ id: 'other', threadId: 'other', labels: ['INBOX'] }]);
+  const otherId = Number(
+    database!.prepare("SELECT id FROM emails WHERE gmail_id = 'other'").get()!.id
+  );
+  await snoozeThread(database!, account, id, 2_000, succeed);
+  await snoozeThread(database!, account, otherId, 1_000, succeed);
+  const list = listMail(database!, { view: 'snoozed', search: '', filter: 'all', limit: 10 });
+  expect(list.emails.map((email) => email.snoozedUntil)).toEqual([1_000, 2_000]);
+  expect(listMail(database!, { search: '', filter: 'all', limit: 10 }).emails).toEqual([]);
+});
+
+test('retries the star when Gmail rejects it after the thread returns', async () => {
+  const id = setup();
+  await snoozeThread(database!, account, id, 1_000, succeed);
+  const rejectStar = (async (_account: unknown, _url: string, options?: { data?: unknown }) => {
+    if (JSON.stringify(options?.data).includes('STARRED')) throw new Error('Star failed');
+    return {};
+  }) as typeof googleApiRequest;
+  await wakeDueSnoozes(database!, 1_000, rejectStar);
+  expect(snoozeRows()).toEqual([{ wake_at: 2_000, retry_count: 1, error: 'Star failed' }]);
+  await wakeDueSnoozes(database!, 2_000, succeed);
+  expect(snoozeRows()).toEqual([]);
+  expect(listEmails(database!).filter((email) => email.labels.includes('STARRED'))).toHaveLength(1);
 });
 
 test('undo returns the thread at once and removes the snooze', async () => {

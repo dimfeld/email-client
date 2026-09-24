@@ -18,7 +18,7 @@ const listInput = z.object({
   account: accountInput,
   search: z.string(),
   filter: z.string(),
-  view: z.enum(['inbox', 'sent']),
+  view: z.enum(['inbox', 'sent', 'snoozed']),
   limit: z.number().int().positive(),
 });
 const eventsInput = z.object({ account: accountInput, day: z.string().refine(isDateKey) });

@@ -3,6 +3,7 @@ import { getDatabase, listAccounts } from './db';
 import { applyGmailThreadAction } from './gmail-actions';
 import { GMAIL_BACKFILL_INTERVAL_MS } from './gmail-backfill';
 import { googleApiRequest, type GoogleAccount } from './google-api';
+import { publishStateChange } from './state-events';
 
 type ThreadActionResult = Awaited<ReturnType<typeof applyGmailThreadAction>>;
 
@@ -47,6 +48,7 @@ export async function snoozeThread(
         wakeAt,
         new Date().toISOString()
       );
+    publishStateChange('mail');
   }
   return result;
 }
@@ -72,11 +74,15 @@ export async function cancelSnooze(
     database
       .prepare('DELETE FROM snoozes WHERE account_email = ? AND thread_key = ?')
       .run(account.email, key);
+    publishStateChange('mail');
   }
   return result;
 }
 
-/** Returns each thread whose snooze has ended to the inbox. A Gmail failure retries later. */
+/**
+ * Returns each thread whose snooze has ended to the inbox and stars it, so it stands out.
+ * A Gmail failure retries later.
+ */
 export async function wakeDueSnoozes(
   database: DatabaseSync,
   now = Date.now(),
@@ -91,19 +97,35 @@ export async function wakeDueSnoozes(
     email_ids_json: string;
     retry_count: number;
   }[];
-  const remove = database.prepare('DELETE FROM snoozes WHERE id = ?');
+  const deleteRow = database.prepare('DELETE FROM snoozes WHERE id = ?');
+  const remove = (id: number) => {
+    deleteRow.run(id);
+    publishStateChange('mail');
+  };
   // Messages moved to Trash while snoozed stay in Trash.
   const present = database.prepare('SELECT 1 FROM emails WHERE id = ? AND deleted_at IS NULL');
   for (const snooze of due) {
     const account = listAccounts(database).find((item) => item.email === snooze.account_email);
     const ids = (JSON.parse(snooze.email_ids_json) as number[]).filter((id) => present.get(id));
     if (!account || ids.length === 0) {
-      remove.run(snooze.id);
+      remove(snooze.id);
       continue;
     }
     let result: ThreadActionResult;
     try {
       result = await applyGmailThreadAction(database, account, ids[0], 'unarchive', ids, request);
+      if (!result.error) {
+        const star = await applyGmailThreadAction(
+          database,
+          account,
+          ids[0],
+          'star',
+          undefined,
+          request
+        );
+        // A retry adds INBOX again, which has no effect, and then tries the star again.
+        if (star.error) result = { ...star, succeededIds: [] };
+      }
     } catch (error) {
       result = {
         succeededIds: [],
@@ -112,7 +134,7 @@ export async function wakeDueSnoozes(
       };
     }
     if (!result.error) {
-      remove.run(snooze.id);
+      remove(snooze.id);
       continue;
     }
     // The same backoff as historical imports.

@@ -4,7 +4,7 @@ import { parseSearchQuery } from './email-search';
 import type { EmailSummary } from './types';
 
 export type MailFilter = string;
-export type MailView = 'inbox' | 'sent';
+export type MailView = 'inbox' | 'sent' | 'snoozed';
 export type MailListQuery = {
   account?: string;
   view?: MailView;
@@ -21,7 +21,7 @@ export type MailList = {
 const effectiveLevel = "CASE WHEN c.level = 'auto' THEN e.importance ELSE c.level END";
 
 function membership(filter: MailFilter, view: MailView): { sql: string; params: SQLInputValue[] } {
-  if (view === 'sent' || filter === 'all') return { sql: '1', params: [] };
+  if (view !== 'inbox' || filter === 'all') return { sql: '1', params: [] };
   const category =
     filter === 'pending'
       ? 'e.category IS NULL AND e.in_inbox = 1'
@@ -94,6 +94,14 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
       WHERE r.position = 1 AND ${filter.sql}
       ORDER BY r.rank, t.latest_sort_time DESC LIMIT ?`;
     params = [...search.params, ...filter.params, query.limit + 1];
+  } else if (view === 'snoozed') {
+    // The snooze that ends first is first.
+    candidateSql = `SELECT t.account_email, t.thread_key, t.latest_email_id,
+      t.latest_email_id AS preview_id, t.latest_sort_time, s.wake_at
+      FROM snoozes s JOIN threads t ON t.account_email = s.account_email
+        AND t.thread_key = s.thread_key
+      WHERE 1 ${accountWhere} ORDER BY s.wake_at, t.latest_email_id DESC LIMIT ?`;
+    params = [...accountParams, query.limit + 1];
   } else {
     if (view === 'inbox' && query.filter !== 'all') {
       const filterKey = ['important', 'useful', 'pending'].includes(query.filter)
@@ -120,6 +128,7 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
     latest_email_id: number;
     preview_id: number;
     latest_sort_time: number;
+    wake_at?: number;
   }[];
   const summary =
     database.prepare(`SELECT e.id, e.account_email, e.thread_key, e.from_address, e.subject,
@@ -149,6 +158,7 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
     result.threadKey = candidate.thread_key;
     result.latestMessageId = candidate.latest_email_id;
     result.latestSortTime = candidate.latest_sort_time;
+    if (candidate.wake_at !== undefined) result.snoozedUntil = candidate.wake_at;
     result.unread = Boolean(
       threadLabel.get(candidate.account_email, candidate.thread_key, 'UNREAD')
     );
