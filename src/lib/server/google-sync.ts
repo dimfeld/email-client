@@ -39,12 +39,17 @@ export function normalizeContact(
     (Array.isArray(contact[key]) ? (contact[key] as Array<Record<string, unknown>>) : []).flatMap(
       (item) => (typeof item.value === 'string' ? [item.value] : [])
     );
+  const photos = Array.isArray(contact.photos)
+    ? (contact.photos as Array<Record<string, unknown>>)
+    : [];
+  const photo = photos.find((item) => item.default === false && typeof item.url === 'string');
   return {
     resourceName,
     displayName: typeof names[0]?.displayName === 'string' ? names[0].displayName : '',
     emails: values('emailAddresses'),
     phones: values('phoneNumbers'),
     organization: [organizationName, organizationTitle].filter(Boolean).join(' — ') || null,
+    photoUrl: typeof photo?.url === 'string' ? photo.url : null,
   };
 }
 
@@ -195,7 +200,7 @@ async function syncGoogleAccountOnce(
       let result: ContactsPage;
       try {
         result = await requestPage('https://people.googleapis.com/v1/people/me/connections', {
-          personFields: 'names,emailAddresses,phoneNumbers,organizations,metadata',
+          personFields: 'names,emailAddresses,phoneNumbers,organizations,photos,metadata',
           pageSize: 1000,
           requestSyncToken: true,
           pageToken: contactsProgress.pageToken ?? undefined,
@@ -222,7 +227,7 @@ async function syncGoogleAccountOnce(
         let result: OtherContactsPage;
         try {
           result = await requestPage('https://people.googleapis.com/v1/otherContacts', {
-            readMask: 'names,emailAddresses,phoneNumbers,metadata',
+            readMask: 'names,emailAddresses,phoneNumbers,photos,metadata',
             pageSize: 1000,
             requestSyncToken: true,
             pageToken: otherContactsProgress.pageToken ?? undefined,
@@ -351,7 +356,7 @@ async function syncGoogleAccountOnce(
       const result = await requestPage<ContactsPage>(
         'https://people.googleapis.com/v1/people/me/connections',
         {
-          personFields: 'names,emailAddresses,phoneNumbers,organizations,metadata',
+          personFields: 'names,emailAddresses,phoneNumbers,organizations,photos,metadata',
           pageSize: 1000,
           requestSyncToken: true,
           syncToken: state.contactsSyncToken,
@@ -384,7 +389,7 @@ async function syncGoogleAccountOnce(
       const result = await requestPage<OtherContactsPage>(
         'https://people.googleapis.com/v1/otherContacts',
         {
-          readMask: 'names,emailAddresses,phoneNumbers,metadata',
+          readMask: 'names,emailAddresses,phoneNumbers,photos,metadata',
           pageSize: 1000,
           requestSyncToken: true,
           syncToken: state.otherContactsSyncToken,

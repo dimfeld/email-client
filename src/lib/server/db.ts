@@ -56,6 +56,13 @@ CREATE TABLE IF NOT EXISTS remote_image_rules (
   PRIMARY KEY (kind, value)
 );
 
+CREATE TABLE IF NOT EXISTS avatar_images (
+  source TEXT PRIMARY KEY,
+  mime_type TEXT,
+  image BLOB,
+  expires_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS emails (
   id INTEGER PRIMARY KEY,
   account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
@@ -112,6 +119,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   emails_json TEXT NOT NULL DEFAULT '[]',
   phones_json TEXT NOT NULL DEFAULT '[]',
   organization TEXT,
+  photo_url TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (account_email, resource_name)
 );
@@ -123,6 +131,7 @@ CREATE TABLE IF NOT EXISTS other_contacts (
   emails_json TEXT NOT NULL DEFAULT '[]',
   phones_json TEXT NOT NULL DEFAULT '[]',
   organization TEXT,
+  photo_url TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (account_email, resource_name)
 );
@@ -189,6 +198,7 @@ CREATE TABLE IF NOT EXISTS google_sync_contacts (
   emails_json TEXT NOT NULL DEFAULT '[]',
   phones_json TEXT NOT NULL DEFAULT '[]',
   organization TEXT,
+  photo_url TEXT,
   PRIMARY KEY (account_email, sync_id, resource_name)
 );
 
@@ -200,6 +210,7 @@ CREATE TABLE IF NOT EXISTS google_sync_other_contacts (
   emails_json TEXT NOT NULL DEFAULT '[]',
   phones_json TEXT NOT NULL DEFAULT '[]',
   organization TEXT,
+  photo_url TEXT,
   PRIMARY KEY (account_email, sync_id, resource_name)
 );
 
@@ -286,6 +297,26 @@ export function createDatabase(path = defaultPath): DatabaseSync {
   }
   if (!accountColumns.some((column) => column.name === 'calendar_list_sync_token')) {
     database.exec('ALTER TABLE accounts ADD COLUMN calendar_list_sync_token TEXT');
+  }
+  let contactPhotoMigration = false;
+  for (const table of [
+    'contacts',
+    'other_contacts',
+    'google_sync_contacts',
+    'google_sync_other_contacts',
+  ]) {
+    const columns = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((column) => column.name === 'photo_url')) {
+      database.exec(`ALTER TABLE ${table} ADD COLUMN photo_url TEXT`);
+      contactPhotoMigration = true;
+    }
+  }
+  if (contactPhotoMigration) {
+    database.exec(`UPDATE accounts SET contacts_sync_token = NULL, other_contacts_sync_token = NULL;
+      DELETE FROM google_sync_contacts;
+      DELETE FROM google_sync_other_contacts;
+      DELETE FROM google_sync_progress WHERE sync_type = 'contacts';
+      DELETE FROM google_other_contacts_sync_progress;`);
   }
   const calendarColumns = database.prepare('PRAGMA table_info(calendars)').all() as Array<{
     name: string;
@@ -795,11 +826,11 @@ export function applyContactsIncrementalSync(
   const syncedAt = new Date().toISOString();
   withTransaction(database, 'contacts', () => {
     const upsert = database.prepare(`INSERT INTO contacts
-			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			(account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(account_email, resource_name) DO UPDATE SET display_name = excluded.display_name,
 				emails_json = excluded.emails_json, phones_json = excluded.phones_json,
-				organization = excluded.organization, updated_at = excluded.updated_at`);
+				organization = excluded.organization, photo_url = excluded.photo_url, updated_at = excluded.updated_at`);
     for (const contact of contacts)
       upsert.run(
         accountEmail,
@@ -808,6 +839,7 @@ export function applyContactsIncrementalSync(
         JSON.stringify(contact.emails),
         JSON.stringify(contact.phones),
         contact.organization,
+        contact.photoUrl ?? null,
         syncedAt
       );
     const remove = database.prepare(
@@ -923,11 +955,12 @@ export function saveContactsSyncPage(
   let complete = false;
   withTransaction(database, 'contacts', () => {
     const insert = database.prepare(`INSERT INTO google_sync_contacts
-			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization, photo_url)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(account_email, sync_id, resource_name) DO UPDATE SET
 				display_name = excluded.display_name, emails_json = excluded.emails_json,
-				phones_json = excluded.phones_json, organization = excluded.organization`);
+				phones_json = excluded.phones_json, organization = excluded.organization,
+				photo_url = excluded.photo_url`);
     for (const contact of contacts) {
       insert.run(
         progress.accountEmail,
@@ -936,7 +969,8 @@ export function saveContactsSyncPage(
         contact.displayName,
         JSON.stringify(contact.emails),
         JSON.stringify(contact.phones),
-        contact.organization
+        contact.organization,
+        contact.photoUrl ?? null
       );
     }
     if (nextPageToken) {
@@ -969,11 +1003,12 @@ export function saveGoogleOtherContactsSyncPage(
   let complete = false;
   withTransaction(database, 'contacts', () => {
     const insert = database.prepare(`INSERT INTO google_sync_other_contacts
-			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			(account_email, sync_id, resource_name, display_name, emails_json, phones_json, organization, photo_url)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(account_email, sync_id, resource_name) DO UPDATE SET
 				display_name = excluded.display_name, emails_json = excluded.emails_json,
-				phones_json = excluded.phones_json, organization = excluded.organization`);
+				phones_json = excluded.phones_json, organization = excluded.organization,
+				photo_url = excluded.photo_url`);
     for (const contact of contacts) {
       insert.run(
         progress.accountEmail,
@@ -982,7 +1017,8 @@ export function saveGoogleOtherContactsSyncPage(
         contact.displayName,
         JSON.stringify(contact.emails),
         JSON.stringify(contact.phones),
-        contact.organization
+        contact.organization,
+        contact.photoUrl ?? null
       );
     }
     if (nextPageToken) {
@@ -1014,11 +1050,11 @@ export function applyGoogleOtherContactsIncrementalSync(
   const syncedAt = new Date().toISOString();
   withTransaction(database, 'contacts', () => {
     const upsert = database.prepare(`INSERT INTO other_contacts
-			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			(account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(account_email, resource_name) DO UPDATE SET display_name = excluded.display_name,
 				emails_json = excluded.emails_json, phones_json = excluded.phones_json,
-				organization = excluded.organization, updated_at = excluded.updated_at`);
+				organization = excluded.organization, photo_url = excluded.photo_url, updated_at = excluded.updated_at`);
     for (const contact of contacts)
       upsert.run(
         accountEmail,
@@ -1027,6 +1063,7 @@ export function applyGoogleOtherContactsIncrementalSync(
         JSON.stringify(contact.emails),
         JSON.stringify(contact.phones),
         contact.organization,
+        contact.photoUrl ?? null,
         syncedAt
       );
     const remove = database.prepare(
@@ -1073,15 +1110,15 @@ export function finalizeGoogleSync(database: DatabaseSync, accountEmail: string)
     database.prepare('DELETE FROM contacts WHERE account_email = ?').run(accountEmail);
     database
       .prepare(`INSERT INTO contacts
-			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
-			SELECT account_email, resource_name, display_name, emails_json, phones_json, organization, ?
+			(account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, updated_at)
+			SELECT account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, ?
 			FROM google_sync_contacts WHERE account_email = ? AND sync_id = ?`)
       .run(syncedAt, accountEmail, contacts.syncId);
     database.prepare('DELETE FROM other_contacts WHERE account_email = ?').run(accountEmail);
     database
       .prepare(`INSERT INTO other_contacts
-			(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
-			SELECT account_email, resource_name, display_name, emails_json, phones_json, organization, ?
+			(account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, updated_at)
+			SELECT account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, ?
 			FROM google_sync_other_contacts WHERE account_email = ? AND sync_id = ?`)
       .run(syncedAt, accountEmail, otherContacts.syncId);
     database.prepare('DELETE FROM calendar_events WHERE account_email = ?').run(accountEmail);
@@ -1279,8 +1316,8 @@ export function replaceContacts(
   syncedAt = new Date().toISOString()
 ): void {
   const insert = database.prepare(`INSERT INTO contacts
-		(account_email, resource_name, display_name, emails_json, phones_json, organization, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`);
+		(account_email, resource_name, display_name, emails_json, phones_json, organization, photo_url, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   withTransaction(database, 'contacts', () => {
     database.prepare('DELETE FROM contacts WHERE account_email = ?').run(accountEmail);
     for (const contact of contacts) {
@@ -1291,6 +1328,7 @@ export function replaceContacts(
         JSON.stringify(contact.emails),
         JSON.stringify(contact.phones),
         contact.organization,
+        contact.photoUrl ?? null,
         syncedAt
       );
     }
@@ -1329,6 +1367,7 @@ export function listContacts(database: DatabaseSync, account?: string): SyncedCo
     emails: JSON.parse(String(row.emails_json)) as string[],
     phones: JSON.parse(String(row.phones_json)) as string[],
     organization: row.organization === null ? null : String(row.organization),
+    photoUrl: row.photo_url === null ? null : String(row.photo_url),
   }));
 }
 

@@ -19,6 +19,10 @@ describe('Google data normalization', () => {
         emailAddresses: [{ value: 'ada@example.com' }],
         phoneNumbers: [{ value: '+1 555 0100' }],
         organizations: [{ name: 'Analytical Engines', title: 'Programmer' }],
+        photos: [
+          { url: 'https://lh3.googleusercontent.com/default', default: true },
+          { url: 'https://lh3.googleusercontent.com/ada', default: false },
+        ],
       })
     ).toEqual({
       resourceName: 'people/contact-1',
@@ -26,6 +30,7 @@ describe('Google data normalization', () => {
       emails: ['ada@example.com'],
       phones: ['+1 555 0100'],
       organization: 'Analytical Engines — Programmer',
+      photoUrl: 'https://lh3.googleusercontent.com/ada',
     });
   });
 
@@ -77,7 +82,13 @@ describe('Google contacts and calendar sync', () => {
                 nextSyncToken: 'contacts-sync-1',
               }
             : {
-                connections: [{ resourceName: 'people/one', names: [{ displayName: 'One' }] }],
+                connections: [
+                  {
+                    resourceName: 'people/one',
+                    names: [{ displayName: 'One' }],
+                    photos: [{ url: 'https://lh3.googleusercontent.com/one', default: false }],
+                  },
+                ],
                 nextPageToken: 'page-2',
               }
         ) as T;
@@ -109,6 +120,7 @@ describe('Google contacts and calendar sync', () => {
     );
     expect(result).toEqual({ contacts: 2, calendars: 1, events: 1 });
     expect(listContacts(database).map((contact) => contact.displayName)).toEqual(['One', 'Two']);
+    expect(listContacts(database)[0].photoUrl).toBe('https://lh3.googleusercontent.com/one');
     expect(listCalendars(database)[0]).toMatchObject({ calendarId: 'primary', summary: 'Main' });
     expect(listCalendarEvents(database)[0]).toMatchObject({ eventId: 'event', summary: 'Meeting' });
     expect(calls.filter((url) => url.includes('connections'))).toHaveLength(2);

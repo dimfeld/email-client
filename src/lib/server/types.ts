@@ -118,6 +118,7 @@ export type SyncedContact = {
   emails: string[];
   phones: string[];
   organization: string | null;
+  photoUrl?: string | null;
 };
 
 export type SyncedCalendar = {

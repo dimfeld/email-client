@@ -1170,9 +1170,17 @@
                         ? 'true'
                         : undefined}
                     >
-                      <span class="sender-avatar" aria-hidden="true"
-                        >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
-                      >
+                      <span class="sender-avatar" aria-hidden="true">
+                        {senderName(email.fromAddress).slice(0, 1).toUpperCase()}
+                        {#if senderAddress(email.fromAddress)}
+                          <img
+                            src={`/avatar?account=${encodeURIComponent(email.accountEmail)}&from=${encodeURIComponent(senderAddress(email.fromAddress)!)}`}
+                            alt=""
+                            loading="lazy"
+                            onerror={(event) => event.currentTarget.remove()}
+                          />
+                        {/if}
+                      </span>
                       <strong class="sender" title={email.fromAddress}
                         >{senderName(email.fromAddress)}</strong
                       >
@@ -1912,6 +1920,7 @@
     color: var(--color-text-secondary);
   }
   .sender-avatar {
+    position: relative;
     display: grid;
     place-items: center;
     width: 21px;
@@ -1920,6 +1929,14 @@
     background: var(--color-avatar-bg);
     color: var(--color-avatar-text);
     font-size: var(--text-xs);
+    overflow: hidden;
+  }
+  .sender-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   .sender,
   .subject {

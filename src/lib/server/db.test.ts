@@ -189,6 +189,30 @@ describe('Google OAuth account migration', () => {
       calendarListSyncToken: null,
     });
   });
+
+  it('restarts contact sync when adding photo storage', () => {
+    directory = mkdtempSync(join(tmpdir(), 'email-check-photo-migration-'));
+    const path = join(directory, 'test.sqlite');
+    database = createDatabase(path);
+    upsertAccount(database, { email: 'owner@example.com', refreshToken: 'token' });
+    database.exec(`UPDATE accounts SET contacts_sync_token = 'old-contacts',
+      other_contacts_sync_token = 'old-other' WHERE email = 'owner@example.com';`);
+    for (const table of [
+      'contacts',
+      'other_contacts',
+      'google_sync_contacts',
+      'google_sync_other_contacts',
+    ]) {
+      database.exec(`ALTER TABLE ${table} DROP COLUMN photo_url`);
+    }
+    database.close();
+
+    database = createDatabase(path);
+    expect(getGoogleSyncState(database, 'owner@example.com')).toMatchObject({
+      contactsSyncToken: null,
+      otherContactsSyncToken: null,
+    });
+  });
 });
 
 describe('calendar event range listing', () => {
