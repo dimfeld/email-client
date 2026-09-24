@@ -338,6 +338,21 @@
     return Number.isInteger(focusedId) && focusedId > 0 ? focusedId : cursorId;
   }
 
+  // The list row that message keys act on while the reading pane is closed.
+  function listTargetEmail(): EmailSummary | null {
+    if (selectedId !== null) return null;
+    const id = listCursorId();
+    return visibleEmails.find((email) => email.id === id) ?? null;
+  }
+
+  // Reply and forward from the list open the thread, then the composer for its latest message.
+  async function composeFromList(email: EmailSummary, mode: 'reply' | 'replyAll' | 'forward') {
+    await focusMessage(email.id);
+    const thread = await getSelectedThread({ account: selectedAccount, id: email.id });
+    const source = thread.at(-1);
+    if (source) openComposer({ mode, sourceEmailId: source.id });
+  }
+
   // J and K change the open message when the reading pane is open. When it is closed,
   // they move the list cursor and the pane stays closed.
   // Held J/K/arrow keys drop repeats while a move is still in progress, so the
@@ -484,18 +499,30 @@
           ? -1
           : 0;
     if (event.repeat && moveOffset === 0) return;
+    const composeMode =
+      key === 'r' ? 'reply' : key === 'a' ? 'replyAll' : key === 'f' ? 'forward' : null;
+    const isDelete =
+      event.key === 'Delete' || event.key === '#' || (event.shiftKey && event.code === 'Digit3');
+    const listTarget = listTargetEmail();
     if (key === 'c') {
       event.preventDefault();
       openComposer({ mode: 'new', account: data.selectedAccount ?? undefined });
-    } else if (key === 'r' && selectedEmail) {
+    } else if (composeMode && selectedEmail) {
       event.preventDefault();
-      openComposer({ mode: 'reply', sourceEmailId: selectedEmail.id });
-    } else if (key === 'a' && selectedEmail) {
+      openComposer({ mode: composeMode, sourceEmailId: selectedEmail.id });
+    } else if (composeMode && listTarget) {
       event.preventDefault();
-      openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail.id });
-    } else if (key === 'f' && selectedEmail) {
+      await composeFromList(listTarget, composeMode);
+    } else if ((isDelete || (key === 'e' && mailView === 'inbox' && !search)) && listTarget) {
       event.preventDefault();
-      openComposer({ mode: 'forward', sourceEmailId: selectedEmail.id });
+      await runThreadAction(listTarget.id, listTarget.id, key === 'e' ? 'archive' : 'delete');
+    } else if (key === 's' && listTarget) {
+      event.preventDefault();
+      await toggleStar(
+        listTarget.id,
+        listTarget.id,
+        starOverrides.get(listTarget.id) ?? listTarget.starred ?? false
+      );
     } else if (inMessageList && (event.key === 'Enter' || event.key === 'ArrowRight')) {
       const row = eventTarget?.closest<HTMLElement>('.message');
       const rowId = Number(row?.dataset.emailId);
@@ -519,13 +546,7 @@
         starOverrides.get(rowId) ??
           selectedThread.some((member) => member.labels.includes('STARRED'))
       );
-    } else if (
-      (event.key === 'Delete' ||
-        event.key === '#' ||
-        (event.shiftKey && event.code === 'Digit3')) &&
-      selectedEmail &&
-      deleteForm
-    ) {
+    } else if (isDelete && selectedEmail && deleteForm) {
       event.preventDefault();
       deleteForm.requestSubmit();
     } else if (key === 'o' || event.key === 'Enter') {
@@ -712,10 +733,22 @@
       const index = visibleEmails.findIndex((email) => email.id === rowId);
       const next =
         index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
+      const rowFocused =
+        document.activeElement?.closest<HTMLElement>('.message')?.dataset.emailId === String(rowId);
+      const wasCursor = !wasOpen && (rowFocused || cursorId === rowId);
       removedIds.add(rowId);
       if (wasOpen) {
         focusReadingPaneOnLoad = next !== null;
         await updateMailboxUrl({ message: next?.id ?? null });
+      } else if (wasCursor) {
+        // The list cursor moves to the next row, so the keys can process mail row by row.
+        cursorId = next?.id ?? null;
+        if (next && rowFocused) {
+          await tick();
+          messageList
+            ?.querySelector<HTMLElement>(`[data-email-id="${next.id}"]`)
+            ?.focus({ preventScroll: true });
+        }
       }
       return true;
     });
