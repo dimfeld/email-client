@@ -340,6 +340,19 @@
 
   // J and K change the open message when the reading pane is open. When it is closed,
   // they move the list cursor and the pane stays closed.
+  // Held J/K/arrow keys drop repeats while a move is still in progress, so the
+  // reading pane does not start a new navigation before the previous one lands.
+  let movingSelection = false;
+  async function repeatableMoveSelection(offset: number, repeat: boolean) {
+    if (repeat && movingSelection) return;
+    movingSelection = true;
+    try {
+      await moveSelection(offset);
+    } finally {
+      movingSelection = false;
+    }
+  }
+
   async function moveSelection(offset: number) {
     if (visibleEmails.length === 0) return;
     const currentId = selectedEmail ? selectedEmail.id : listCursorId();
@@ -353,7 +366,7 @@
     if (nextIndex === currentIndex && offset > 0 && data.hasMore) pageCount += 1;
     const nextId = visibleEmails[nextIndex].id;
     if (selectedId !== null) {
-      updateMailboxUrl({ message: nextId });
+      await updateMailboxUrl({ message: nextId });
       return;
     }
     cursorId = nextId;
@@ -460,17 +473,17 @@
       showChat = !showChat;
       return;
     }
-    if (
-      isInteractiveTarget(event.target) ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.altKey ||
-      event.repeat
-    )
-      return;
+    if (isInteractiveTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
     const eventTarget = event.target instanceof Element ? event.target : null;
     const inMessageList = !!eventTarget?.closest('.message-list');
+    const moveOffset =
+      key === 'j' || (event.key === 'ArrowDown' && inMessageList)
+        ? 1
+        : key === 'k' || (event.key === 'ArrowUp' && inMessageList)
+          ? -1
+          : 0;
+    if (event.repeat && moveOffset === 0) return;
     if (key === 'c') {
       event.preventDefault();
       openComposer({ mode: 'new', account: data.selectedAccount ?? undefined });
@@ -491,12 +504,9 @@
         event.preventDefault();
         await focusMessage(emailId);
       }
-    } else if (key === 'j' || (event.key === 'ArrowDown' && inMessageList)) {
+    } else if (moveOffset !== 0) {
       event.preventDefault();
-      moveSelection(1);
-    } else if (key === 'k' || (event.key === 'ArrowUp' && inMessageList)) {
-      event.preventDefault();
-      moveSelection(-1);
+      void repeatableMoveSelection(moveOffset, event.repeat);
     } else if (key === 'e' && selectedEmail && archiveForm) {
       event.preventDefault();
       archiveForm.requestSubmit();
