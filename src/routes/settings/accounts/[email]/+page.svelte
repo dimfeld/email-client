@@ -46,9 +46,9 @@
 <section aria-labelledby="account-sync-heading">
   <h3 id="account-sync-heading">Google data sync</h3>
   <p class="help">
-    Reconnect the account to grant access to Other contacts, which includes people saved by Gmail
-    autocomplete. Restart the server after you reconnect so the background Gmail listener reloads
-    the account. A failed download keeps the last complete local copy.
+    Contacts, including people saved by Gmail autocomplete, and calendar data sync in the
+    background. Select Sync now to check for updates at any time. If a sync fails, the last complete
+    local copy stays available.
   </p>
   <form method="POST" action="?/syncGoogle" use:enhance class="sync-card">
     <p>
