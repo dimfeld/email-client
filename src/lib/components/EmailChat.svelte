@@ -1,7 +1,8 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { onDestroy, onMount } from 'svelte';
-  import type { ChatAnswer, ChatMessage } from '$lib/email-chat';
+  import type { ChatAnswer, ChatMessage, ChatProgress } from '$lib/email-chat';
+  import { readChatStream } from '$lib/chat-stream';
   import { openComposer } from '$lib/composer';
   let {
     account,
@@ -9,8 +10,13 @@
     close,
   }: { account: string | null; currentMessageId: number | null; close: () => void } = $props();
   let messages = $state<
-    (ChatMessage & { sources?: ChatAnswer['sources']; actions?: ChatAnswer['actions'] })[]
+    (ChatMessage & {
+      sources?: ChatAnswer['sources'];
+      actions?: ChatAnswer['actions'];
+      progress?: ChatProgress[];
+    })[]
   >([]);
+  let progress = $state<ChatProgress[]>([]);
   let threadMessageId = $state<number | null>(null);
   let question = $state('');
   let pending = $state(false);
@@ -25,6 +31,7 @@
     if (messages.length === 0) threadMessageId = currentMessageId;
     question = '';
     error = '';
+    progress = [];
     const history: ChatMessage[] = [
       ...messages.map(({ role, content }) => ({ role, content })),
       { role: 'user', content },
@@ -39,14 +46,24 @@
         body: JSON.stringify({ account, currentMessageId: threadMessageId, messages: history }),
         signal: controller.signal,
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? 'Email chat failed.');
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error ?? 'Email chat failed.');
+      }
+      if (!response.body) throw new Error('The chat stream is not available.');
+      const result = await readChatStream(response.body, (update) => {
+        const index = progress.findIndex((item) => item.id === update.id);
+        if (index < 0) progress = [...progress, update];
+        else progress = progress.map((item, position) => (position === index ? update : item));
+      });
       messages.push({
         role: 'assistant',
         content: result.answer,
         sources: result.sources,
         actions: result.actions,
+        progress: [...progress],
       });
+      progress = [];
     } catch (failure) {
       error = controller.signal.aborted
         ? 'Search stopped.'
@@ -63,6 +80,7 @@
     messages = [];
     threadMessageId = null;
     error = '';
+    progress = [];
   }
 </script>
 
@@ -83,6 +101,9 @@
       <article class:user={message.role === 'user'}>
         <strong>{message.role === 'user' ? 'You' : 'Email assistant'}</strong>
         <p>{message.content}</p>
+        {#if message.progress?.length}<ul class="progress-list">
+            {#each message.progress as item}<li>{item.text}</li>{/each}
+          </ul>{/if}
         {#if message.sources?.length}<ul>
             {#each message.sources as source}<li>
                 <a href={source.href}>[{source.id}] {source.subject}</a><small>{source.from}</small>
@@ -100,7 +121,11 @@
           </ul>{/if}
       </article>
     {/each}
-    {#if pending}<p class="help">Searching and reading your mail…</p>{/if}
+    {#if pending || progress.length}<div class="help" role="status">
+        {#if progress.length}<ul class="progress-list">
+            {#each progress as item (item.id)}<li>{item.text}</li>{/each}
+          </ul>{:else}<p>Working on your request…</p>{/if}
+      </div>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </div>
   <form
@@ -222,6 +247,10 @@
   }
   ul {
     padding-left: 16px;
+  }
+  .progress-list {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
   }
   li {
     margin-block: 10px;

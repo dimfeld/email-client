@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getDatabase, getEmail, listAccounts } from '$lib/server/db';
 import { chatWithEmail } from '$lib/server/email-chat';
+import type { ChatStreamEvent } from '$lib/email-chat';
 import type { RequestHandler } from './$types';
 
 const requestSchema = z.object({
@@ -32,22 +33,39 @@ export const POST: RequestHandler = async ({ request, url }) => {
     !getEmail(database, input.currentMessageId, input.account ?? undefined)
   )
     return json({ error: 'The open message is not available.' }, { status: 400 });
-  try {
-    return json(
-      await chatWithEmail(
-        database,
-        input.messages,
-        input.account ?? undefined,
-        request.signal,
-        {},
-        input.currentMessageId ?? undefined
-      ),
-      { headers: { 'cache-control': 'no-store' } }
-    );
-  } catch (error) {
-    return json(
-      { error: error instanceof Error ? error.message : 'Email chat failed.' },
-      { status: 502 }
-    );
-  }
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: ChatStreamEvent) => {
+        if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      };
+      try {
+        const answer = await chatWithEmail(
+          database,
+          input.messages,
+          input.account ?? undefined,
+          request.signal,
+          {},
+          input.currentMessageId ?? undefined,
+          (progress) => send({ type: 'progress', progress })
+        );
+        send({ type: 'answer', answer });
+      } catch (error) {
+        if (!request.signal.aborted && !cancelled)
+          send({
+            type: 'error',
+            error: error instanceof Error ? error.message : 'Email chat failed.',
+          });
+      } finally {
+        if (!cancelled) controller.close();
+      }
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  return new Response(stream, {
+    headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
+  });
 };

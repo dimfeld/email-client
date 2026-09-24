@@ -103,6 +103,38 @@ test('adds the message open at chat start to the instructions', async () => {
   );
 });
 
+test('reports tool progress and asks for stable message numbers', async () => {
+  seed();
+  const updates: string[] = [];
+  const generate = (async (options: Parameters<typeof generateText>[0]) => {
+    expect(options.instructions).toContain('number them 1, 2, 3');
+    const toolCall = {
+      toolCallId: 'search-1',
+      toolName: 'search',
+      input: { query: 'in:inbox', offset: 0, limit: 10 },
+    };
+    await options.onToolExecutionStart?.({ toolCall } as never);
+    await options.onToolExecutionEnd?.({
+      toolCall,
+      toolOutput: { type: 'tool-result', output: { results: [{ id: 1 }] } },
+    } as never);
+    return { output: { answer: 'Done.', sourceIds: [] } };
+  }) as typeof generateText;
+  await chatWithEmail(
+    database,
+    [{ role: 'user', content: 'Triage mail.' }],
+    undefined,
+    undefined,
+    {
+      apiKey: 'test',
+      generate,
+    },
+    undefined,
+    (progress) => updates.push(progress.text)
+  );
+  expect(updates).toEqual(['Searching for in:inbox…', 'Found 1 message for in:inbox.']);
+});
+
 test('rejects invented citations and stops tools after cancellation', async () => {
   const { one } = seed();
   const generate = (async () => ({
