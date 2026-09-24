@@ -1,4 +1,5 @@
 <script lang="ts">
+  import CalendarEventDialog from './CalendarEventDialog.svelte';
   import Icon from './Icon.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -23,6 +24,7 @@
     day,
   }: { calendars: SyncedCalendar[]; events: SyncedCalendarEvent[]; day: string } = $props();
   let selection = $state<CalendarSelection>({});
+  let eventDialog = $state<CalendarEventDialog>();
   let visibleKeys = $derived(
     new Set(
       calendars
@@ -66,8 +68,10 @@
       ><Icon name="chevron-right" /></button
     >
   </div>
-  {#each allDay as event}<a class="all-day" href={`/calendar?view=day&date=${day}`}
-      >{event.summary}</a
+  {#each allDay as event}<button
+      type="button"
+      class="all-day"
+      onclick={() => eventDialog?.open(event)}>{event.summary}</button
     >{/each}
   <div class="scroll" bind:this={scroller}>
     <div class="hours">
@@ -79,19 +83,21 @@
           >
         </div>{/each}
       {#each placements as item}
-        <a
+        <button
+          type="button"
           class="event"
           style:left={`calc(38px + (100% - 48px) * ${item.column / item.columns})`}
           style:width={`calc((100% - 48px) / ${item.columns})`}
           style:top={`${(item.startMinutes / 60) * 52}px`}
           style:height={`${((item.endMinutes - item.startMinutes) / 60) * 52}px`}
-          href={`/calendar?view=day&date=${day}`}
-          title={item.event.summary}>{item.event.summary}</a
+          title={item.event.summary}
+          onclick={() => eventDialog?.open(item.event)}>{item.event.summary}</button
         >
       {/each}
     </div>
   </div>
 </aside>
+<CalendarEventDialog bind:this={eventDialog} {calendars} />
 
 <style>
   aside {
@@ -147,6 +153,11 @@
     left: 6px;
     color: var(--color-text-faint);
     font-size: var(--text-xs);
+  }
+  .event,
+  .all-day {
+    font: inherit;
+    text-align: left;
   }
   .event {
     position: absolute;

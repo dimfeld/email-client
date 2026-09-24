@@ -201,6 +201,7 @@ export function layoutTimedEvents(events: SyncedCalendarEvent[], key: DateKey): 
 }
 
 /** Local storage key for per-calendar visibility overrides on the calendar page. */
+export const calendarFallbackColor = '#6edff3';
 export const calendarSelectionStorageKey = 'calendar:visible-calendars';
 
 /** Local storage key for per-calendar visibility overrides in the mail page calendar rail. */
