@@ -111,13 +111,13 @@
   }
 </script>
 
-<section class="chat" aria-label="Chat with email">
+<section class="chat" aria-label="Agent chat">
   <header>
     <div>
-      <h2>Chat with email</h2>
+      <h2>Agent Chat</h2>
       <small>{account ?? 'All accounts'}</small>
     </div>
-    <button onclick={close} aria-label="Close email chat"><Icon name="close" /></button>
+    <button onclick={close} aria-label="Close agent"><Icon name="close" /></button>
   </header>
   <div class="conversation" bind:this={conversation} aria-live="polite" aria-busy={pending}>
     {#if messages.length === 0}<p class="help">
