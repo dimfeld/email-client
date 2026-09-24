@@ -103,6 +103,12 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
       WHERE 1 ${accountWhere} ORDER BY s.wake_at, t.latest_email_id DESC LIMIT ?`;
     params = [...accountParams, query.limit + 1];
   } else {
+    // Starred threads stay at the top of the inbox.
+    const starredFirst =
+      view === 'inbox'
+        ? `EXISTS (SELECT 1 FROM thread_labels s WHERE s.account_email = t.account_email
+            AND s.thread_key = t.thread_key AND s.label = 'STARRED') DESC,`
+        : '';
     if (view === 'inbox' && query.filter !== 'all') {
       const filterKey = ['important', 'useful', 'pending'].includes(query.filter)
         ? query.filter
@@ -112,13 +118,13 @@ export function listMail(database: DatabaseSync, query: MailListQuery): MailList
         FROM thread_filters t WHERE t.filter = ? ${accountWhere}
           AND EXISTS (SELECT 1 FROM thread_labels l WHERE l.account_email = t.account_email
             AND l.thread_key = t.thread_key AND l.label = 'INBOX')
-        ORDER BY t.latest_sort_time DESC, t.latest_email_id DESC LIMIT ?`;
+        ORDER BY ${starredFirst} t.latest_sort_time DESC, t.latest_email_id DESC LIMIT ?`;
       params = [filterKey, ...accountParams, query.limit + 1];
     } else {
       candidateSql = `SELECT t.account_email, t.thread_key, t.latest_email_id,
         t.latest_email_id AS preview_id, t.latest_sort_time
         FROM thread_labels t WHERE t.label = ? ${accountWhere}
-        ORDER BY t.latest_sort_time DESC, t.latest_email_id DESC LIMIT ?`;
+        ORDER BY ${starredFirst} t.latest_sort_time DESC, t.latest_email_id DESC LIMIT ?`;
       params = [label, ...accountParams, query.limit + 1];
     }
   }

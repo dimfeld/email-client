@@ -118,3 +118,20 @@ it('marks threads that have a starred message', () => {
     'Message b kiwi',
   ]);
 });
+
+it('lists starred threads first in the inbox and its filters, but not in Sent', () => {
+  setup();
+  const day = (date: number) => new Date(Date.UTC(2026, 0, date)).toUTCString();
+  upsertEmails(database!, 'one@example.com', [
+    { id: 'd', subject: 'Message d kiwi', date: day(7), labels: ['INBOX', 'STARRED'] },
+    { id: 'f', subject: 'Message f kiwi', date: day(12), labels: ['SENT'] },
+    { id: 'g', subject: 'Message g kiwi', date: day(11), labels: ['SENT', 'STARRED'] },
+  ]);
+  const list = (filter: string, view?: 'sent', limit = 10) =>
+    subjects(listMail(database!, { search: '', filter, view, limit }));
+  expect(list('all')).toEqual(['d', 'a', 'b', 'c', 'e']);
+  expect(list('important')).toEqual(['d', 'a']);
+  expect(list('all', 'sent')).toEqual(['f', 'g']);
+  // The starred thread is in the first page too.
+  expect(list('all', undefined, 1)).toEqual(['d']);
+});
