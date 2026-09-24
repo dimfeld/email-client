@@ -2,6 +2,7 @@
   // Outline icons on a 24px grid with one stroke width, so every icon matches.
   const paths = {
     menu: 'M4 6h16M4 12h16M4 18h16',
+    accounts: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20v-2a8 8 0 0 1 16 0v2z',
     search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
     close: 'M6 6l12 12M18 6L6 18',
     minimize: 'M5 12h14',

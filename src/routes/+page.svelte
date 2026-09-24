@@ -1025,19 +1025,26 @@
     >
     <form method="GET" class="account-picker">
       {#if data.query}<input type="hidden" name="q" value={data.query} />{/if}
-      <select
-        id="account"
-        name="account"
-        aria-label="Account"
-        onchange={(event) => event.currentTarget.form?.requestSubmit()}
+      <button
+        type="button"
+        class="account-button"
+        aria-label={`Account: ${data.selectedAccount ?? 'All accounts'}`}
+        title={data.selectedAccount ?? 'All accounts'}
+        popovertarget="account-menu"><Icon name="accounts" size="1.25rem" /></button
       >
-        <option value="">All accounts</option>
+      <div id="account-menu" class="action-menu account-menu" popover="auto">
+        <button type="submit" name="account" value="" aria-pressed={!data.selectedAccount}
+          >All accounts</button
+        >
         {#each data.accounts as account}
-          <option value={account.email} selected={data.selectedAccount === account.email}
-            >{account.email}</option
+          <button
+            type="submit"
+            name="account"
+            value={account.email}
+            aria-pressed={data.selectedAccount === account.email}>{account.email}</button
           >
         {/each}
-      </select>
+      </div>
     </form>
     <a class="settings-link" href="/settings" aria-label="Settings" title="Settings"
       ><Icon name="settings" size="1.25rem" /></a
@@ -1672,8 +1679,7 @@
     color: inherit;
   }
   button:focus-visible,
-  .message:focus-visible,
-  select:focus-visible {
+  .message:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: -3px;
   }
@@ -1761,15 +1767,35 @@
   .account-picker {
     display: flex;
     align-items: center;
-    gap: 12px;
-    min-width: 0;
   }
-  .account-picker select {
-    max-width: 220px;
-  }
-  .account-picker label {
+  .account-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border: 0;
+    background: none;
     color: var(--color-text-muted);
-    font-size: 0.8rem;
+  }
+  .account-button:hover {
+    color: var(--color-text);
+  }
+  .action-menu.account-menu[popover] {
+    position-area: block-end span-inline-start;
+  }
+  .account-menu button {
+    display: block;
+    width: 100%;
+    padding: 9px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--color-text);
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .account-menu button:hover,
+  .account-menu button[aria-pressed='true'] {
+    background: var(--color-accent-bg-subtle);
   }
   kbd {
     display: inline-block;
@@ -1781,16 +1807,6 @@
     color: var(--color-text);
     font: 0.75rem var(--font-mono);
     text-align: center;
-  }
-  select {
-    min-width: 0;
-    max-width: 100%;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    padding: 8px 12px;
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-size: var(--text-sm);
   }
   .mailbox {
     flex: 1;
@@ -2486,9 +2502,6 @@
     }
   }
   @media (max-width: 1100px) {
-    .account-picker label {
-      display: none;
-    }
     .mailbox > :global(aside) {
       display: none;
     }
@@ -2508,13 +2521,17 @@
   @media (max-width: 760px) {
     .masthead {
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 10px 6px;
+      padding-inline: 8px;
+    }
+    .brand {
+      gap: 6px;
+    }
+    .compose-button {
+      padding-inline: 8px;
     }
     .account-picker {
       margin-left: auto;
-    }
-    .account-picker label {
-      display: none;
     }
     .mailbox,
     .mailbox.show-detail,
