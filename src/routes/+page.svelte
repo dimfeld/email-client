@@ -1075,6 +1075,7 @@
         {#if visibleEmails.length > 0}
           {@const canArchive = mailView === 'inbox' && !search}
           {@const openRow = swipeOpen}
+          {@const importanceMap = importanceById}
           <ul
             aria-label="Messages"
             style:padding-top="{rowWindow.start * rowHeight}px"
@@ -1082,6 +1083,7 @@
           >
             {#each visibleEmails.slice(rowWindow.start, rowWindow.end) as email, index (email.id)}
               {@const starred = starOverrides.get(email.id) ?? email.starred ?? false}
+              {@const important = importanceMap.get(email.id) === 'important'}
               {@const swipe = swipeActions(email, canArchive, starred)}
               <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
                 <SwipeRow
@@ -1120,6 +1122,12 @@
                     {#if mailView !== 'sent'}<span class="category-tag"
                         >{email.category ? labels[email.category] : 'Pending'}</span
                       >{:else}<span></span>{/if}
+                    <!-- Jev's importance and the Gmail star are separate, so each has a column. -->
+                    <span class="importance" title={important ? 'Important' : undefined}
+                      >{#if important}<Icon name="important" size="12px" /><span
+                          class="visually-hidden">Important</span
+                        >{/if}</span
+                    >
                     <span class="star" aria-label={starred ? 'Starred' : undefined}
                       >{starred ? '★' : ''}</span
                     >
@@ -1780,7 +1788,7 @@
   }
   .message {
     display: grid;
-    grid-template-columns: 24px minmax(120px, 19%) minmax(0, 1fr) auto 14px 72px;
+    grid-template-columns: 24px minmax(120px, 19%) minmax(0, 1fr) auto 12px 14px 72px;
     align-items: center;
     gap: 9px;
     width: 100%;
@@ -1844,6 +1852,17 @@
   .star {
     color: var(--color-star);
   }
+  .importance {
+    color: var(--color-warning);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .snoozed-until {
     color: var(--color-caution);
   }
@@ -1890,7 +1909,7 @@
     display: none;
   }
   .show-detail .message {
-    grid-template-columns: 22px minmax(90px, 23%) minmax(0, 1fr) 14px 66px;
+    grid-template-columns: 22px minmax(90px, 23%) minmax(0, 1fr) 12px 14px 66px;
     padding-inline: 10px;
   }
   details {
@@ -2420,12 +2439,12 @@
       display: none;
     }
     .message {
-      grid-template-columns: 22px 96px minmax(0, 1fr) 14px 60px;
+      grid-template-columns: 22px 96px minmax(0, 1fr) 12px 14px 60px;
       padding-inline: 8px;
       height: 44px;
     }
     .message > .category-tag,
-    .message > span:empty:not(.star) {
+    .message > span:empty:not(.star, .importance) {
       display: none;
     }
     .pane-heading > span {
