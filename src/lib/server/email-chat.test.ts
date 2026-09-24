@@ -1,11 +1,24 @@
 import { afterEach, expect, test } from 'bun:test';
-import type { generateText } from 'ai';
+import type { streamText } from 'ai';
 import { createDatabase, listEmails, markDeleted, upsertEmails } from './db';
 import { chatWithEmail, createEmailChatTools } from './email-chat';
 
 const database = createDatabase(':memory:');
 afterEach(() => database.exec('DELETE FROM emails'));
 const context = { toolCallId: 'test', messages: [], context: {} };
+function fakeResult(
+  output: { answer: string; sourceIds: number[] },
+  parts: string[] = [],
+  before?: () => Promise<void>
+) {
+  return {
+    partialOutputStream: (async function* () {
+      await before?.();
+      for (const answer of parts) yield { answer };
+    })(),
+    output: Promise.resolve(output),
+  };
+}
 function seed() {
   upsertEmails(database, 'a@test.com', [
     { id: 'one', subject: 'Launch', bodyText: 'Launch is Friday.', labels: ['INBOX'] },
@@ -70,16 +83,32 @@ test('passes conversation to the model and returns verified sources', async () =
     { role: 'assistant' as const, content: 'I found it.' },
     { role: 'user' as const, content: 'When is it?' },
   ];
-  const generate = (async (options: Parameters<typeof generateText>[0]) => {
+  const stream = ((options: Parameters<typeof streamText>[0]) => {
     expect(options.messages).toEqual(messages);
     expect(options.instructions).toContain('untrusted data');
-    await options.tools!.read.execute!({ id: one, offset: 0, length: 100 }, context);
-    return { output: { answer: `Friday [${one}].`, sourceIds: [one] } };
-  }) as typeof generateText;
-  const result = await chatWithEmail(database, messages, 'a@test.com', undefined, {
-    apiKey: 'test',
-    generate,
-  });
+    return fakeResult(
+      { answer: `Friday [${one}].`, sourceIds: [one] },
+      ['Fri', `Friday [${one}].`],
+      async () => {
+        await options.tools!.read.execute!({ id: one, offset: 0, length: 100 }, context);
+      }
+    );
+  }) as unknown as typeof streamText;
+  const partials: string[] = [];
+  const result = await chatWithEmail(
+    database,
+    messages,
+    'a@test.com',
+    undefined,
+    {
+      apiKey: 'test',
+      stream,
+    },
+    undefined,
+    undefined,
+    (text) => partials.push(text)
+  );
+  expect(partials).toEqual(['Fri', `Friday [${one}].`]);
   expect(result.sources.map((source) => source.id)).toEqual([one]);
   expect(result.references).toEqual([{ id: one, href: `/?account=a%40test.com&message=${one}` }]);
   expect(result.actions).toEqual([]);
@@ -87,10 +116,10 @@ test('passes conversation to the model and returns verified sources', async () =
 
 test('adds the message open at chat start to the instructions', async () => {
   const { one } = seed();
-  const generate = (async (options: Parameters<typeof generateText>[0]) => {
+  const stream = ((options: Parameters<typeof streamText>[0]) => {
     expect(options.instructions).toContain(`Message ${one} was open when this chat started`);
-    return { output: { answer: 'No action needed.', sourceIds: [] } };
-  }) as typeof generateText;
+    return fakeResult({ answer: 'No action needed.', sourceIds: [] });
+  }) as unknown as typeof streamText;
   await chatWithEmail(
     database,
     [{ role: 'user', content: 'Help me.' }],
@@ -98,7 +127,7 @@ test('adds the message open at chat start to the instructions', async () => {
     undefined,
     {
       apiKey: 'test',
-      generate,
+      stream,
     },
     one
   );
@@ -107,20 +136,21 @@ test('adds the message open at chat start to the instructions', async () => {
 test('reports tool progress and asks for stable message numbers', async () => {
   seed();
   const updates: string[] = [];
-  const generate = (async (options: Parameters<typeof generateText>[0]) => {
+  const stream = ((options: Parameters<typeof streamText>[0]) => {
     expect(options.instructions).toContain('number them 1, 2, 3');
     const toolCall = {
       toolCallId: 'search-1',
       toolName: 'search',
       input: { query: 'in:inbox', offset: 0, limit: 10 },
     };
-    await options.onToolExecutionStart?.({ toolCall } as never);
-    await options.onToolExecutionEnd?.({
-      toolCall,
-      toolOutput: { type: 'tool-result', output: { results: [{ id: 1 }] } },
-    } as never);
-    return { output: { answer: 'Done.', sourceIds: [] } };
-  }) as typeof generateText;
+    return fakeResult({ answer: 'Done.', sourceIds: [] }, [], async () => {
+      await options.onToolExecutionStart?.({ toolCall } as never);
+      await options.onToolExecutionEnd?.({
+        toolCall,
+        toolOutput: { type: 'tool-result', output: { results: [{ id: 1 }] } },
+      } as never);
+    });
+  }) as unknown as typeof streamText;
   await chatWithEmail(
     database,
     [{ role: 'user', content: 'Triage mail.' }],
@@ -128,7 +158,7 @@ test('reports tool progress and asks for stable message numbers', async () => {
     undefined,
     {
       apiKey: 'test',
-      generate,
+      stream,
     },
     undefined,
     (progress) => updates.push(progress.text)
@@ -138,15 +168,27 @@ test('reports tool progress and asks for stable message numbers', async () => {
 
 test('rejects invented citations and stops tools after cancellation', async () => {
   const { one } = seed();
-  const generate = (async () => ({
-    output: { answer: `Invented [${one}].`, sourceIds: [] },
-  })) as unknown as typeof generateText;
+  const partials: string[] = [];
+  const stream = (() =>
+    fakeResult({ answer: `Invented [${one}].`, sourceIds: [] }, [
+      `Invented [${one}].`,
+    ])) as unknown as typeof streamText;
   await expect(
-    chatWithEmail(database, [{ role: 'user', content: 'When?' }], undefined, undefined, {
-      apiKey: 'test',
-      generate,
-    })
+    chatWithEmail(
+      database,
+      [{ role: 'user', content: 'When?' }],
+      undefined,
+      undefined,
+      {
+        apiKey: 'test',
+        stream,
+      },
+      undefined,
+      undefined,
+      (text) => partials.push(text)
+    )
   ).rejects.toThrow('unverified source');
+  expect(partials).toEqual([`Invented [${one}].`]);
   const abort = new AbortController();
   abort.abort();
   const { tools } = createEmailChatTools(database, undefined, undefined, abort.signal);

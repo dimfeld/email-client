@@ -2,7 +2,8 @@ import type { ChatAnswer, ChatProgress, ChatStreamEvent } from './email-chat';
 
 export async function readChatStream(
   body: ReadableStream<Uint8Array>,
-  onProgress: (progress: ChatProgress) => void
+  onProgress: (progress: ChatProgress) => void,
+  onAnswerText: (text: string) => void = () => {}
 ): Promise<ChatAnswer> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -14,6 +15,7 @@ export async function readChatStream(
     if (event.type === 'error') throw new Error(event.error);
     if (event.type === 'answer') answer = event.answer;
     if (event.type === 'progress') onProgress(event.progress);
+    if (event.type === 'answer-text') onAnswerText(event.text);
   };
   try {
     while (true) {

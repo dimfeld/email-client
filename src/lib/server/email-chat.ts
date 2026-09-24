@@ -1,5 +1,5 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateText, Output, tool } from 'ai';
+import { streamText, Output, tool } from 'ai';
 import { choice, TypeSafeClient } from '@typesafe-ai/sdk';
 import { z } from 'zod';
 import type { DatabaseSync } from 'node:sqlite';
@@ -248,9 +248,10 @@ export async function chatWithEmail(
   messages: ChatMessage[],
   account?: string,
   signal?: AbortSignal,
-  dependencies: { apiKey?: string; generate?: typeof generateText; check?: RelevanceCheck } = {},
+  dependencies: { apiKey?: string; stream?: typeof streamText; check?: RelevanceCheck } = {},
   currentMessageId?: number,
-  onProgress?: (progress: ChatProgress) => void
+  onProgress?: (progress: ChatProgress) => void,
+  onAnswerText?: (text: string) => void
 ): Promise<ChatAnswer> {
   const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('Set OPENAI_API_KEY on the server to use email chat.');
@@ -260,7 +261,7 @@ export async function chatWithEmail(
     dependencies.check ?? createRelevanceCheck(),
     signal
   );
-  const result = await (dependencies.generate ?? generateText)({
+  const result = (dependencies.stream ?? streamText)({
     model: createOpenAI({ apiKey }).responses(process.env.EMAIL_CHAT_MODEL ?? 'gpt-6-luna'),
     instructions: `Help the user with downloaded email. Current date: ${new Date().toISOString()}. Account scope: ${account ?? 'all connected accounts'}.${currentMessageId ? ` Message ${currentMessageId} was open when this chat started. Consider whether the request concerns that thread or is a general question about email. Read that message when relevant.` : ''}
 Use search to find candidates, relevance when it is available to check candidates, and read to inspect evidence. Refine searches when needed. Do not claim to have searched the complete remote mailbox. Report missing or incomplete evidence. Follow-up questions can refer to earlier turns, but verify cited messages again.
@@ -296,7 +297,14 @@ Write a clear answer in plain text. Cite factual claims with [message ID], for e
     abortSignal: signal,
     providerOptions: { openai: { reasoningEffort: 'medium', store: false } },
   });
-  const output = result.output;
+  let lastAnswer = '';
+  for await (const partial of result.partialOutputStream) {
+    if (typeof partial.answer === 'string' && partial.answer !== lastAnswer) {
+      lastAnswer = partial.answer;
+      onAnswerText?.(lastAnswer);
+    }
+  }
+  const output = await result.output;
   const cited = [...output.answer.matchAll(/\[(\d+)\]/g)].map((match) => Number(match[1]));
   const ids = [...new Set([...output.sourceIds, ...cited])];
   const actedIds = new Set(

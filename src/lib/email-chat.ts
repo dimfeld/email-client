@@ -32,5 +32,6 @@ export function linkMessageReferences(text: string, references: ChatReference[])
 export type ChatProgress = { id: string; text: string; done: boolean };
 export type ChatStreamEvent =
   | { type: 'progress'; progress: ChatProgress }
+  | { type: 'answer-text'; text: string }
   | { type: 'answer'; answer: ChatAnswer }
   | { type: 'error'; error: string };

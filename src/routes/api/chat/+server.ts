@@ -48,7 +48,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
           request.signal,
           {},
           input.currentMessageId ?? undefined,
-          (progress) => send({ type: 'progress', progress })
+          (progress) => send({ type: 'progress', progress }),
+          (text) => send({ type: 'answer-text', text })
         );
         send({ type: 'answer', answer });
       } catch (error) {

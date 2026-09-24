@@ -23,6 +23,7 @@
     })[]
   >([]);
   let progress = $state<ChatProgress[]>([]);
+  let draftAnswer = $state('');
   let threadMessageId = $state<number | null>(null);
   let question = $state('');
   let pending = $state(false);
@@ -38,6 +39,7 @@
     question = '';
     error = '';
     progress = [];
+    draftAnswer = '';
     const history: ChatMessage[] = [
       ...messages.map(({ role, content }) => ({ role, content })),
       { role: 'user', content },
@@ -57,11 +59,15 @@
         throw new Error(result.error ?? 'Email chat failed.');
       }
       if (!response.body) throw new Error('The chat stream is not available.');
-      const result = await readChatStream(response.body, (update) => {
-        const index = progress.findIndex((item) => item.id === update.id);
-        if (index < 0) progress = [...progress, update];
-        else progress = progress.map((item, position) => (position === index ? update : item));
-      });
+      const result = await readChatStream(
+        response.body,
+        (update) => {
+          const index = progress.findIndex((item) => item.id === update.id);
+          if (index < 0) progress = [...progress, update];
+          else progress = progress.map((item, position) => (position === index ? update : item));
+        },
+        (text) => (draftAnswer = text)
+      );
       messages.push({
         role: 'assistant',
         content: result.answer,
@@ -71,6 +77,7 @@
         progress: [...progress],
       });
       progress = [];
+      draftAnswer = '';
     } catch (failure) {
       error = controller.signal.aborted
         ? 'Search stopped.'
@@ -78,6 +85,7 @@
           ? failure.message
           : 'Email chat failed.';
       messages.pop();
+      draftAnswer = '';
       question = content;
     } finally {
       pending = false;
@@ -88,6 +96,7 @@
     threadMessageId = null;
     error = '';
     progress = [];
+    draftAnswer = '';
   }
 </script>
 
@@ -132,6 +141,10 @@
           </ul>{/if}
       </article>
     {/each}
+    {#if pending && draftAnswer}<article aria-live="off">
+        <strong>Email assistant</strong>
+        <p>{draftAnswer}</p>
+      </article>{/if}
     {#if pending || progress.length}<div class="help" role="status">
         {#if progress.length}<ul class="progress-list">
             {#each progress as item (item.id)}<li>{item.text}</li>{/each}
