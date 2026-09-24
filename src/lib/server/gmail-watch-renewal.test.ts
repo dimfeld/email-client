@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, listAccounts, upsertAccount } from './db';
 import type { GoogleAccount } from './google-api';
-import { renewGmailWatches } from './gmail-watch-renewal';
+import { renewGmailWatches, startGmailWatchRenewal } from './gmail-watch-renewal';
 
 let database: DatabaseSync | undefined;
 
@@ -12,6 +12,33 @@ afterEach(() => {
 });
 
 describe('Gmail watch renewal', () => {
+  it('renews a watch when the server starts', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, {
+      email: 'one@example.com',
+      refreshToken: 'one',
+      topic: 'projects/p/topics/mail',
+    });
+    let finishRequest: (() => void) | undefined;
+    const requestStarted = new Promise<void>((resolve) => {
+      finishRequest = resolve;
+    });
+    const renewal = startGmailWatchRenewal({
+      database,
+      request: async <T>() => {
+        finishRequest?.();
+        return { historyId: '200' } as T;
+      },
+    });
+    try {
+      await requestStarted;
+      await Promise.resolve();
+      expect(listAccounts(database)[0].historyId).toBe('200');
+    } finally {
+      renewal.close();
+    }
+  });
+
   it('renews enabled watches and preserves an existing history cursor', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, {

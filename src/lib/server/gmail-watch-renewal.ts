@@ -78,6 +78,7 @@ export function startGmailWatchRenewal({
     void renewGmailWatches(database, request);
   };
 
+  renew();
   const timer = setInterval(renew, intervalMs);
   return {
     close() {

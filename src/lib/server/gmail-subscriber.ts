@@ -232,6 +232,7 @@ export function startGmailSubscribers(): GmailSubscribers | null {
     );
 
     subscription.on('message', (message: Message) => {
+      const receivedAt = Date.now();
       let notification: GmailNotification;
       try {
         notification = parseGmailNotification(message.data);
@@ -253,7 +254,14 @@ export function startGmailSubscribers(): GmailSubscribers | null {
         return;
       }
 
+      console.info('Gmail Pub/Sub notification received.', {
+        account: account.email,
+        notificationHistoryId: notification.historyId,
+        publishedAt: message.publishTime?.toISOString(),
+        receivedAt: new Date(receivedAt).toISOString(),
+      });
       void queueGmailAccountWork(account.email, async () => {
+        const startedAt = Date.now();
         try {
           account.historyId =
             listAccounts(database).find((item) => item.email === account.email)?.historyId ?? null;
@@ -267,11 +275,21 @@ export function startGmailSubscribers(): GmailSubscribers | null {
             account: account.email,
             notificationHistoryId: notification.historyId,
             historyId: account.historyId,
+            publishedAt: message.publishTime?.toISOString(),
+            receivedAt: new Date(receivedAt).toISOString(),
+            queueDelayMs: startedAt - receivedAt,
+            processingMs: Date.now() - startedAt,
             ...result,
           });
           message.ack();
         } catch (error) {
-          console.error(`Gmail notification failed for ${account.email}.`, error);
+          console.error(`Gmail notification failed for ${account.email}.`, {
+            publishedAt: message.publishTime?.toISOString(),
+            receivedAt: new Date(receivedAt).toISOString(),
+            queueDelayMs: startedAt - receivedAt,
+            processingMs: Date.now() - startedAt,
+            error,
+          });
           message.nack();
         }
       });

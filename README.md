@@ -78,7 +78,7 @@ Email content is sent to the TypeSafe API for classification. Messages that Jev 
 
 8. Optional: import existing email from **Settings → Historical email import**. Choose an account and, if needed, enter a Gmail query or date range. Leave these fields empty to import all mail from before the task starts. The import runs in the background and resumes after a server restart.
 
-9. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch once every 24 hours and runs Gmail and Google data synchronization every five minutes while it runs. The Gmail history check uses each account's saved history cursor to catch changes missed by Pub/Sub. The inbox backfill finds missed inbox messages. Its first run checks the previous hour; later runs use each account's saved backfill time with a five-minute overlap.
+9. Stop the development server and build and start the app. The server loads its Pub/Sub listeners at startup, with one listener for each unique configured subscription. It renews each configured Gmail watch at startup and once every 24 hours while it runs. It runs Gmail and Google data synchronization every five minutes while it runs. The Gmail history check uses each account's saved history cursor to catch changes missed by Pub/Sub. The inbox backfill finds missed inbox messages. Its first run checks the previous hour; later runs use each account's saved backfill time with a five-minute overlap.
 
    ```sh
    bun run app
