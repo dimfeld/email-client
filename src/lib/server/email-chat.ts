@@ -64,6 +64,7 @@ export function createEmailChatTools(
 ) {
   const readSources = new Map<number, ChatSource>();
   const actions: ChatAction[] = [];
+  const actionMessageIds = new Set<number>();
   const find = (id: number) => {
     signal?.throwIfAborted();
     const email = getEmail(database, id, account);
@@ -158,6 +159,7 @@ export function createEmailChatTools(
         );
         const label = `${action} [${id}]`;
         actions.push({ kind: 'message', id, label });
+        actionMessageIds.add(id);
         return { id, action, status: 'completed' };
       },
     }),
@@ -182,6 +184,7 @@ export function createEmailChatTools(
           html: `<p>${text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('\n', '<br>')}</p>${draft.html}`,
         });
         actions.push({ kind: 'draft', id: saved.id, label: `Review reply draft for [${id}]` });
+        actionMessageIds.add(id);
         return { draftId: saved.id, sourceId: id, status: 'saved' };
       },
     }),
@@ -204,7 +207,7 @@ export function createEmailChatTools(
         }
       : {}),
   };
-  return { tools, readSources, actions };
+  return { tools, readSources, actions, actionMessageIds };
 }
 
 const answerSchema = z.object({
@@ -251,7 +254,7 @@ export async function chatWithEmail(
 ): Promise<ChatAnswer> {
   const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error('Set OPENAI_API_KEY on the server to use email chat.');
-  const { tools, readSources, actions } = createEmailChatTools(
+  const { tools, readSources, actions, actionMessageIds } = createEmailChatTools(
     database,
     account,
     dependencies.check ?? createRelevanceCheck(),
@@ -305,5 +308,11 @@ Write a clear answer in plain text. Cite factual claims with [message ID], for e
     answer: output.answer,
     sources: ids.flatMap((id) => (readSources.has(id) ? [readSources.get(id)!] : [])),
     actions,
+    references: [...new Set([...ids, ...actionMessageIds])].flatMap((id) => {
+      const email = getEmail(database, id, account);
+      return email
+        ? [{ id, href: `/?account=${encodeURIComponent(email.accountEmail)}&message=${id}` }]
+        : [];
+    }),
   };
 }

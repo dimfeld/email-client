@@ -1,7 +1,12 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { onDestroy, onMount } from 'svelte';
-  import type { ChatAnswer, ChatMessage, ChatProgress } from '$lib/email-chat';
+  import {
+    linkMessageReferences,
+    type ChatAnswer,
+    type ChatMessage,
+    type ChatProgress,
+  } from '$lib/email-chat';
   import { readChatStream } from '$lib/chat-stream';
   import { openComposer } from '$lib/composer';
   let {
@@ -13,6 +18,7 @@
     (ChatMessage & {
       sources?: ChatAnswer['sources'];
       actions?: ChatAnswer['actions'];
+      references?: ChatAnswer['references'];
       progress?: ChatProgress[];
     })[]
   >([]);
@@ -61,6 +67,7 @@
         content: result.answer,
         sources: result.sources,
         actions: result.actions,
+        references: result.references,
         progress: [...progress],
       });
       progress = [];
@@ -100,7 +107,11 @@
     {#each messages as message}
       <article class:user={message.role === 'user'}>
         <strong>{message.role === 'user' ? 'You' : 'Email assistant'}</strong>
-        <p>{message.content}</p>
+        <p>
+          {#each linkMessageReferences(message.content, message.references ?? []) as part}{#if part.href}<a
+                href={part.href}>{part.text}</a
+              >{:else}{part.text}{/if}{/each}
+        </p>
         {#if message.progress?.length}<ul class="progress-list">
             {#each message.progress as item}<li>{item.text}</li>{/each}
           </ul>{/if}

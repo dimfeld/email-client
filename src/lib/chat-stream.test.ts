@@ -17,7 +17,7 @@ function chunks(events: ChatStreamEvent[], split: number) {
 
 test('reads progress and the answer across network chunks', async () => {
   const seen: string[] = [];
-  const answer = { answer: 'Done.', sources: [], actions: [] };
+  const answer = { answer: 'Done.', sources: [], actions: [], references: [] };
   const stream = chunks(
     [
       { type: 'progress', progress: { id: 'search-1', text: 'Searching…', done: false } },

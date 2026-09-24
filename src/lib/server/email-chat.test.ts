@@ -81,6 +81,7 @@ test('passes conversation to the model and returns verified sources', async () =
     generate,
   });
   expect(result.sources.map((source) => source.id)).toEqual([one]);
+  expect(result.references).toEqual([{ id: one, href: `/?account=a%40test.com&message=${one}` }]);
   expect(result.actions).toEqual([]);
 });
 
