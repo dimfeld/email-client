@@ -2,17 +2,17 @@
 
 ## Contract
 
-A bundle is one Inbox row for a group of related threads that arrive in the same week, for example GitHub notifications or promotions. Opening the bundle shows its threads, and each thread opens as usual. The keyboard moves in and out of a bundle with the same keys that open and close a message: Right arrow or Enter goes in, Left arrow, Escape, or `U` comes out.
+A bundle is one Inbox row for a group of related threads that arrived recently, for example GitHub notifications or promotions. Opening the bundle shows its threads, and each thread opens as usual. The keyboard moves in and out of a bundle with the same keys that open and close a message: Right arrow or Enter goes in, Left arrow, Escape, or `U` comes out.
 
 Categories control bundles. Each category gets two new settings:
 
 1. **Rules.** A rule matches a message by sender address or domain, by a subject regular expression, or by both. A match puts the message in the rule's category, and replaces the category that Jev chose.
-2. **Bundle.** A boolean. When it is on, Inbox shows the category's threads as one row for each week.
+2. **Bundle.** A boolean. When it is on, Inbox shows the category's recent threads as one row, and its older threads as a second row.
 
 The work is complete when these statements are true and tested:
 
 - A rule match sets the message's category. Jev's choice is kept, and it becomes the category again when the rule is removed or stops matching. A rule change does not call Jev.
-- In Inbox, two or more threads in a bundled category and the same week show as one row. The row shows the category, the week, the thread count, the unread count, recent senders, and the latest time.
+- In Inbox, two or more threads in a bundled category and the same age group show as one row, across all accounts. The row shows the category, the age group, the thread count, the unread count, recent senders, and the latest time.
 - From the list, Right arrow or Enter on a bundle row shows the bundle's threads. Left arrow, Escape, or `U` goes back to the list, with the cursor on the bundle row. From an open message in a bundle, Left arrow goes back to the bundle's thread list, with the cursor on that thread.
 - Archive and Delete on a bundle row act on every thread that the row shows. Undo reverses them.
 - Existing Inbox, filter, count, search, and thread behavior does not change for categories that do not bundle.
@@ -20,8 +20,8 @@ The work is complete when these statements are true and tested:
 ## Terms
 
 - **Thread category.** The category of the thread's latest classified, received, nondeleted member. The Inbox row already shows this category (`mail-list.ts`); bundles use the same value, so a thread is in one bundle at most.
-- **Week.** The seven days from Monday 00:00 in the server's local time zone. The app runs locally, so the server time zone is the user's time zone. A thread's week comes from the thread's latest time, so a new reply moves the thread to the current week's bundle.
-- **Bundle key.** `(account_email, thread category, week start date)`. Bundles do not combine accounts, because threads do not combine accounts (see `THREADING_PLAN.md`).
+- **Age group.** `recent` when the thread's latest time is in the last 7 days (the length from the request), and `older` otherwise. The boundary moves with the current time: a bundle means "recent related mail", not a fixed period. A new reply moves a thread back to `recent`. The `older` group keeps old threads of a bundled category together, so they do not become separate rows when they leave `recent`.
+- **Bundle key.** `(thread category, age group)`, written as `<categoryId>/recent` or `<categoryId>/older`. A bundle contains threads from every account in the view. When the view shows one account, the bundle contains only that account's threads. Threads keep their account boundaries (see `THREADING_PLAN.md`); only the bundle row combines them.
 
 ## Category rules
 
@@ -85,13 +85,7 @@ A group with one thread shows as a normal thread row.
 
 Add `category TEXT` to `threads`, holding the thread category. The `recompute` statements in `thread-schema.ts` set it, the `emails_thread_classification` trigger updates it, and `rebuildThreads` fills it. Tests must check that the triggers and the rebuild give the same value, as they do for the other derived columns.
 
-The week is not stored. The list query computes it from `latest_sort_time`:
-
-```sql
-date(t.latest_sort_time / 1000, 'unixepoch', 'localtime', '-6 days', 'weekday 1')
-```
-
-This gives the Monday on or before the thread's local date.
+The age group is not stored, because it changes with the current time. The list query computes it from `latest_sort_time` and a `recentSince` parameter (the current time minus 7 days). The list response returns `recentSince`, so that later bundle requests and actions use the same boundary as the rows that the user saw.
 
 ### Query
 
@@ -101,39 +95,40 @@ The Inbox query keeps its current candidate source (`thread_filters` or `thread_
 WITH candidates AS (<current Inbox candidate query, without LIMIT, plus a `starred` column from `thread_labels`>),
 keyed AS (
   SELECT v.*, CASE WHEN c.bundle = 1 AND NOT v.starred
-      THEN t.category || '/' || <week expression> END AS bundle_part
+      THEN t.category || CASE WHEN v.latest_sort_time >= :recentSince
+        THEN '/recent' ELSE '/older' END END AS bundle_part
   FROM candidates v
   JOIN threads t ON t.account_email = v.account_email AND t.thread_key = v.thread_key
   LEFT JOIN categories c ON c.id = t.category
 )
-SELECT account_email, coalesce(bundle_part, thread_key) AS row_key, bundle_part,
+SELECT coalesce(bundle_part, account_email || char(0) || thread_key) AS row_key,
+  bundle_part, min(account_email) AS account_email, min(thread_key) AS thread_key,
   count(*) AS thread_count, max(latest_sort_time) AS latest_sort_time,
   max(latest_email_id) AS latest_email_id, max(starred) AS starred
 FROM keyed
-GROUP BY account_email, row_key
+GROUP BY row_key
 ORDER BY starred DESC, latest_sort_time DESC, latest_email_id DESC
 LIMIT ?
 ```
 
 Thread rows load their summaries as today. Bundle rows load their unread thread count and their most recent distinct senders with one indexed query for each bundle row on the page.
 
-This query groups every Inbox candidate before the limit. `THREADING_PLAN.md` does not allow that without evidence. Implement this query first. Then check the query plan and measure first-page time on a scratch database with a representative number of Inbox threads, bundled categories, and accounts. If the first page is too slow, add a derived `thread_bundles` table that triggers keep current, as the threading plan did for `thread_filters`. The measurement decides; this design sets no size or time target.
+This query groups every Inbox candidate before the limit. `THREADING_PLAN.md` does not allow that without evidence. Implement this query first. Then check the query plan and measure first-page time on a scratch database with a representative number of Inbox threads, bundled categories, and accounts. If the first page is too slow, add an index on `threads(category, latest_sort_time)` or a derived table of bundled threads that triggers keep current, as the threading plan did for `thread_filters`. A derived table cannot store the age group, because the age group changes with time. The measurement decides; this design sets no size or time target.
 
 Sidebar counts do not change. They continue to count threads.
 
 ### Row type
 
-`MailList.emails` becomes `MailList.rows`, a union:
+`MailList.emails` becomes `MailList.rows`, a union. `MailList` also gets `recentSince: number`.
 
 ```ts
 type MailRow =
   | ({ kind: 'thread' } & EmailSummary)
   | {
       kind: 'bundle';
-      key: string; // `${accountEmail}/${categoryId}/${weekStart}`
-      accountEmail: string;
+      key: string; // `${categoryId}/${age}`
       category: string;
-      weekStart: string; // YYYY-MM-DD
+      age: 'recent' | 'older';
       threadCount: number;
       unreadCount: number;
       senders: string[];
@@ -144,17 +139,17 @@ type MailRow =
 
 ### Bundle contents
 
-`listBundle(database, { bundle, filter, limit })` returns the bundle's thread rows with the same row data as Inbox. It applies the same Inbox candidate query and filter, adds `threads.category = ?`, the week condition, and "not starred", and orders by latest time. Server membership comes from the bundle key, not from a list that the client sends.
+`listBundle(database, { bundle, recentSince, account, filter, limit })` returns the bundle's thread rows with the same row data as Inbox, from all accounts unless `account` is set. It applies the same Inbox candidate query and filter, adds `threads.category = ?`, the age condition, and "not starred", and orders by latest time. Each thread row keeps its account, so thread actions and the reading pane do not change. Server membership comes from the bundle key, not from a list that the client sends.
 
 ### Bundle row display
 
-The row shows the bundle icon (add one to `Icon.svelte`), the category name, the week ("Sep 21 – 27"), the thread count, and as many recent senders as fit on the row. The row is bold when `unreadCount > 0`. Use the tokens in `src/app.css`.
+The row shows the bundle icon (add one to `Icon.svelte`), the category name, the age group ("Last 7 days" or "Older"), the thread count, and as many recent senders as fit on the row. The row is bold when `unreadCount > 0`. Use the tokens in `src/app.css`.
 
 ## Navigation
 
 ### URL
 
-`?bundle=<key>` opens a bundle. `?bundle=<key>&message=<id>` opens a message in that bundle. The `category`, `account`, and `view` parameters keep their meaning. A `?message=` link without `bundle` opens the message as today; the list then marks the bundle row that contains the thread as selected.
+`?bundle=<key>&since=<recentSince>` opens a bundle. `?bundle=<key>&message=<id>` opens a message in that bundle. The `category`, `account`, and `view` parameters keep their meaning. A `?message=` link without `bundle` opens the message as today; the list then marks the bundle row that contains the thread as selected.
 
 ### Keyboard
 
@@ -179,13 +174,13 @@ On phones (the 760 px breakpoint), the bundle list is a separate view between th
 
 ## Bundle actions
 
-Archive or Delete on a bundle row sends the bundle key and the largest `latestEmailId` that the row showed. The server resolves the bundle's threads, skips threads that have a newer message than that ID, and runs the existing thread action on each remaining thread. Thus a thread that arrives after the list rendered is not archived without the user seeing it. Partial failure, refresh, and Undo work as for thread actions: Undo targets only the message IDs that succeeded.
+Archive or Delete on a bundle row sends the bundle key, the list's `recentSince`, and the largest `latestEmailId` that the row showed. The server resolves the bundle's threads in every account in the view, skips threads that have a newer message than that ID, and runs the existing thread action on each remaining thread. Thus a thread that arrives after the list rendered is not archived without the user seeing it. Partial failure, refresh, and Undo work as for thread actions: Undo targets only the message IDs that succeeded.
 
 ## Settings
 
 Each category form on the Categories settings page gets:
 
-- A checkbox, "Group into weekly bundles".
+- A checkbox, "Group into bundles".
 - A rules list. Each rule has a "From address or @domain" field and a "Subject matches" field, and a Remove button. An "Add rule" button adds an empty rule.
 
 Save validates each rule, stores the category and its rules in one transaction, applies the rules to stored messages, and publishes `categories` and `mail`.
@@ -195,15 +190,15 @@ Save validates each rule, stores the category and its rules in one transaction, 
 1. Schema: `categories.bundle`, `category_rules`, `emails.classifier_category`, `emails.category_rule_id`, and the migration. Keep Jev's importance for all messages.
 2. Rule evaluation in `saveClassification`, rule re-application after a rule or category change, and category removal. Test a match, no match, a rule removal, rule order, both patterns, invalid regular expressions, and category removal with rule-set and Jev-set messages.
 3. `threads.category` in the triggers and the rebuild, with trigger-versus-rebuild tests.
-4. The Inbox row query, `MailRow`, and `listBundle`. Test grouping by category, week, and account; starred threads; single-thread groups; filters; week edges at Monday 00:00 local time; and that Sent, Snoozed, and search do not bundle. Check the query plan and measure the first page.
+4. The Inbox row query, `MailRow`, and `listBundle`. Test grouping by category and age group; one bundle for threads from two accounts, and only one account's threads when the view selects that account; starred threads; single-thread groups; filters; the 7-day boundary; and that Sent, Snoozed, and search do not bundle. Check the query plan and measure the first page.
 5. Settings UI.
 6. Bundle row, bundle list, URL, keyboard, and phone navigation.
 7. Bundle Archive and Delete with Undo and partial failure.
 8. Browser test against a scratch database and server, as `AGENTS.md` describes: open and close a bundle and a message in it with only the keyboard, on desktop and phone widths.
 
-## Open questions
+## Decisions
 
-- **Week boundary.** The request says "say the past week". This design uses fixed Monday-to-Sunday weeks in local time, so a bundle does not change members as days pass. A rolling seven-day window is the alternative. Confirm the choice, and confirm Monday as the first day.
-- **Skip Jev on a rule match.** Skipping saves a Jev call for each matched message, but loses importance, action items, and reminders, and removes the fallback category. This design does not skip.
-- **Important threads in bundles.** In an `auto` category, a thread can be Important and still go into a bundle in the All view. This design bundles it. The alternative is to keep Important threads as their own rows.
-- **Bundles across accounts.** When the list shows all accounts, this design shows one bundle for each account.
+- **Age groups.** A rolling 7-day boundary, not calendar weeks. Older threads of a bundled category form one `older` bundle.
+- **Jev on a rule match.** Jev runs for every message. A rule changes only the category. Action item, reminder, and importance answers still come from Jev.
+- **Important threads.** A bundle can contain Important threads; nothing special applies to them. In the All view they are inside the bundle row. In the Important view, the bundle row contains only the Important threads. The only importance change is the one in "Importance" above: it keeps rule-matched messages in the Important and Useful filters.
+- **Accounts.** One bundle for all accounts in the view.
