@@ -45,8 +45,8 @@
 </script>
 
 <svelte:head>
-  <link rel="icon" href="/icons/mail-factory.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/icons/mail-factory-180.png" />
+  <link rel="icon" href="/icons/email-check-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="/icons/email-check-180.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#0b0b0d" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
