@@ -163,33 +163,27 @@
       </article>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </div>
-  <form
-    onsubmit={(event) => {
-      event.preventDefault();
-      void ask(question);
-    }}
-  >
+  <div class="chat-prompt">
     <label for="chat-question">Ask a question</label><textarea
       id="chat-question"
       bind:this={questionField}
       bind:value={question}
       autocomplete="off"
+      inputmode="text"
       rows="3"
       placeholder="What needs my attention this week?"
       disabled={pending}
       onkeydown={(event) => {
         if (event.metaKey && event.key === 'Enter') {
           event.preventDefault();
-          if (!pending) event.currentTarget.form?.requestSubmit();
+          void ask(question);
         }
       }}></textarea>
     <div>
       {#if pending}<button type="button" onclick={() => controller?.abort()}>Stop</button
-        >{:else}<button type="submit" disabled={!question.trim()}>Ask</button>{/if}<button
-        type="button"
-        disabled={pending}
-        onclick={newChat}>New chat</button
-      ><button
+        >{:else}<button type="button" disabled={!question.trim()} onclick={() => void ask(question)}
+          >Ask</button
+        >{/if}<button type="button" disabled={pending} onclick={newChat}>New chat</button><button
         type="button"
         disabled={pending}
         onclick={() => {
@@ -200,7 +194,7 @@
         }}>Triage inbox</button
       >
     </div>
-  </form>
+  </div>
 </section>
 
 <style>
@@ -297,7 +291,7 @@
   .error {
     color: var(--color-danger);
   }
-  form {
+  .chat-prompt {
     padding: 18px;
     border-top: 1px solid var(--color-border-strong);
   }
@@ -317,7 +311,7 @@
     padding: 10px;
     font: inherit;
   }
-  form div {
+  .chat-prompt > div {
     display: flex;
     gap: 8px;
     margin-top: 8px;
