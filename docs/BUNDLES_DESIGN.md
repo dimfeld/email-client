@@ -61,7 +61,7 @@ Jev still runs for rule-matched messages. Its importance, action item, and remin
 
 ### Importance
 
-Today the classifier keeps Jev's importance only when Jev's category has the `auto` level. A rule can move a message into an `auto` category, and then the message has no importance. Keep Jev's importance answer for every message. The `effectiveLevel` expression already ignores message importance for fixed-level categories, so filters do not change. This also removes the need to reclassify when a category's level changes to `auto`.
+Today the classifier keeps Jev's importance only when Jev's category has the `auto` level. A rule can move a message into an `auto` category, and then the message has no importance. Jev already answers the importance question in the same request for every message, so no extra request is needed: store that answer for every message. A message that a rule moves into an `auto` category then uses Jev's importance. The `effectiveLevel` expression already ignores message importance for fixed-level categories, so filters do not change. This also removes the need to reclassify when a category's level changes to `auto`.
 
 ### Classification details
 
@@ -198,7 +198,7 @@ Save validates each rule, stores the category and its rules in one transaction, 
 
 ## Decisions
 
-- **Age groups.** A rolling 7-day boundary, not calendar weeks. Older threads of a bundled category form one `older` bundle.
+- **Age groups.** A rolling 7-day boundary, not calendar weeks. Older threads of a bundled category form one `older` bundle. A later option is persistent bundles: a bundle keeps its threads as they age, and new threads start a new bundle. It is not part of this design.
 - **Jev on a rule match.** Jev runs for every message. A rule changes only the category. Action item, reminder, and importance answers still come from Jev.
 - **Important threads.** A bundle can contain Important threads; nothing special applies to them. In the All view they are inside the bundle row. In the Important view, the bundle row contains only the Important threads. The only importance change is the one in "Importance" above: it keeps rule-matched messages in the Important and Useful filters.
 - **Accounts.** One bundle for all accounts in the view.
