@@ -1027,11 +1027,11 @@
       >Chat</button
     >
     <form method="GET" class="account-picker">
-      <label for="account">Account</label>
       {#if data.query}<input type="hidden" name="q" value={data.query} />{/if}
       <select
         id="account"
         name="account"
+        aria-label="Account"
         onchange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         <option value="">All accounts</option>
