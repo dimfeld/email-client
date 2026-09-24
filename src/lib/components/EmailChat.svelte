@@ -169,10 +169,11 @@
       void ask(question);
     }}
   >
-    <label for="email-question">Ask a question</label><textarea
-      id="email-question"
+    <label for="chat-question">Ask a question</label><textarea
+      id="chat-question"
       bind:this={questionField}
       bind:value={question}
+      autocomplete="off"
       rows="3"
       placeholder="What needs my attention this week?"
       disabled={pending}
