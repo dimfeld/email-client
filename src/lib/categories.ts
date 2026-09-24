@@ -8,11 +8,3 @@ export type Category = {
   description: string;
   level: CategoryLevel;
 };
-
-export function effectiveImportance(
-  categoryLevel: CategoryLevel | undefined,
-  messageImportance: Importance | null
-): Importance | null {
-  if (!categoryLevel) return null;
-  return categoryLevel === 'auto' ? messageImportance : categoryLevel;
-}

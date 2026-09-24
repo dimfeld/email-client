@@ -11,7 +11,7 @@ Categories control bundles. Each category gets two new settings:
 
 The work is complete when these statements are true and tested:
 
-- A rule match sets the message's category. Jev's choice is kept, and it becomes the category again when the rule is removed or stops matching. A rule change does not call Jev.
+- A rule match sets the message's category, and the message's importance comes from that category. A rule change classifies the affected Inbox messages again.
 - In Inbox, two or more threads in a bundled category and the same age group show as one row, across all accounts. The row shows the category, the age group, the thread count, the unread count, recent senders, and the latest time.
 - From the list, Right arrow or Enter on a bundle row shows the bundle's threads. Left arrow, Escape, or `U` goes back to the list, with the cursor on the bundle row. From an open message in a bundle, Left arrow goes back to the bundle's thread list, with the cursor on that thread.
 - Archive and Delete on a bundle row act on every thread that the row shows. Undo reverses them.
@@ -39,11 +39,10 @@ CREATE TABLE category_rules (
   CHECK (from_pattern IS NOT NULL OR subject_pattern IS NOT NULL)
 );
 
-ALTER TABLE emails ADD COLUMN classifier_category TEXT;  -- Jev's choice
-ALTER TABLE emails ADD COLUMN category_rule_id TEXT;     -- the rule that set `category`, or NULL
+ALTER TABLE emails ADD COLUMN category_rule_id TEXT;  -- the rule that set `category`, or NULL
 ```
 
-`emails.category` stays the effective category. Because of this, `thread_filters`, its triggers, filter counts, and the category display do not change. The migration copies `category` into `classifier_category` for every classified row.
+`emails.category` holds the rule's category when a rule matches. Because of this, `thread_filters`, its triggers, filter counts, and the category display do not change.
 
 When a rule has both patterns, both must match. Match `from_pattern` with the address parser that the `from:` search filter uses (`email_search_address`), so display names do not affect the match. Save validates the regular expression and rejects an empty rule.
 
@@ -53,19 +52,21 @@ Rules are evaluated in category order (the Settings order), then in `position` o
 
 ### When rules apply
 
-- **Classification.** `saveClassification` stores Jev's answer in `classifier_category`, and then evaluates the rules. It sets `category` to the matched rule's category, or to `classifier_category` if no rule matches. All classification paths (ingest, history poll, historical backfill, reclassification) call `saveClassification`, so they all get the rules.
-- **Rule or category change.** In one transaction, evaluate the rules again for every received message that has `classifier_category`, and update `category` and `category_rule_id` only where they change. This does not call Jev. The existing `emails_thread_classification` trigger keeps `thread_filters` current. Publish `categories` and `mail`.
-- **Category removal.** Remove the category's rules. A message whose rule came from the removed category goes back to `classifier_category`. A message whose `classifier_category` is the removed category is cleared for reclassification, as today.
+- **Classification.** `saveClassification` evaluates the rules. It sets `category` to the matched rule's category, or to Jev's category if no rule matches. It then sets `importance` from that category, as described in "Importance" below. All classification paths (ingest, history poll, historical backfill, reclassification) call `saveClassification`, so they all get the rules.
+- **Rule change.** Set `classified_at = NULL` on the received Inbox messages that the old or the new rule matches. The normal classification path then classifies them again with Jev and applies the rules. Jev is cheap, so this path is simpler than a separate local re-evaluation. Publish `categories`.
+- **Category removal.** Remove the category's rules. Messages in the category are cleared for reclassification, as today.
 
-Jev still runs for rule-matched messages. Its importance, action item, and reminder answers stay useful, and the stored `classifier_category` lets a rule change fall back without a new Jev call.
+Jev still runs for rule-matched messages, in the same single request as today. Its action item and reminder answers stay useful.
 
 ### Importance
 
-Today the classifier keeps Jev's importance only when Jev's category has the `auto` level. A rule can move a message into an `auto` category, and then the message has no importance. Jev already answers the importance question in the same request for every message, so no extra request is needed: store that answer for every message. A message that a rule moves into an `auto` category then uses Jev's importance. The `effectiveLevel` expression already ignores message importance for fixed-level categories, so filters do not change. This also removes the need to reclassify when a category's level changes to `auto`.
+Importance is stored when a message is classified. For a category with a fixed level, `importance` is the category's level. For an `auto` category, it is Jev's importance answer, which Jev gives in the same request for every message. A later change to a category's level affects only messages classified after the change. Filters read `emails.importance` directly. (This behavior is implemented before the bundles work.)
+
+With rules, `saveClassification` sets `importance` from the final category, not from Jev's category. So a message that a rule moves into an `auto` category uses Jev's importance, and a message that a rule moves into a fixed category uses that level.
 
 ### Classification details
 
-When `category_rule_id` is set, the classification details show "Set by rule" with the rule text, and show Jev's category next to it.
+When `category_rule_id` is set, the classification details show "Set by rule" with the rule text.
 
 ## Mail list
 
@@ -187,8 +188,8 @@ Save validates each rule, stores the category and its rules in one transaction, 
 
 ## Work sequence
 
-1. Schema: `categories.bundle`, `category_rules`, `emails.classifier_category`, `emails.category_rule_id`, and the migration. Keep Jev's importance for all messages.
-2. Rule evaluation in `saveClassification`, rule re-application after a rule or category change, and category removal. Test a match, no match, a rule removal, rule order, both patterns, invalid regular expressions, and category removal with rule-set and Jev-set messages.
+1. Schema: `categories.bundle`, `category_rules`, and `emails.category_rule_id`.
+2. Rule evaluation and importance from the final category in `saveClassification`, reclassification after a rule change, and category removal. Test a match, no match, a rule removal, rule order, both patterns, invalid regular expressions, a rule into an `auto` category and into a fixed category, and category removal.
 3. `threads.category` in the triggers and the rebuild, with trigger-versus-rebuild tests.
 4. The Inbox row query, `MailRow`, and `listBundle`. Test grouping by category and age group; one bundle for threads from two accounts, and only one account's threads when the view selects that account; starred threads; single-thread groups; filters; the 7-day boundary; and that Sent, Snoozed, and search do not bundle. Check the query plan and measure the first page.
 5. Settings UI.
@@ -199,6 +200,6 @@ Save validates each rule, stores the category and its rules in one transaction, 
 ## Decisions
 
 - **Age groups.** A rolling 7-day boundary, not calendar weeks. Older threads of a bundled category form one `older` bundle. A later option is persistent bundles: a bundle keeps its threads as they age, and new threads start a new bundle. It is not part of this design.
-- **Jev on a rule match.** Jev runs for every message. A rule changes only the category. Action item, reminder, and importance answers still come from Jev.
-- **Important threads.** A bundle can contain Important threads; nothing special applies to them. In the All view they are inside the bundle row. In the Important view, the bundle row contains only the Important threads. The only importance change is the one in "Importance" above: it keeps rule-matched messages in the Important and Useful filters.
+- **Jev on a rule match.** Jev runs for every message. A rule changes the category, and importance follows the final category. Action item and reminder answers still come from Jev.
+- **Important threads.** A bundle can contain Important threads; nothing special applies to them. In the All view they are inside the bundle row. In the Important view, the bundle row contains only the Important threads.
 - **Accounts.** One bundle for all accounts in the view.

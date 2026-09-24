@@ -16,7 +16,6 @@
   import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
   import { tick, untrack } from 'svelte';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-  import { effectiveImportance } from '$lib/categories';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
   import { buildEmailDocument, emailColorMode, hasRemoteImages } from '$lib/email-html';
   import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
@@ -110,26 +109,6 @@
   let labels = $derived(
     Object.fromEntries(data.categories.map((category) => [category.id, category.name]))
   );
-  let categoryLevels = $derived(
-    new Map(data.categories.map((category) => [category.id, category.level]))
-  );
-  // Read derived values into locals before a loop. A derived read inside a per-email callback
-  // can check or recompute its whole dependency chain on every call, which froze the inbox.
-  let importanceById = $derived.by(() => {
-    const levels = categoryLevels;
-    return new Map(
-      emails.map((email) => [
-        email.id,
-        effectiveImportance(levels.get(email.category ?? ''), email.importance),
-      ])
-    );
-  });
-  function importance(email: EmailSummary | StoredEmail) {
-    return (
-      importanceById.get(email.id) ??
-      effectiveImportance(categoryLevels.get(email.category ?? ''), email.importance)
-    );
-  }
   function mailListArgs() {
     return {
       account: selectedAccount,
@@ -1139,7 +1118,6 @@
           {#if visibleEmails.length > 0}
             {@const canArchive = mailView === 'inbox' && !search}
             {@const openRow = swipeOpen}
-            {@const importanceMap = importanceById}
             <ul
               aria-label="Messages"
               style:padding-top="{rowWindow.start * rowHeight}px"
@@ -1147,7 +1125,7 @@
             >
               {#each visibleEmails.slice(rowWindow.start, rowWindow.end) as email, index (email.id)}
                 {@const starred = starOverrides.get(email.id) ?? email.starred ?? false}
-                {@const important = importanceMap.get(email.id) === 'important'}
+                {@const important = email.importance === 'important'}
                 {@const swipe = swipeActions(email, canArchive, starred)}
                 <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
                   <SwipeRow
@@ -1257,11 +1235,11 @@
                 ? labels[selectedSummary.category]
                 : 'Message detail'}</span
           >
-          {#if mailView === 'inbox' && selectedSummary && importance(selectedSummary) !== null}<span
+          {#if mailView === 'inbox' && selectedSummary && selectedSummary.importance !== null}<span
               class="useful-tag"
-              >{importance(selectedSummary) === 'important'
+              >{selectedSummary.importance === 'important'
                 ? 'Important'
-                : importance(selectedSummary) === 'useful'
+                : selectedSummary.importance === 'useful'
                   ? 'Useful'
                   : 'Other'}</span
             >{/if}

@@ -2149,11 +2149,6 @@ export function saveCategory(
     .prepare(`INSERT INTO categories (id, name, description, level) VALUES (?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, level = excluded.level`)
     .run(id, name, description, input.level);
-  if (input.level === 'auto') {
-    database
-      .prepare('UPDATE emails SET classified_at = NULL WHERE category = ? AND importance IS NULL')
-      .run(id);
-  }
   publishStateChange('categories');
   return id;
 }

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { effectiveImportance } from '../categories';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,6 +12,7 @@ import {
   saveClassification,
   upsertEmails,
 } from './db';
+import { listMail } from './mail-list';
 
 let database: DatabaseSync | undefined;
 let directory: string | undefined;
@@ -75,7 +75,6 @@ describe('category settings', () => {
       DROP TRIGGER emails_thread_delete;
       DROP TRIGGER emails_thread_update;
       DROP TRIGGER emails_thread_classification;
-      DROP TRIGGER categories_thread_filters_update;
       ALTER TABLE emails DROP COLUMN importance;
 			ALTER TABLE emails DROP COLUMN importance_confidence;
 			ALTER TABLE emails DROP COLUMN importance_probabilities_json;
@@ -186,15 +185,55 @@ describe('category settings', () => {
   });
 });
 
-describe('effective message importance', () => {
-  it('uses fixed category levels and uses Jev results for Auto', () => {
-    for (const level of ['important', 'useful', 'other'] as const) {
-      expect(effectiveImportance(level, null)).toBe(level);
-      expect(effectiveImportance(level, 'other')).toBe(level);
-      expect(effectiveImportance('auto', level)).toBe(level);
-    }
-    expect(effectiveImportance('auto', null)).toBeNull();
-    expect(effectiveImportance(undefined, 'important')).toBeNull();
+describe('stored message importance', () => {
+  it('keeps stored importance when a category level changes', () => {
+    database = createDatabase(':memory:');
+    upsertEmails(database, 'test@example.com', [{ id: 'message', labels: ['INBOX'] }]);
+    saveClassification(database, 'test@example.com', 'message', {
+      ...classification,
+      importance: 'important',
+    });
+    saveCategory(database, { ...listCategories(database)[0], level: 'auto' });
+    saveCategory(database, { ...listCategories(database)[0], level: 'other' });
+    expect(listEmails(database)[0]).toMatchObject({ importance: 'important' });
+    expect(listMail(database, { filter: 'important', search: '', limit: 10 }).emails).toHaveLength(
+      1
+    );
+  });
+
+  it('stores fixed category levels on messages from before stored importance', () => {
+    directory = mkdtempSync(join(tmpdir(), 'email-check-fixed-importance-'));
+    const path = join(directory, 'test.sqlite');
+    database = createDatabase(path);
+    upsertEmails(database, 'test@example.com', [
+      { id: 'fixed', labels: ['INBOX'] },
+      { id: 'auto', labels: ['INBOX'] },
+    ]);
+    saveClassification(database, 'test@example.com', 'fixed', {
+      ...classification,
+      importance: null,
+    });
+    saveClassification(database, 'test@example.com', 'auto', {
+      ...classification,
+      category: 'newsletter',
+      importance: 'useful',
+    });
+    // The old design derived fixed levels on read and rebuilt filters when a level changed.
+    database.exec(`CREATE TRIGGER categories_thread_filters_update AFTER UPDATE OF level ON categories
+      BEGIN SELECT 1; END;`);
+    database.close();
+    database = createDatabase(path);
+    expect(
+      Object.fromEntries(listEmails(database).map((email) => [email.gmailId, email.importance]))
+    ).toEqual({ fixed: 'important', auto: 'useful' });
+    expect(listMail(database, { filter: 'important', search: '', limit: 10 }).emails).toHaveLength(
+      1
+    );
+    expect(
+      database
+        .prepare("SELECT name FROM sqlite_master WHERE name = 'categories_thread_filters_update'")
+        .get()
+    ).toBeUndefined();
   });
 
   it('orders messages by date without sorting by effective importance', () => {

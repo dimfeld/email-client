@@ -78,7 +78,9 @@ export function createJevClassifier(
     );
     if (!category) throw new Error('Jev returned an unknown category.');
     const automatic = category.level === 'auto';
-    const importance = automatic ? response.answers.importance.choice : null;
+    // A fixed category level is stored as the message's importance when it is classified.
+    const importance =
+      category.level === 'auto' ? response.answers.importance.choice : category.level;
     return {
       category: category.id,
       importance,

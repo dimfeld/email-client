@@ -51,22 +51,15 @@ function recompute(ref: 'old' | 'new'): string {
 
 function filterRows(where: string): string {
   const base = `FROM threads t JOIN emails e ON e.account_email = t.account_email
-    AND e.thread_key = t.thread_key AND e.deleted_at IS NULL AND e.is_sent = 0
-    LEFT JOIN categories c ON c.id = e.category WHERE ${where}`;
+    AND e.thread_key = t.thread_key AND e.deleted_at IS NULL AND e.is_sent = 0 WHERE ${where}`;
   const select = (filter: string, condition: string) =>
     `SELECT t.account_email, t.thread_key, ${filter} AS filter, t.latest_sort_time, t.latest_email_id
       ${base} AND ${condition}`;
   return [
     select("'category:' || e.category", 'e.category IS NOT NULL'),
     select("'pending'", 'e.category IS NULL AND e.in_inbox = 1'),
-    select(
-      "'important'",
-      "(CASE WHEN c.level = 'auto' THEN e.importance ELSE c.level END) = 'important'"
-    ),
-    select(
-      "'useful'",
-      "(CASE WHEN c.level = 'auto' THEN e.importance ELSE c.level END) IN ('important', 'useful')"
-    ),
+    select("'important'", "e.importance = 'important'"),
+    select("'useful'", "e.importance IN ('important', 'useful')"),
   ].join(' UNION ');
 }
 
@@ -128,6 +121,15 @@ export function installThreadSchema(database: DatabaseSync): boolean {
     const update = database.prepare('UPDATE emails SET sort_time = ? WHERE id = ?');
     for (const row of rows) update.run(emailSortTime(row.message_date, row.first_seen_at), row.id);
   }
+  // Importance was once derived from the current category level when mail was read. Store the
+  // fixed levels on existing messages, so a later level change affects only new messages. A
+  // database without the classification trigger is older than that design.
+  const exists = (name: string) =>
+    Boolean(database.prepare('SELECT name FROM sqlite_master WHERE name = ?').get(name));
+  if (!exists('emails_thread_classification') || exists('categories_thread_filters_update'))
+    database.exec(`DROP TRIGGER IF EXISTS categories_thread_filters_update;
+      UPDATE emails SET importance = (SELECT level FROM categories WHERE id = emails.category)
+      WHERE category IN (SELECT id FROM categories WHERE level != 'auto');`);
   const hadFilters = Boolean(
     database.prepare("SELECT name FROM sqlite_master WHERE name = 'thread_filters'").get()
   );
@@ -153,12 +155,7 @@ export function installThreadSchema(database: DatabaseSync): boolean {
   database.exec(`CREATE TRIGGER IF NOT EXISTS emails_thread_classification
     AFTER UPDATE OF category, importance ON emails
     WHEN old.category IS NOT new.category OR old.importance IS NOT new.importance
-    BEGIN ${recomputeFilters('new')} END;
-    CREATE TRIGGER IF NOT EXISTS categories_thread_filters_update AFTER UPDATE OF level ON categories
-    WHEN old.level IS NOT new.level
-    BEGIN DELETE FROM thread_filters;
-      INSERT INTO thread_filters(account_email, thread_key, filter, latest_sort_time, latest_email_id)
-      ${filterRows('1')}; END;`);
+    BEGIN ${recomputeFilters('new')} END;`);
   return migrated;
 }
 

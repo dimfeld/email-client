@@ -18,20 +18,18 @@ export type MailList = {
   counts: Record<MailFilter, number>;
 };
 
-const effectiveLevel = "CASE WHEN c.level = 'auto' THEN e.importance ELSE c.level END";
-
 function membership(filter: MailFilter, view: MailView): { sql: string; params: SQLInputValue[] } {
   if (view !== 'inbox' || filter === 'all') return { sql: '1', params: [] };
   const category =
     filter === 'pending'
       ? 'e.category IS NULL AND e.in_inbox = 1'
       : filter === 'important'
-        ? `${effectiveLevel} = 'important'`
+        ? "e.importance = 'important'"
         : filter === 'useful'
-          ? `${effectiveLevel} IN ('important', 'useful')`
+          ? "e.importance IN ('important', 'useful')"
           : 'e.category = ?';
   return {
-    sql: `EXISTS (SELECT 1 FROM emails e LEFT JOIN categories c ON c.id = e.category
+    sql: `EXISTS (SELECT 1 FROM emails e
       WHERE e.account_email = t.account_email AND e.thread_key = t.thread_key
         AND e.deleted_at IS NULL AND e.is_sent = 0 AND ${category})`,
     params: filter === 'pending' || filter === 'important' || filter === 'useful' ? [] : [filter],
@@ -189,7 +187,7 @@ export function countMailFilters(
       FROM emails e ${search.join} WHERE ${search.where}`)
       .all(...search.params) as { account_email: string; thread_key: string }[];
     const membership = database.prepare(`SELECT e.category, e.in_inbox,
-      ${effectiveLevel} AS level FROM emails e LEFT JOIN categories c ON c.id = e.category
+      e.importance AS level FROM emails e
       WHERE e.account_email = ? AND e.thread_key = ? AND e.deleted_at IS NULL AND e.is_sent = 0`);
     const sets = new Map<string, Set<string>>();
     const add = (filter: string, key: string) => {

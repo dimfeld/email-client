@@ -38,7 +38,7 @@ function setup() {
       labels: ['INBOX'],
     }))
   );
-  classify('a', 'action', null); // level important
+  classify('a', 'action', 'important'); // the fixed level is stored
   classify('b', 'work', 'useful'); // auto, so the message level counts
   classify('c', 'work', 'other');
   classify('d', 'newsletter', 'important');

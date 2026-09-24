@@ -37,7 +37,7 @@
   </p>
   <p class="help">
     <strong>All important</strong> shows Important messages. <strong>Useful now</strong> shows Important
-    and Useful messages. Fixed levels apply to all messages in the category.
+    and Useful messages. A fixed level applies to messages classified after you set it.
   </p>
   <p class="help">
     With Auto, Jev chooses Important, Useful, or Other for each message. Existing messages without a

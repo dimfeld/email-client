@@ -112,7 +112,9 @@ test('filters use any received member and search previews the matching member', 
     { id: 'one', threadId: 'thread', labels: ['INBOX'], date: '2024-01-01', subject: 'Needle' },
     { id: 'two', threadId: 'thread', labels: ['SENT'], date: '2024-01-02', subject: 'Reply' },
   ]);
-  db.prepare("UPDATE emails SET category = 'action' WHERE gmail_id = 'one'").run();
+  db.prepare(
+    "UPDATE emails SET category = 'action', importance = 'important' WHERE gmail_id = 'one'"
+  ).run();
   expect(listMail(db, { search: '', filter: 'action', limit: 10 }).emails[0]).toMatchObject({
     id: 2,
     category: 'action',
@@ -122,9 +124,9 @@ test('filters use any received member and search previews the matching member', 
     id: 1,
     latestMessageId: 2,
   });
+  // Stored importance does not follow a later category level change.
   db.prepare("UPDATE categories SET level = 'other' WHERE id = 'action'").run();
-  expect(countMailFilters(db)).toMatchObject({ all: 1, action: 1 });
-  expect(countMailFilters(db).important).toBeUndefined();
+  expect(countMailFilters(db)).toMatchObject({ all: 1, action: 1, important: 1 });
 });
 
 test('label-only upserts preserve classification and content changes retain the old result until replacement', () => {

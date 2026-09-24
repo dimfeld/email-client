@@ -24,7 +24,7 @@ describe('configurable Jev categories', () => {
         category: { choice: 'custom', confidence: 1, probabilities: { custom: 1 } },
         actionItem: { noul: 0.8 },
         reminder: { noul: 0.3 },
-        importance: { choice: 'important', confidence: 0.9, probabilities: { important: 0.9 } },
+        importance: { choice: 'other', confidence: 0.9, probabilities: { other: 0.9 } },
       },
     } as never);
     try {
@@ -38,7 +38,7 @@ describe('configurable Jev categories', () => {
       );
       const result = await classify({ id: 'message' }, 'casey@example.com');
       expect(result.category).toBe('custom');
-      expect(result.importance).toBeNull();
+      expect(result.importance).toBe('important');
       expect(result).toMatchObject({
         hasActionItem: true,
         actionItemProbability: 0.8,
