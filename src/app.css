@@ -35,7 +35,7 @@
   --color-event-bg: #553739;
   --color-event-text: #ead9dc;
 
-  /* Light "paper" surfaces for message HTML and the composer editor. */
+  /* Light "paper" surfaces for message HTML. */
   --color-paper: #fff;
   --color-paper-text: #171717;
   --color-paper-muted: #555;

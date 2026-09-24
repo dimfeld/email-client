@@ -211,8 +211,8 @@
   }
   .editor-content {
     padding: 14px;
-    background: var(--color-paper);
-    color: var(--color-paper-text);
+    background: var(--color-surface-sunken);
+    color: var(--color-text);
     min-height: 180px;
   }
   .editor-content :global(.tiptap) {
@@ -228,18 +228,18 @@
     height: auto;
   }
   .editor-content :global(blockquote) {
-    border-left: 3px solid var(--color-paper-border);
+    border-left: 3px solid var(--color-border-hover);
     padding-left: 12px;
     margin-inline: 0;
-    color: var(--color-paper-muted);
+    color: var(--color-text-secondary);
   }
   .editor-content :global(pre) {
     white-space: pre-wrap;
-    background: var(--color-paper-code);
+    background: var(--color-surface-raised);
     padding: 10px;
   }
   .editor-content :global(a) {
-    color: var(--color-paper-link);
+    color: var(--color-accent-text);
   }
   .hint {
     margin: 0;
