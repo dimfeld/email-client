@@ -500,6 +500,15 @@
     } else if (key === 'e' && selectedEmail && archiveForm) {
       event.preventDefault();
       archiveForm.requestSubmit();
+    } else if (key === 's' && selectedEmail) {
+      event.preventDefault();
+      const rowId = openThreadRowId(selectedEmail.id);
+      void toggleStar(
+        selectedEmail.id,
+        rowId,
+        starOverrides.get(rowId) ??
+          selectedThread.some((member) => member.labels.includes('STARRED'))
+      );
     } else if (
       (event.key === 'Delete' ||
         event.key === '#' ||
@@ -743,16 +752,19 @@
 
   // A star shows at once. The list keeps the change until its next refresh.
   const starOverrides = new SvelteMap<number, boolean>();
-  async function toggleStar(email: EmailSummary) {
-    const starred = !(starOverrides.get(email.id) ?? email.starred ?? false);
-    starOverrides.set(email.id, starred);
-    const result = await postMessageAction(starred ? 'star' : 'unstar', email.id);
+  async function toggleStar(id: number, rowId: number, wasStarred: boolean) {
+    const starred = !wasStarred;
+    starOverrides.set(rowId, starred);
+    const result = await postMessageAction(starred ? 'star' : 'unstar', id);
     if (result.type === 'success' && !result.data?.error) {
-      await getMailList(mailListArgs()).refresh();
-      starOverrides.delete(email.id);
+      const refreshes = [getMailList(mailListArgs()).refresh()];
+      if (selectedId !== null)
+        refreshes.push(getSelectedThread({ account: selectedAccount, id: selectedId }).refresh());
+      await Promise.all(refreshes);
+      starOverrides.delete(rowId);
       return;
     }
-    starOverrides.delete(email.id);
+    starOverrides.delete(rowId);
     showToast(result.type === 'success' ? String(result.data?.error) : actionError(result), {
       tone: 'error',
     });
@@ -780,7 +792,7 @@
       label: starred ? 'Unstar' : 'Star',
       icon: 'star',
       tone: 'star',
-      run: () => void toggleStar(email),
+      run: () => void toggleStar(email.id, email.id, starred),
     } as const;
     const snooze = {
       label: 'Snooze',
@@ -1207,6 +1219,10 @@
           <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
             <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
             {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
+              {@const starRowId = openThreadRowId(selectedEmail.id)}
+              {@const isStarred =
+                starOverrides.get(starRowId) ??
+                selectedThread.some((member) => member.labels.includes('STARRED'))}
               {@const from = selectedEmail.labels.includes('SENT')
                 ? selectedEmail.accountEmail
                 : selectedEmail.fromAddress}
@@ -1346,18 +1362,17 @@
                       openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}
                     ><Icon name="forward" /></button
                   >
-                  {#if selectedThread.some((member) => member.labels.includes('INBOX'))}<form
-                      bind:this={archiveForm}
-                      method="POST"
-                      action="?/archive"
-                      onsubmit={(event) => void submitMessageAction(event, 'archive')}
-                    >
-                      <input type="hidden" name="id" value={selectedEmail.id} />
-                      <button type="submit" class="icon-action" aria-label="Archive" title="Archive"
-                        ><Icon name="archive" /></button
-                      >
-                    </form>
-                    <button
+                  <button
+                    type="button"
+                    class="icon-action"
+                    class:starred-button={isStarred}
+                    aria-label={isStarred ? 'Unstar' : 'Star'}
+                    aria-pressed={isStarred}
+                    title={isStarred ? 'Unstar' : 'Star'}
+                    onclick={() => void toggleStar(selectedEmail.id, starRowId, isStarred)}
+                    ><Icon name="star" /></button
+                  >
+                  {#if selectedThread.some((member) => member.labels.includes('INBOX'))}<button
                       type="button"
                       class="icon-action"
                       aria-label="Snooze"
@@ -1367,7 +1382,18 @@
                           id: selectedEmail.id,
                           rowId: openThreadRowId(selectedEmail.id),
                         })}><Icon name="clock" /></button
-                    >{/if}
+                    >
+                    <form
+                      bind:this={archiveForm}
+                      method="POST"
+                      action="?/archive"
+                      onsubmit={(event) => void submitMessageAction(event, 'archive')}
+                    >
+                      <input type="hidden" name="id" value={selectedEmail.id} />
+                      <button type="submit" class="icon-action" aria-label="Archive" title="Archive"
+                        ><Icon name="archive" /></button
+                      >
+                    </form>{/if}
                   <form
                     bind:this={deleteForm}
                     method="POST"
@@ -1568,6 +1594,10 @@
         <div>
           <dt><kbd>E</kbd></dt>
           <dd>Archive selected message</dd>
+        </div>
+        <div>
+          <dt><kbd>S</kbd></dt>
+          <dd>Star or unstar the selected message</dd>
         </div>
         <div>
           <dt><kbd>Delete</kbd> <kbd>#</kbd></dt>
@@ -2205,6 +2235,9 @@
   .message-actions .icon-action:hover {
     border-color: var(--color-border-hover);
     background: var(--color-surface-hover);
+  }
+  .message-actions .starred-button {
+    color: var(--color-star);
   }
   .message-actions .delete-button {
     border-color: var(--color-danger-border);
