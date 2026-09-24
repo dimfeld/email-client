@@ -133,8 +133,8 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   const originalColorIds = new SvelteSet<number>();
-  // Recipients are hidden until the user opens them for a message.
-  const recipientIds = new SvelteSet<number>();
+  // Message details stay hidden until the user opens them for a message.
+  const messageDetailsIds = new SvelteSet<number>();
   let filters = $derived([
     { category: 'all' as const, label: 'All inbox', count: filterCounts.all ?? 0 },
     { category: 'important', label: 'All important', count: filterCounts.important ?? 0 },
@@ -1256,7 +1256,7 @@
                 ? selectedEmail.accountEmail
                 : selectedEmail.fromAddress}
               {@const fromAddress = senderAddress(from)}
-              {@const showRecipients = recipientIds.has(selectedEmail.id)}
+              {@const showMessageDetails = messageDetailsIds.has(selectedEmail.id)}
               <article {@attach attachReadingContent} class="reading-content" tabindex="-1">
                 {#if memberIndex > 0 && meaningfulSubject(selectedEmail.subject) !== meaningfulSubject(selectedThread[memberIndex - 1].subject)}
                   <h3>{selectedEmail.subject || '(No subject)'}</h3>
@@ -1272,13 +1272,16 @@
                   <button
                     type="button"
                     class="recipients-toggle"
-                    aria-expanded={showRecipients}
-                    aria-label={showRecipients ? 'Hide recipients' : 'Show recipients'}
-                    title={showRecipients ? 'Hide recipients' : 'Show recipients'}
+                    aria-expanded={showMessageDetails}
+                    aria-label={showMessageDetails
+                      ? 'Hide message details'
+                      : 'Show message details'}
+                    title={showMessageDetails ? 'Hide message details' : 'Show message details'}
                     onclick={() =>
-                      showRecipients
-                        ? recipientIds.delete(selectedEmail.id)
-                        : recipientIds.add(selectedEmail.id)}><Icon name="chevron-down" /></button
+                      showMessageDetails
+                        ? messageDetailsIds.delete(selectedEmail.id)
+                        : messageDetailsIds.add(selectedEmail.id)}
+                    ><Icon name="chevron-down" /></button
                   >
                   <time
                     datetime={new Date(selectedEmail.sortTime).toISOString()}
@@ -1286,40 +1289,46 @@
                     >{formatCompactDateTime(selectedEmail.sortTime)}</time
                   >
                 </header>
-                {#if showRecipients}<dl class="message-recipients">
+                {#if showMessageDetails}
+                  <dl class="message-recipients">
                     <div>
                       <dt>To</dt>
                       <dd>{selectedEmail.toAddresses || 'Unknown recipient'}</dd>
                     </div>
-                    {#if selectedEmail.headers?.cc}<div>
+                    {#if selectedEmail.headers?.cc}
+                      <div>
                         <dt>Cc</dt>
                         <dd>{selectedEmail.headers.cc}</dd>
-                      </div>{/if}
-                  </dl>{/if}
-                {#if !selectedEmail.labels.includes('SENT')}<details>
-                    <summary>Classification details</summary>
-                    <div class="classification-summary" aria-label="Jev classification results">
-                      {#if confidence(selectedEmail)}<span
-                          >Category confidence: <strong>{confidence(selectedEmail)}</strong></span
-                        >{/if}
-                      {#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span
-                          >Action item: <strong
-                            >{jevAnswer(
-                              selectedEmail.hasActionItem,
-                              selectedEmail.actionItemProbability
-                            )}</strong
-                          ></span
-                        >{/if}
-                      {#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span
-                          >Reminder: <strong
-                            >{jevAnswer(
-                              selectedEmail.hasReminder,
-                              selectedEmail.reminderProbability
-                            )}</strong
-                          ></span
-                        >{/if}
+                      </div>
+                    {/if}
+                  </dl>
+                  {#if !selectedEmail.labels.includes('SENT')}
+                    <div class="message-classification">
+                      <h3>Classification details</h3>
+                      <div class="classification-summary" aria-label="Jev classification results">
+                        {#if confidence(selectedEmail)}<span
+                            >Category confidence: <strong>{confidence(selectedEmail)}</strong></span
+                          >{/if}
+                        {#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span
+                            >Action item: <strong
+                              >{jevAnswer(
+                                selectedEmail.hasActionItem,
+                                selectedEmail.actionItemProbability
+                              )}</strong
+                            ></span
+                          >{/if}
+                        {#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span
+                            >Reminder: <strong
+                              >{jevAnswer(
+                                selectedEmail.hasReminder,
+                                selectedEmail.reminderProbability
+                              )}</strong
+                            ></span
+                          >{/if}
+                      </div>
                     </div>
-                  </details>{/if}
+                  {/if}
+                {/if}
                 {#if selectedEmail.classificationError}<p class="notice">
                     Classification failed. This message needs another attempt.
                   </p>{/if}
@@ -2005,12 +2014,6 @@
     grid-template-columns: 22px minmax(90px, 23%) minmax(0, 1fr) 12px 14px 66px;
     padding-inline: 10px;
   }
-  details {
-    margin-top: 12px;
-    font-size: var(--text-xs);
-    color: var(--color-text-muted);
-  }
-
   .useful-tag {
     display: inline-block;
     border-radius: var(--radius-sm);
@@ -2129,11 +2132,18 @@
     margin: 0;
     color: var(--color-text-secondary);
   }
+  .message-classification h3 {
+    margin: 8px 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
   .classification-summary {
     display: flex;
     flex-wrap: wrap;
     gap: 8px 16px;
-    margin-top: 16px;
+    margin-top: 4px;
     color: var(--color-text-faint);
     font-size: 0.75rem;
   }
