@@ -55,6 +55,25 @@ describe('Gmail message actions', () => {
     expect(url).toEndWith('/messages/gmail-message/trash');
   });
 
+  it('sets the Gmail important label and local state', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com' });
+    upsertEmails(database, 'one@example.com', [{ id: 'gmail-message', labels: ['INBOX'] }]);
+    let change: unknown;
+    await applyGmailMessageAction(
+      database,
+      { email: 'one@example.com', refreshToken: 'token' },
+      'gmail-message',
+      'markImportant',
+      async <T>(_account: GoogleAccount, _url: string, options?: { data?: unknown }) => {
+        change = options?.data;
+        return {} as T;
+      }
+    );
+    expect(change).toEqual({ addLabelIds: ['IMPORTANT'] });
+    expect(listEmails(database, 'one@example.com')[0].labels).toContain('IMPORTANT');
+  });
+
   it('updates local state only after Gmail succeeds and keeps archived mail recoverable', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, { email: 'one@example.com' });

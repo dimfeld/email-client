@@ -58,6 +58,8 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
       markRead: 'Message marked as read.',
       star: 'Thread starred.',
       unstar: 'Thread unstarred.',
+      markImportant: 'Message marked as important.',
+      unmarkImportant: 'Message no longer marked as important.',
     };
     return {
       message: result.error

@@ -974,7 +974,7 @@
           else searchInput?.blur();
           if (data.query) void goto(clearSearchHref, { keepFocus: true, noScroll: true });
         }}
-        placeholder={'Search email · "exact phrase" · from:example.com'}
+        placeholder={'Search email · in:inbox · from:example.com'}
         value={data.query}
       />
       <button type="submit" aria-label="Search"><Icon name="search" /></button>
@@ -1013,474 +1013,492 @@
     >
   </header>
 
-  <div class="mailbox" class:show-detail={mobileDetail} class:show-categories={showCategories}>
-    <nav class="sidebar" aria-label="Mailbox">
-      <p class="eyebrow">MAILBOX</p>
-      <button class="filter" class:active={mailView === 'inbox'} onclick={() => selectView('inbox')}
-        >Inbox</button
-      >
-      <button class="filter" class:active={mailView === 'sent'} onclick={() => selectView('sent')}
-        >Sent</button
-      >
-      <button
-        class="filter"
-        class:active={mailView === 'snoozed'}
-        onclick={() => selectView('snoozed')}>Snoozed</button
-      >
-      {#if mailView === 'inbox'}{#each filters as filter}
-          <button
-            class="filter"
-            class:active={activeFilter === filter.category}
-            aria-pressed={activeFilter === filter.category}
-            onclick={() => selectFilter(filter.category)}
-          >
-            <span class="filter-label">{filter.label}</span><span class="count">{filter.count}</span
+  <div class="content-shell">
+    {#if showChat}{#key data.selectedAccount}<EmailChat
+          account={data.selectedAccount}
+          currentMessageId={selectedEmail?.id ?? null}
+          close={() => (showChat = false)}
+        />{/key}{/if}
+    <div class="mailbox" class:show-detail={mobileDetail} class:show-categories={showCategories}>
+      <nav class="sidebar" aria-label="Mailbox">
+        <p class="eyebrow">MAILBOX</p>
+        <button
+          class="filter"
+          class:active={mailView === 'inbox'}
+          onclick={() => selectView('inbox')}>Inbox</button
+        >
+        <button class="filter" class:active={mailView === 'sent'} onclick={() => selectView('sent')}
+          >Sent</button
+        >
+        <button
+          class="filter"
+          class:active={mailView === 'snoozed'}
+          onclick={() => selectView('snoozed')}>Snoozed</button
+        >
+        {#if mailView === 'inbox'}{#each filters as filter}
+            <button
+              class="filter"
+              class:active={activeFilter === filter.category}
+              aria-pressed={activeFilter === filter.category}
+              onclick={() => selectFilter(filter.category)}
             >
-          </button>
-        {/each}{/if}
-      <p class="eyebrow app-heading">APPS</p>
-      <a class="filter" href="/calendar">Calendar</a>
-      <a class="filter" href="/contacts">Contacts</a>
-      <a class="filter" href="/settings">Settings</a>
-    </nav>
+              <span class="filter-label">{filter.label}</span><span class="count"
+                >{filter.count}</span
+              >
+            </button>
+          {/each}{/if}
+        <p class="eyebrow app-heading">APPS</p>
+        <a class="filter" href="/calendar">Calendar</a>
+        <a class="filter" href="/contacts">Contacts</a>
+        <a class="filter" href="/settings">Settings</a>
+      </nav>
 
-    <section class="list-pane" aria-label="Message list">
-      <header class="pane-heading">
-        <!-- The sidebar has the same filters, so the tabs show only when it is closed. -->
-        {#if !showCategories && mailView === 'inbox'}
-          <div class="mail-tabs">
-            <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
-              >All inbox <small>{filterCounts.all ?? 0}</small></button
-            ><button
-              class:tab-active={activeFilter === 'important'}
-              onclick={() => selectFilter('important')}>Important</button
-            ><button
-              class:tab-active={activeFilter === 'useful'}
-              onclick={() => selectFilter('useful')}>Useful</button
+      <section class="list-pane" aria-label="Message list">
+        <header class="pane-heading">
+          <!-- The sidebar has the same filters, so the tabs show only when it is closed. -->
+          {#if !showCategories && mailView === 'inbox'}
+            <div class="mail-tabs">
+              <button class:tab-active={activeFilter === 'all'} onclick={() => selectFilter('all')}
+                >All inbox <small>{filterCounts.all ?? 0}</small></button
+              ><button
+                class:tab-active={activeFilter === 'important'}
+                onclick={() => selectFilter('important')}>Important</button
+              ><button
+                class:tab-active={activeFilter === 'useful'}
+                onclick={() => selectFilter('useful')}>Useful</button
+              >
+            </div>
+          {/if}
+          <span>{mailView === 'inbox' ? filterLabel : mailViews[mailView]} · {listSize}</span>
+        </header>
+        {#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
+        {#if data.query}<p class="search-summary">
+            Search results · Best match first · Includes archived mail
+          </p>{/if}
+        <div
+          class="message-list"
+          bind:this={messageList}
+          bind:clientHeight={listHeight}
+          onscroll={handleListScroll}
+        >
+          {#if visibleEmails.length > 0}
+            {@const canArchive = mailView === 'inbox' && !search}
+            {@const openRow = swipeOpen}
+            {@const importanceMap = importanceById}
+            <ul
+              aria-label="Messages"
+              style:padding-top="{rowWindow.start * rowHeight}px"
+              style:padding-bottom="{(visibleEmails.length - rowWindow.end) * rowHeight}px"
             >
-          </div>
-        {/if}
-        <span>{mailView === 'inbox' ? filterLabel : mailViews[mailView]} · {listSize}</span>
-      </header>
-      {#if data.searchError}<p class="search-error" role="alert">{data.searchError}</p>{/if}
-      {#if data.query}<p class="search-summary">
-          Search results · Best match first · Includes archived mail
-        </p>{/if}
-      <div
-        class="message-list"
-        bind:this={messageList}
-        bind:clientHeight={listHeight}
-        onscroll={handleListScroll}
-      >
-        {#if visibleEmails.length > 0}
-          {@const canArchive = mailView === 'inbox' && !search}
-          {@const openRow = swipeOpen}
-          {@const importanceMap = importanceById}
-          <ul
-            aria-label="Messages"
-            style:padding-top="{rowWindow.start * rowHeight}px"
-            style:padding-bottom="{(visibleEmails.length - rowWindow.end) * rowHeight}px"
-          >
-            {#each visibleEmails.slice(rowWindow.start, rowWindow.end) as email, index (email.id)}
-              {@const starred = starOverrides.get(email.id) ?? email.starred ?? false}
-              {@const important = importanceMap.get(email.id) === 'important'}
-              {@const swipe = swipeActions(email, canArchive, starred)}
-              <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
-                <SwipeRow
-                  left={swipe.left}
-                  right={swipe.right}
-                  open={openRow?.id === email.id ? openRow.side : null}
-                  onOpenChange={(side) => (swipeOpen = side ? { id: email.id, side } : null)}
-                >
-                  <a
-                    class="message"
-                    href={mailboxHref({ message: email.id })}
-                    data-sveltekit-keepfocus
-                    data-sveltekit-noscroll
-                    data-email-id={email.id}
-                    class:unread={email.unread && !readIds.has(email.id)}
-                    class:selected={selectedEmail?.threadKey === email.threadKey &&
-                      selectedEmail?.accountEmail === email.accountEmail}
-                    aria-current={selectedEmail?.threadKey === email.threadKey &&
-                    selectedEmail?.accountEmail === email.accountEmail
-                      ? 'true'
-                      : undefined}
+              {#each visibleEmails.slice(rowWindow.start, rowWindow.end) as email, index (email.id)}
+                {@const starred = starOverrides.get(email.id) ?? email.starred ?? false}
+                {@const important = importanceMap.get(email.id) === 'important'}
+                {@const swipe = swipeActions(email, canArchive, starred)}
+                <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
+                  <SwipeRow
+                    left={swipe.left}
+                    right={swipe.right}
+                    open={openRow?.id === email.id ? openRow.side : null}
+                    onOpenChange={(side) => (swipeOpen = side ? { id: email.id, side } : null)}
                   >
-                    <span class="sender-avatar" aria-hidden="true"
-                      >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
+                    <a
+                      class="message"
+                      href={mailboxHref({ message: email.id })}
+                      data-sveltekit-keepfocus
+                      data-sveltekit-noscroll
+                      data-email-id={email.id}
+                      class:unread={email.unread && !readIds.has(email.id)}
+                      class:selected={selectedEmail?.threadKey === email.threadKey &&
+                        selectedEmail?.accountEmail === email.accountEmail}
+                      aria-current={selectedEmail?.threadKey === email.threadKey &&
+                      selectedEmail?.accountEmail === email.accountEmail
+                        ? 'true'
+                        : undefined}
                     >
-                    <strong class="sender" title={email.fromAddress}
-                      >{senderName(email.fromAddress)}</strong
-                    >
-                    <span class="message-line"
-                      ><span class="subject">{email.subject || '(No subject)'}</span><span
-                        class="preview"
+                      <span class="sender-avatar" aria-hidden="true"
+                        >{senderName(email.fromAddress).slice(0, 1).toUpperCase()}</span
                       >
-                        — {email.snippet || 'No preview text.'}</span
-                      ></span
-                    >
-                    {#if mailView !== 'sent'}<span class="category-tag"
-                        >{email.category ? labels[email.category] : 'Pending'}</span
-                      >{:else}<span></span>{/if}
-                    <!-- Jev's importance and the Gmail star are separate, so each has a column. -->
-                    <span class="importance" title={important ? 'Important' : undefined}
-                      >{#if important}<Icon name="important" size="12px" /><span
-                          class="visually-hidden">Important</span
-                        >{/if}</span
-                    >
-                    <span class="star" aria-label={starred ? 'Starred' : undefined}
-                      >{starred ? '★' : ''}</span
-                    >
-                    {#if email.snoozedUntil}
-                      {@const until = new Date(email.snoozedUntil)}
-                      <time class="snoozed-until" title={`Snoozed until ${formatSnoozeTime(until)}`}
-                        >{formatDate(until.toISOString())}</time
+                      <strong class="sender" title={email.fromAddress}
+                        >{senderName(email.fromAddress)}</strong
                       >
-                    {:else}
-                      <time title={email.accountEmail}
-                        >{formatDate(
-                          email.latestSortTime
-                            ? new Date(email.latestSortTime).toISOString()
-                            : email.messageDate
-                        )}</time
+                      <span class="message-line"
+                        ><span class="subject">{email.subject || '(No subject)'}</span><span
+                          class="preview"
+                        >
+                          — {email.snippet || 'No preview text.'}</span
+                        ></span
                       >
-                    {/if}
-                  </a>
-                </SwipeRow>
-              </li>
-            {/each}
-          </ul>
-        {:else}
-          <div class="empty-state">
-            <h3>
-              {data.accounts.length === 0
-                ? 'No accounts yet'
-                : !data.query && (filterCounts.all ?? 0) === 0
-                  ? 'No downloaded email'
-                  : 'No messages here'}
-            </h3>
-            <p>
-              {data.accounts.length === 0
-                ? 'Connect an account to see your mail.'
-                : !data.query && (filterCounts.all ?? 0) === 0
-                  ? 'Messages will appear after your account syncs.'
-                  : 'Try another search or category.'}
-            </p>
-          </div>
-        {/if}
-      </div>
-    </section>
+                      {#if mailView !== 'sent'}<span class="category-tag"
+                          >{email.category ? labels[email.category] : 'Pending'}</span
+                        >{:else}<span></span>{/if}
+                      <!-- Jev's importance and the Gmail star are separate, so each has a column. -->
+                      <span class="importance" title={important ? 'Important' : undefined}
+                        >{#if important}<Icon name="important" size="12px" /><span
+                            class="visually-hidden">Important</span
+                          >{/if}</span
+                      >
+                      <span class="star" aria-label={starred ? 'Starred' : undefined}
+                        >{starred ? '★' : ''}</span
+                      >
+                      {#if email.snoozedUntil}
+                        {@const until = new Date(email.snoozedUntil)}
+                        <time
+                          class="snoozed-until"
+                          title={`Snoozed until ${formatSnoozeTime(until)}`}
+                          >{formatDate(until.toISOString())}</time
+                        >
+                      {:else}
+                        <time title={email.accountEmail}
+                          >{formatDate(
+                            email.latestSortTime
+                              ? new Date(email.latestSortTime).toISOString()
+                              : email.messageDate
+                          )}</time
+                        >
+                      {/if}
+                    </a>
+                  </SwipeRow>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <div class="empty-state">
+              <h3>
+                {data.accounts.length === 0
+                  ? 'No accounts yet'
+                  : !data.query && (filterCounts.all ?? 0) === 0
+                    ? 'No downloaded email'
+                    : 'No messages here'}
+              </h3>
+              <p>
+                {data.accounts.length === 0
+                  ? 'Connect an account to see your mail.'
+                  : !data.query && (filterCounts.all ?? 0) === 0
+                    ? 'Messages will appear after your account syncs.'
+                    : 'Try another search or category.'}
+              </p>
+            </div>
+          {/if}
+        </div>
+      </section>
 
-    <section class="detail-pane" aria-label="Message detail">
-      <header class="pane-heading detail-toolbar">
-        <button class="back-button" onclick={() => updateMailboxUrl({ message: null })}
-          ><Icon name="arrow-left" /> Back to messages</button
-        >
-        <span
-          >{mailView === 'sent'
-            ? 'Sent thread'
-            : selectedSummary?.category
-              ? labels[selectedSummary.category]
-              : 'Message detail'}</span
-        >
-        {#if mailView === 'inbox' && selectedSummary && importance(selectedSummary) !== null}<span
-            class="useful-tag"
-            >{importance(selectedSummary) === 'important'
-              ? 'Important'
-              : importance(selectedSummary) === 'useful'
-                ? 'Useful'
-                : 'Other'}</span
-          >{/if}
-      </header>
-      {#if selectedEmail}
-        <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
-          <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
-          {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
-            {@const from = selectedEmail.labels.includes('SENT')
-              ? selectedEmail.accountEmail
-              : selectedEmail.fromAddress}
-            {@const fromAddress = senderAddress(from)}
-            {@const showRecipients = recipientIds.has(selectedEmail.id)}
-            <article {@attach attachReadingContent} class="reading-content" tabindex="-1">
-              {#if memberIndex > 0 && meaningfulSubject(selectedEmail.subject) !== meaningfulSubject(selectedThread[memberIndex - 1].subject)}
-                <h3>{selectedEmail.subject || '(No subject)'}</h3>
-              {/if}
-              <header class="message-header">
-                <span class="account-badge" title={selectedEmail.accountEmail}
-                  >{accountLabel(selectedEmail.accountEmail)}</span
-                >
-                <strong class="message-sender" title={from}>{senderName(from)}</strong>
-                {#if fromAddress && fromAddress !== senderName(from).toLowerCase()}<span
-                    class="message-sender-address">{fromAddress}</span
-                  >{/if}
-                <button
-                  type="button"
-                  class="recipients-toggle"
-                  aria-expanded={showRecipients}
-                  aria-label={showRecipients ? 'Hide recipients' : 'Show recipients'}
-                  title={showRecipients ? 'Hide recipients' : 'Show recipients'}
-                  onclick={() =>
-                    showRecipients
-                      ? recipientIds.delete(selectedEmail.id)
-                      : recipientIds.add(selectedEmail.id)}><Icon name="chevron-down" /></button
-                >
-                <time
-                  datetime={new Date(selectedEmail.sortTime).toISOString()}
-                  title={formatFullDate(new Date(selectedEmail.sortTime).toISOString())}
-                  >{formatCompactDateTime(selectedEmail.sortTime)}</time
-                >
-              </header>
-              {#if showRecipients}<dl class="message-recipients">
-                  <div>
-                    <dt>To</dt>
-                    <dd>{selectedEmail.toAddresses || 'Unknown recipient'}</dd>
-                  </div>
-                  {#if selectedEmail.headers?.cc}<div>
-                      <dt>Cc</dt>
-                      <dd>{selectedEmail.headers.cc}</dd>
-                    </div>{/if}
-                </dl>{/if}
-              {#if !selectedEmail.labels.includes('SENT')}<details>
-                  <summary>Classification details</summary>
-                  <div class="classification-summary" aria-label="Jev classification results">
-                    {#if confidence(selectedEmail)}<span
-                        >Category confidence: <strong>{confidence(selectedEmail)}</strong></span
-                      >{/if}
-                    {#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span
-                        >Action item: <strong
-                          >{jevAnswer(
-                            selectedEmail.hasActionItem,
-                            selectedEmail.actionItemProbability
-                          )}</strong
-                        ></span
-                      >{/if}
-                    {#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span
-                        >Reminder: <strong
-                          >{jevAnswer(
-                            selectedEmail.hasReminder,
-                            selectedEmail.reminderProbability
-                          )}</strong
-                        ></span
-                      >{/if}
-                  </div>
-                </details>{/if}
-              {#if selectedEmail.classificationError}<p class="notice">
-                  Classification failed. This message needs another attempt.
-                </p>{/if}
-              {#if selectedEmail.actionItems.length > 0 || selectedEmail.reminders.length > 0 || selectedEmail.extractionError}
-                <section class="extraction-panel" aria-label="Extracted action items and reminders">
-                  {#if selectedEmail.actionItems.length > 0}
-                    <div class="extraction-group">
-                      <h3>Action items</h3>
-                      <ul>
-                        {#each selectedEmail.actionItems as item}
-                          <li>
-                            <strong>{item.title}</strong>
-                            {#if item.details}<span>{item.details}</span>{/if}
-                            {#if extractedDate(item.dueAt)}<small
-                                >Due {extractedDate(item.dueAt)}</small
-                              >{/if}
-                          </li>
-                        {/each}
-                      </ul>
+      <section class="detail-pane" aria-label="Message detail">
+        <header class="pane-heading detail-toolbar">
+          <button class="back-button" onclick={() => updateMailboxUrl({ message: null })}
+            ><Icon name="arrow-left" /> Back to messages</button
+          >
+          <span
+            >{mailView === 'sent'
+              ? 'Sent thread'
+              : selectedSummary?.category
+                ? labels[selectedSummary.category]
+                : 'Message detail'}</span
+          >
+          {#if mailView === 'inbox' && selectedSummary && importance(selectedSummary) !== null}<span
+              class="useful-tag"
+              >{importance(selectedSummary) === 'important'
+                ? 'Important'
+                : importance(selectedSummary) === 'useful'
+                  ? 'Useful'
+                  : 'Other'}</span
+            >{/if}
+        </header>
+        {#if selectedEmail}
+          <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
+            <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
+            {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
+              {@const from = selectedEmail.labels.includes('SENT')
+                ? selectedEmail.accountEmail
+                : selectedEmail.fromAddress}
+              {@const fromAddress = senderAddress(from)}
+              {@const showRecipients = recipientIds.has(selectedEmail.id)}
+              <article {@attach attachReadingContent} class="reading-content" tabindex="-1">
+                {#if memberIndex > 0 && meaningfulSubject(selectedEmail.subject) !== meaningfulSubject(selectedThread[memberIndex - 1].subject)}
+                  <h3>{selectedEmail.subject || '(No subject)'}</h3>
+                {/if}
+                <header class="message-header">
+                  <span class="account-badge" title={selectedEmail.accountEmail}
+                    >{accountLabel(selectedEmail.accountEmail)}</span
+                  >
+                  <strong class="message-sender" title={from}>{senderName(from)}</strong>
+                  {#if fromAddress && fromAddress !== senderName(from).toLowerCase()}<span
+                      class="message-sender-address">{fromAddress}</span
+                    >{/if}
+                  <button
+                    type="button"
+                    class="recipients-toggle"
+                    aria-expanded={showRecipients}
+                    aria-label={showRecipients ? 'Hide recipients' : 'Show recipients'}
+                    title={showRecipients ? 'Hide recipients' : 'Show recipients'}
+                    onclick={() =>
+                      showRecipients
+                        ? recipientIds.delete(selectedEmail.id)
+                        : recipientIds.add(selectedEmail.id)}><Icon name="chevron-down" /></button
+                  >
+                  <time
+                    datetime={new Date(selectedEmail.sortTime).toISOString()}
+                    title={formatFullDate(new Date(selectedEmail.sortTime).toISOString())}
+                    >{formatCompactDateTime(selectedEmail.sortTime)}</time
+                  >
+                </header>
+                {#if showRecipients}<dl class="message-recipients">
+                    <div>
+                      <dt>To</dt>
+                      <dd>{selectedEmail.toAddresses || 'Unknown recipient'}</dd>
                     </div>
-                  {/if}
-                  {#if selectedEmail.reminders.length > 0}
-                    <div class="extraction-group">
-                      <h3>Reminders</h3>
-                      <ul>
-                        {#each selectedEmail.reminders as reminder}
-                          <li>
-                            <strong>{reminder.title}</strong>
-                            {#if reminder.details}<span>{reminder.details}</span>{/if}
-                            {#if extractedDate(reminder.remindAt)}<small
-                                >Reminder {extractedDate(reminder.remindAt)}</small
-                              >{/if}
-                          </li>
-                        {/each}
-                      </ul>
+                    {#if selectedEmail.headers?.cc}<div>
+                        <dt>Cc</dt>
+                        <dd>{selectedEmail.headers.cc}</dd>
+                      </div>{/if}
+                  </dl>{/if}
+                {#if !selectedEmail.labels.includes('SENT')}<details>
+                    <summary>Classification details</summary>
+                    <div class="classification-summary" aria-label="Jev classification results">
+                      {#if confidence(selectedEmail)}<span
+                          >Category confidence: <strong>{confidence(selectedEmail)}</strong></span
+                        >{/if}
+                      {#if jevAnswer(selectedEmail.hasActionItem, selectedEmail.actionItemProbability)}<span
+                          >Action item: <strong
+                            >{jevAnswer(
+                              selectedEmail.hasActionItem,
+                              selectedEmail.actionItemProbability
+                            )}</strong
+                          ></span
+                        >{/if}
+                      {#if jevAnswer(selectedEmail.hasReminder, selectedEmail.reminderProbability)}<span
+                          >Reminder: <strong
+                            >{jevAnswer(
+                              selectedEmail.hasReminder,
+                              selectedEmail.reminderProbability
+                            )}</strong
+                          ></span
+                        >{/if}
                     </div>
-                  {/if}
-                  {#if selectedEmail.extractionError}<p class="notice extraction-error">
-                      Extraction failed: {selectedEmail.extractionError}
-                    </p>{/if}
-                </section>
-              {/if}
-              {#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
-              <div class="message-actions">
-                <button
-                  class="icon-action"
-                  aria-label="Reply"
-                  title="Reply"
-                  onclick={() => openComposer({ mode: 'reply', sourceEmailId: selectedEmail!.id })}
-                  ><Icon name="reply" /></button
-                >
-                <button
-                  class="icon-action"
-                  aria-label="Reply all"
-                  title="Reply all"
-                  onclick={() =>
-                    openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail!.id })}
-                  ><Icon name="reply-all" /></button
-                >
-                <button
-                  class="icon-action"
-                  aria-label="Forward"
-                  title="Forward"
-                  onclick={() =>
-                    openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}
-                  ><Icon name="forward" /></button
-                >
-                {#if selectedThread.some((member) => member.labels.includes('INBOX'))}<form
-                    bind:this={archiveForm}
+                  </details>{/if}
+                {#if selectedEmail.classificationError}<p class="notice">
+                    Classification failed. This message needs another attempt.
+                  </p>{/if}
+                {#if selectedEmail.actionItems.length > 0 || selectedEmail.reminders.length > 0 || selectedEmail.extractionError}
+                  <section
+                    class="extraction-panel"
+                    aria-label="Extracted action items and reminders"
+                  >
+                    {#if selectedEmail.actionItems.length > 0}
+                      <div class="extraction-group">
+                        <h3>Action items</h3>
+                        <ul>
+                          {#each selectedEmail.actionItems as item}
+                            <li>
+                              <strong>{item.title}</strong>
+                              {#if item.details}<span>{item.details}</span>{/if}
+                              {#if extractedDate(item.dueAt)}<small
+                                  >Due {extractedDate(item.dueAt)}</small
+                                >{/if}
+                            </li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+                    {#if selectedEmail.reminders.length > 0}
+                      <div class="extraction-group">
+                        <h3>Reminders</h3>
+                        <ul>
+                          {#each selectedEmail.reminders as reminder}
+                            <li>
+                              <strong>{reminder.title}</strong>
+                              {#if reminder.details}<span>{reminder.details}</span>{/if}
+                              {#if extractedDate(reminder.remindAt)}<small
+                                  >Reminder {extractedDate(reminder.remindAt)}</small
+                                >{/if}
+                            </li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+                    {#if selectedEmail.extractionError}<p class="notice extraction-error">
+                        Extraction failed: {selectedEmail.extractionError}
+                      </p>{/if}
+                  </section>
+                {/if}
+                {#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
+                <div class="message-actions">
+                  <button
+                    class="icon-action"
+                    aria-label="Reply"
+                    title="Reply"
+                    onclick={() =>
+                      openComposer({ mode: 'reply', sourceEmailId: selectedEmail!.id })}
+                    ><Icon name="reply" /></button
+                  >
+                  <button
+                    class="icon-action"
+                    aria-label="Reply all"
+                    title="Reply all"
+                    onclick={() =>
+                      openComposer({ mode: 'replyAll', sourceEmailId: selectedEmail!.id })}
+                    ><Icon name="reply-all" /></button
+                  >
+                  <button
+                    class="icon-action"
+                    aria-label="Forward"
+                    title="Forward"
+                    onclick={() =>
+                      openComposer({ mode: 'forward', sourceEmailId: selectedEmail!.id })}
+                    ><Icon name="forward" /></button
+                  >
+                  {#if selectedThread.some((member) => member.labels.includes('INBOX'))}<form
+                      bind:this={archiveForm}
+                      method="POST"
+                      action="?/archive"
+                      onsubmit={(event) => void submitMessageAction(event, 'archive')}
+                    >
+                      <input type="hidden" name="id" value={selectedEmail.id} />
+                      <button type="submit" class="icon-action" aria-label="Archive" title="Archive"
+                        ><Icon name="archive" /></button
+                      >
+                    </form>
+                    <button
+                      type="button"
+                      class="icon-action"
+                      aria-label="Snooze"
+                      title="Snooze"
+                      onclick={() =>
+                        (snoozeTarget = {
+                          id: selectedEmail.id,
+                          rowId: openThreadRowId(selectedEmail.id),
+                        })}><Icon name="clock" /></button
+                    >{/if}
+                  <form
+                    bind:this={deleteForm}
                     method="POST"
-                    action="?/archive"
-                    onsubmit={(event) => void submitMessageAction(event, 'archive')}
+                    action="?/delete"
+                    onsubmit={(event) => void submitMessageAction(event, 'delete')}
                   >
                     <input type="hidden" name="id" value={selectedEmail.id} />
-                    <button type="submit" class="icon-action" aria-label="Archive" title="Archive"
-                      ><Icon name="archive" /></button
+                    <button
+                      type="submit"
+                      class="icon-action delete-button"
+                      aria-label="Delete"
+                      title="Delete"><Icon name="trash" /></button
                     >
                   </form>
-                  <button
-                    type="button"
-                    class="icon-action"
-                    aria-label="Snooze"
-                    title="Snooze"
-                    onclick={() =>
-                      (snoozeTarget = {
-                        id: selectedEmail.id,
-                        rowId: openThreadRowId(selectedEmail.id),
-                      })}><Icon name="clock" /></button
-                  >{/if}
-                <form
-                  bind:this={deleteForm}
-                  method="POST"
-                  action="?/delete"
-                  onsubmit={(event) => void submitMessageAction(event, 'delete')}
-                >
-                  <input type="hidden" name="id" value={selectedEmail.id} />
-                  <button
-                    type="submit"
-                    class="icon-action delete-button"
-                    aria-label="Delete"
-                    title="Delete"><Icon name="trash" /></button
-                  >
-                </form>
-                {#if selectedEmail.bodyHtml}
-                  {@const menuId = `message-options-${selectedEmail.id}`}
-                  <button
-                    type="button"
-                    class="icon-action"
-                    aria-label="More actions"
-                    title="More actions"
-                    popovertarget={menuId}><Icon name="more" /></button
-                  >
-                  <div id={menuId} class="action-menu message-options" popover="auto">
+                  {#if selectedEmail.bodyHtml}
+                    {@const menuId = `message-options-${selectedEmail.id}`}
                     <button
                       type="button"
-                      popovertarget={menuId}
-                      popovertargetaction="hide"
-                      onclick={() => {
-                        if (originalColorIds.has(selectedEmail.id))
-                          originalColorIds.delete(selectedEmail.id);
-                        else originalColorIds.add(selectedEmail.id);
-                      }}
-                      >{originalColorIds.has(selectedEmail.id)
-                        ? 'Show in dark mode'
-                        : 'Show original colors'}</button
+                      class="icon-action"
+                      aria-label="More actions"
+                      title="More actions"
+                      popovertarget={menuId}><Icon name="more" /></button
                     >
-                  </div>
-                {/if}
-                {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed(selectedEmail)}
-                  {@const remoteImagesMenuId = `remote-images-options-${selectedEmail.id}`}
-                  <div class="remote-images-control">
-                    <button
-                      type="button"
-                      class="remote-images-button"
-                      onclick={() => {
-                        remoteImagesFor = selectedEmail.id;
-                      }}>Load remote images</button
-                    >
-                    <button
-                      type="button"
-                      class="remote-images-menu"
-                      aria-label="Remote image options"
-                      popovertarget={remoteImagesMenuId}><Icon name="chevron-down" /></button
-                    >
-                    <div id={remoteImagesMenuId} class="action-menu" popover="auto">
-                      {#if senderAddress(selectedEmail.fromAddress)}
-                        <form
-                          method="POST"
-                          action="?/saveRemoteImageRule"
-                          use:enhance={saveRemoteImageRule}
-                        >
-                          <input type="hidden" name="id" value={selectedEmail.id} />
-                          <input type="hidden" name="kind" value="address" />
-                          <button type="submit"
-                            >Always load from {senderAddress(selectedEmail.fromAddress)}</button
-                          >
-                        </form>
-                        <form
-                          method="POST"
-                          action="?/saveRemoteImageRule"
-                          use:enhance={saveRemoteImageRule}
-                        >
-                          <input type="hidden" name="id" value={selectedEmail.id} />
-                          <input type="hidden" name="kind" value="domain" />
-                          <button type="submit"
-                            >Always load from {senderDomain(selectedEmail.fromAddress)}</button
-                          >
-                        </form>
-                      {:else}<p>No sender address is available for this message.</p>{/if}
+                    <div id={menuId} class="action-menu message-options" popover="auto">
+                      <button
+                        type="button"
+                        popovertarget={menuId}
+                        popovertargetaction="hide"
+                        onclick={() => {
+                          if (originalColorIds.has(selectedEmail.id))
+                            originalColorIds.delete(selectedEmail.id);
+                          else originalColorIds.add(selectedEmail.id);
+                        }}
+                        >{originalColorIds.has(selectedEmail.id)
+                          ? 'Show in dark mode'
+                          : 'Show original colors'}</button
+                      >
                     </div>
+                  {/if}
+                  {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed(selectedEmail)}
+                    {@const remoteImagesMenuId = `remote-images-options-${selectedEmail.id}`}
+                    <div class="remote-images-control">
+                      <button
+                        type="button"
+                        class="remote-images-button"
+                        onclick={() => {
+                          remoteImagesFor = selectedEmail.id;
+                        }}>Load remote images</button
+                      >
+                      <button
+                        type="button"
+                        class="remote-images-menu"
+                        aria-label="Remote image options"
+                        popovertarget={remoteImagesMenuId}><Icon name="chevron-down" /></button
+                      >
+                      <div id={remoteImagesMenuId} class="action-menu" popover="auto">
+                        {#if senderAddress(selectedEmail.fromAddress)}
+                          <form
+                            method="POST"
+                            action="?/saveRemoteImageRule"
+                            use:enhance={saveRemoteImageRule}
+                          >
+                            <input type="hidden" name="id" value={selectedEmail.id} />
+                            <input type="hidden" name="kind" value="address" />
+                            <button type="submit"
+                              >Always load from {senderAddress(selectedEmail.fromAddress)}</button
+                            >
+                          </form>
+                          <form
+                            method="POST"
+                            action="?/saveRemoteImageRule"
+                            use:enhance={saveRemoteImageRule}
+                          >
+                            <input type="hidden" name="id" value={selectedEmail.id} />
+                            <input type="hidden" name="kind" value="domain" />
+                            <button type="submit"
+                              >Always load from {senderDomain(selectedEmail.fromAddress)}</button
+                            >
+                          </form>
+                        {:else}<p>No sender address is available for this message.</p>{/if}
+                      </div>
+                    </div>
+                  {/if}
+                </div>
+                {#if selectedEmail.bodyHtml}
+                  {@const colorMode = emailColorMode(
+                    selectedEmail.bodyHtml,
+                    originalColorIds.has(selectedEmail.id)
+                  )}
+                  <div class={['message-paper', colorMode]}>
+                    <iframe
+                      class="html-message"
+                      title="Email message content"
+                      sandbox="allow-same-origin"
+                      referrerpolicy="no-referrer"
+                      srcdoc={buildEmailDocument(
+                        selectedEmail.bodyHtml,
+                        remoteImagesAllowed(selectedEmail),
+                        colorMode
+                      )}
+                      {@attach messageFrame}
+                    ></iframe>
+                  </div>
+                {:else}
+                  <div class="message-body">
+                    {selectedEmail.bodyText ||
+                      selectedEmail.snippet ||
+                      'No message text available.'}
                   </div>
                 {/if}
-              </div>
-              {#if selectedEmail.bodyHtml}
-                {@const colorMode = emailColorMode(
-                  selectedEmail.bodyHtml,
-                  originalColorIds.has(selectedEmail.id)
-                )}
-                <div class={['message-paper', colorMode]}>
-                  <iframe
-                    class="html-message"
-                    title="Email message content"
-                    sandbox="allow-same-origin"
-                    referrerpolicy="no-referrer"
-                    srcdoc={buildEmailDocument(
-                      selectedEmail.bodyHtml,
-                      remoteImagesAllowed(selectedEmail),
-                      colorMode
-                    )}
-                    {@attach messageFrame}
-                  ></iframe>
-                </div>
-              {:else}
-                <div class="message-body">
-                  {selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}
-                </div>
-              {/if}
-              {#if selectedEmail.bodyTruncated}<p class="notice">
-                  Only part of this message was downloaded.
-                </p>{/if}
-            </article>
-          {/each}
-        </div>
-      {:else}
-        <div class="detail-empty">
-          <span aria-hidden="true">@</span>
-          <h2>No message selected</h2>
-          <p>Choose a category and a message to read it here.</p>
-        </div>
-      {/if}
-    </section>
-    <CalendarRail calendars={data.calendars} events={data.calendarEvents} day={data.calendarDay} />
+                {#if selectedEmail.bodyTruncated}<p class="notice">
+                    Only part of this message was downloaded.
+                  </p>{/if}
+              </article>
+            {/each}
+          </div>
+        {:else}
+          <div class="detail-empty">
+            <span aria-hidden="true">@</span>
+            <h2>No message selected</h2>
+            <p>Choose a category and a message to read it here.</p>
+          </div>
+        {/if}
+      </section>
+      <CalendarRail
+        calendars={data.calendars}
+        events={data.calendarEvents}
+        day={data.calendarDay}
+      />
+    </div>
   </div>
-  {#if showChat}{#key data.selectedAccount}<EmailChat
-        account={data.selectedAccount}
-        close={() => (showChat = false)}
-      />{/key}{/if}
   {#if snoozeTarget}
     {@const target = snoozeTarget}
     <SnoozeDialog
@@ -1602,6 +1620,12 @@
     display: flex;
     flex-direction: column;
   }
+  .content-shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+  }
   .masthead {
     display: flex;
     align-items: center;
@@ -1703,6 +1727,7 @@
   .mailbox {
     flex: 1;
     min-height: 0;
+    min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 210px;
   }

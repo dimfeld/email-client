@@ -10,7 +10,9 @@ export type GmailMessageAction =
   | 'undelete'
   | 'markRead'
   | 'star'
-  | 'unstar';
+  | 'unstar'
+  | 'markImportant'
+  | 'unmarkImportant';
 
 export const labelChanges = {
   archive: { removeLabelIds: ['INBOX'] },
@@ -18,6 +20,8 @@ export const labelChanges = {
   markRead: { removeLabelIds: ['UNREAD'] },
   star: { addLabelIds: ['STARRED'] },
   unstar: { removeLabelIds: ['STARRED'] },
+  markImportant: { addLabelIds: ['IMPORTANT'] },
+  unmarkImportant: { removeLabelIds: ['IMPORTANT'] },
 };
 
 export async function runGmailMessageAction(

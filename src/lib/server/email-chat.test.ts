@@ -22,13 +22,19 @@ function seed() {
 test('tools enforce account scope and record only messages read', async () => {
   const { one, two } = seed();
   const { tools, readSources } = createEmailChatTools(database, 'a@test.com');
-  expect(Object.keys(tools)).toEqual(['search', 'read']);
+  expect(Object.keys(tools)).toEqual(['search', 'read', 'changeMessage', 'createReplyDraft']);
   const found = await tools.search.execute!({ query: '', offset: 0, limit: 10 }, context);
   expect(found).toMatchObject({ results: [{ id: one }] });
   expect(readSources.size).toBe(0);
   await expect(tools.read.execute!({ id: two, offset: 0, length: 100 }, context)).rejects.toThrow(
     'selected account'
   );
+  await expect(
+    tools.changeMessage.execute!({ id: two, action: 'archive' }, context)
+  ).rejects.toThrow('selected account');
+  await expect(
+    tools.createReplyDraft.execute!({ id: two, text: 'Reply', replyAll: false }, context)
+  ).rejects.toThrow('selected account');
   expect(await tools.read.execute!({ id: one, offset: 0, length: 6 }, context)).toMatchObject({
     body: 'Launch',
     nextOffset: 6,
@@ -75,6 +81,26 @@ test('passes conversation to the model and returns verified sources', async () =
     generate,
   });
   expect(result.sources.map((source) => source.id)).toEqual([one]);
+  expect(result.actions).toEqual([]);
+});
+
+test('adds the message open at chat start to the instructions', async () => {
+  const { one } = seed();
+  const generate = (async (options: Parameters<typeof generateText>[0]) => {
+    expect(options.instructions).toContain(`Message ${one} was open when this chat started`);
+    return { output: { answer: 'No action needed.', sourceIds: [] } };
+  }) as typeof generateText;
+  await chatWithEmail(
+    database,
+    [{ role: 'user', content: 'Help me.' }],
+    'a@test.com',
+    undefined,
+    {
+      apiKey: 'test',
+      generate,
+    },
+    one
+  );
 });
 
 test('rejects invented citations and stops tools after cancellation', async () => {

@@ -66,6 +66,24 @@ test('matches addresses and domains exactly and accepts RFC email dates', () => 
   expect(searchEmails(database, '***')).toEqual([]);
 });
 
+test('filters recent mail by folder and label status', () => {
+  upsertEmails(database, 'owner@test.com', [
+    { id: 'inbox', labels: ['INBOX'], date: '2026-09-24T12:00:00Z' },
+    { id: 'archive', labels: ['STARRED', 'IMPORTANT'], date: '2026-09-23T12:00:00Z' },
+    { id: 'sent', labels: ['SENT'], date: '2026-09-22T12:00:00Z' },
+  ]);
+  for (const [folder, ids] of [
+    ['inbox', ['inbox']],
+    ['archive', ['archive']],
+    ['sent', ['sent']],
+    ['starred', ['archive']],
+    ['important', ['archive']],
+    ['all', ['inbox', 'archive', 'sent']],
+  ] as const)
+    expect(searchEmails(database, `in:${folder}`).map((email) => email.gmailId)).toEqual([...ids]);
+  expect(() => searchEmails(database, 'in:unknown')).toThrow('Use inbox');
+});
+
 test('updates and deletes index rows with the stored message', () => {
   upsertEmails(database, 'a@test.com', [{ id: 'a', subject: 'before' }]);
   upsertEmails(database, 'a@test.com', [{ id: 'a', subject: 'after' }]);

@@ -7,4 +7,5 @@ export type ChatSource = {
   date: string | null;
   href: string;
 };
-export type ChatAnswer = { answer: string; sources: ChatSource[] };
+export type ChatAction = { kind: 'message' | 'draft'; id: number | string; label: string };
+export type ChatAnswer = { answer: string; sources: ChatSource[]; actions: ChatAction[] };

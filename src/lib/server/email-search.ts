@@ -68,18 +68,25 @@ export function installEmailSearch(database: DatabaseSync) {
 
 export function parseSearchQuery(query: string) {
   const terms: string[] = [];
-  const filters: { field: 'from' | 'to' | 'after' | 'before'; value: string }[] = [];
+  const filters: { field: 'from' | 'to' | 'after' | 'before' | 'in'; value: string }[] = [];
   const tokens = query.match(/(?:[^\s"]|"[^"]*")+/g) ?? [];
   if ((query.match(/"/g)?.length ?? 0) % 2)
     throw new SearchQueryError('Close the quote for the exact phrase.');
   for (const token of tokens) {
-    const filter = /^(from|to|after|before):(.*)$/i.exec(token);
+    const filter = /^(from|to|after|before|in):(.*)$/i.exec(token);
     if (filter) {
       const field = filter[1].toLowerCase() as (typeof filters)[number]['field'];
       const value = filter[2].replace(/^"|"$/g, '');
       if (!value) throw new SearchQueryError(`Add a value after ${field}:.`);
       if ((field === 'after' || field === 'before') && !isDateKey(value))
         throw new SearchQueryError(`Use YYYY-MM-DD for ${field}:.`);
+      if (
+        field === 'in' &&
+        !['inbox', 'archive', 'sent', 'starred', 'important', 'all'].includes(value.toLowerCase())
+      )
+        throw new SearchQueryError(
+          'Use inbox, archive, sent, starred, important, or all after in:.'
+        );
       filters.push({ field, value });
     } else {
       const value = token.replace(/^"|"$/g, '');
@@ -121,6 +128,14 @@ export function searchEmailSource(query: string, account?: string): EmailSource 
         `email_search_address(e.${field === 'from' ? 'from_address' : 'to_addresses'}, ?) = 1`
       );
       params.push(value);
+    } else if (field === 'in') {
+      const folder = value.toLowerCase();
+      if (folder === 'archive')
+        where.push('e.in_inbox = 0 AND e.is_sent = 0 AND instr(e.labels_json, \'"DRAFT"\') = 0');
+      else if (folder !== 'all') {
+        where.push('instr(e.labels_json, ?) > 0');
+        params.push(JSON.stringify(folder.toUpperCase()));
+      }
     } else {
       where.push(`email_search_date(e.message_date) ${field === 'after' ? '>=' : '<'} ?`);
       params.push(Date.parse(`${value}T00:00:00Z`));

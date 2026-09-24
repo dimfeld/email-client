@@ -2,8 +2,16 @@
   import Icon from './Icon.svelte';
   import { onDestroy, onMount } from 'svelte';
   import type { ChatAnswer, ChatMessage } from '$lib/email-chat';
-  let { account, close }: { account: string | null; close: () => void } = $props();
-  let messages = $state<(ChatMessage & { sources?: ChatAnswer['sources'] })[]>([]);
+  import { openComposer } from '$lib/composer';
+  let {
+    account,
+    currentMessageId,
+    close,
+  }: { account: string | null; currentMessageId: number | null; close: () => void } = $props();
+  let messages = $state<
+    (ChatMessage & { sources?: ChatAnswer['sources']; actions?: ChatAnswer['actions'] })[]
+  >([]);
+  let threadMessageId = $state<number | null>(null);
   let question = $state('');
   let pending = $state(false);
   let error = $state('');
@@ -11,10 +19,10 @@
   let controller: AbortController | undefined;
   onMount(() => questionField.focus());
   onDestroy(() => controller?.abort());
-  async function ask(event: SubmitEvent) {
-    event.preventDefault();
-    if (!question.trim() || pending) return;
-    const content = question.trim();
+  async function ask(content: string) {
+    if (!content.trim() || pending) return;
+    content = content.trim();
+    if (messages.length === 0) threadMessageId = currentMessageId;
     question = '';
     error = '';
     const history: ChatMessage[] = [
@@ -28,12 +36,17 @@
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ account, messages: history }),
+        body: JSON.stringify({ account, currentMessageId: threadMessageId, messages: history }),
         signal: controller.signal,
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? 'Email chat failed.');
-      messages.push({ role: 'assistant', content: result.answer, sources: result.sources });
+      messages.push({
+        role: 'assistant',
+        content: result.answer,
+        sources: result.sources,
+        actions: result.actions,
+      });
     } catch (failure) {
       error = controller.signal.aborted
         ? 'Search stopped.'
@@ -45,6 +58,11 @@
     } finally {
       pending = false;
     }
+  }
+  function newChat() {
+    messages = [];
+    threadMessageId = null;
+    error = '';
   }
 </script>
 
@@ -70,12 +88,27 @@
                 <a href={source.href}>[{source.id}] {source.subject}</a><small>{source.from}</small>
               </li>{/each}
           </ul>{/if}
+        {#if message.actions?.length}<ul>
+            {#each message.actions as action}<li>
+                {#if action.kind === 'draft'}<button
+                    type="button"
+                    onclick={() => openComposer({ mode: 'reply', draftId: String(action.id) })}
+                    >{action.label}</button
+                  >
+                {:else}{action.label}{/if}
+              </li>{/each}
+          </ul>{/if}
       </article>
     {/each}
     {#if pending}<p class="help">Searching and reading your mail…</p>{/if}
     {#if error}<p class="error" role="alert">{error}</p>{/if}
   </div>
-  <form onsubmit={ask}>
+  <form
+    onsubmit={(event) => {
+      event.preventDefault();
+      void ask(question);
+    }}
+  >
     <label for="email-question">Ask a question</label><textarea
       id="email-question"
       bind:this={questionField}
@@ -94,10 +127,16 @@
         >{:else}<button type="submit" disabled={!question.trim()}>Ask</button>{/if}<button
         type="button"
         disabled={pending}
+        onclick={newChat}>New chat</button
+      ><button
+        type="button"
+        disabled={pending}
         onclick={() => {
-          messages = [];
-          error = '';
-        }}>New chat</button
+          newChat();
+          void ask(
+            'Look at my recent inbox emails. Summarize what needs attention and help me decide what to do with each one. Do not change messages or create drafts until I ask.'
+          );
+        }}>Triage inbox</button
       >
     </div>
   </form>
@@ -107,16 +146,21 @@
   .chat {
     display: flex;
     flex-direction: column;
-    position: fixed;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 8;
-    width: min(520px, 100vw);
+    flex: 0 0 min(420px, 34vw);
+    min-width: 0;
+    min-height: 0;
     background: var(--color-surface);
-    border-left: 1px solid var(--color-border-strong);
-    box-shadow: -16px 0 50px var(--color-shadow);
+    border-right: 1px solid var(--color-border-strong);
     color: var(--color-text);
+  }
+  @media (max-width: 760px) {
+    .chat {
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      width: 100vw;
+      background: var(--color-surface);
+    }
   }
   header {
     display: flex;

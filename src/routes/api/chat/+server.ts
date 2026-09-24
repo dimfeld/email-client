@@ -1,11 +1,12 @@
 import { json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { getDatabase, listAccounts } from '$lib/server/db';
+import { getDatabase, getEmail, listAccounts } from '$lib/server/db';
 import { chatWithEmail } from '$lib/server/email-chat';
 import type { RequestHandler } from './$types';
 
 const requestSchema = z.object({
   account: z.string().nullable(),
+  currentMessageId: z.number().int().positive().nullable().optional(),
   messages: z
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().trim().min(1) }))
     .min(1),
@@ -25,9 +26,22 @@ export const POST: RequestHandler = async ({ request, url }) => {
   const database = getDatabase();
   if (input.account && !listAccounts(database).some((account) => account.email === input.account))
     return json({ error: 'The selected account is not available.' }, { status: 400 });
+  if (
+    input.messages.length === 1 &&
+    input.currentMessageId &&
+    !getEmail(database, input.currentMessageId, input.account ?? undefined)
+  )
+    return json({ error: 'The open message is not available.' }, { status: 400 });
   try {
     return json(
-      await chatWithEmail(database, input.messages, input.account ?? undefined, request.signal),
+      await chatWithEmail(
+        database,
+        input.messages,
+        input.account ?? undefined,
+        request.signal,
+        {},
+        input.currentMessageId ?? undefined
+      ),
       { headers: { 'cache-control': 'no-store' } }
     );
   } catch (error) {
