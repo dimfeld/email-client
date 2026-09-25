@@ -469,12 +469,17 @@
     }
     if (isInteractiveTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
-    const eventTarget = event.target instanceof Element ? event.target : null;
-    const inMessageList = !!eventTarget?.closest('.message-list');
+    const eventTarget =
+      event.target && typeof event.target === 'object' && 'closest' in event.target
+        ? (event.target as Element)
+        : null;
+    const inMessageDetail =
+      !!eventTarget?.closest('.reading-content') ||
+      (eventTarget !== null && eventTarget.ownerDocument !== document);
     const moveOffset =
-      key === 'j' || (event.key === 'ArrowDown' && inMessageList)
+      key === 'j' || (event.key === 'ArrowDown' && !inMessageDetail)
         ? 1
-        : key === 'k' || (event.key === 'ArrowUp' && inMessageList)
+        : key === 'k' || (event.key === 'ArrowUp' && !inMessageDetail)
           ? -1
           : 0;
     if (event.repeat && moveOffset === 0) return;
