@@ -1,6 +1,7 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
   import { calendarResponses, type CalendarResponse } from '$lib/calendar-response';
+  import { eventInterval } from '$lib/calendar';
   import type { SyncedCalendarEvent } from '$lib/server/types';
   import Icon from './Icon.svelte';
 
@@ -10,6 +11,22 @@
   let busy = $state(false);
   let error = $state('');
   let message = $state('');
+  let now = $state(Date.now());
+  let activeInvites = $derived(invites.filter((event) => eventInterval(event).end > now));
+
+  $effect(() => {
+    const nextEnd = activeInvites.reduce(
+      (earliest, event) => Math.min(earliest, eventInterval(event).end),
+      Infinity
+    );
+    if (!Number.isFinite(nextEnd)) return;
+    // setTimeout accepts a signed 32-bit delay.
+    const timer = setTimeout(
+      () => (now = Date.now()),
+      Math.min(2_147_483_647, Math.max(1, nextEnd - now + 1))
+    );
+    return () => clearTimeout(timer);
+  });
 
   function choose(event: SyncedCalendarEvent, response: CalendarResponse) {
     chosen = event;
@@ -29,15 +46,15 @@
 </script>
 
 <details class="pending-invites">
-  <summary aria-label={`Invitations: ${invites.length} need a response`}>
+  <summary aria-label={`Invitations: ${activeInvites.length} need a response`}>
     <Icon name="calendar" />
-    <span class="count">{invites.length}</span>
+    <span class="count">{activeInvites.length}</span>
   </summary>
   <div class="invite-list">
-    {#if invites.length === 0}
+    {#if activeInvites.length === 0}
       <p class="empty">No invitations need a response.</p>
     {/if}
-    {#each invites as event (`${event.accountEmail}\0${event.calendarId}\0${event.eventId}`)}
+    {#each activeInvites as event (`${event.accountEmail}\0${event.calendarId}\0${event.eventId}`)}
       <article class="invite">
         <strong>{event.summary || '(No title)'}</strong>
         <span>{dateLabel(event)} · {event.accountEmail}</span>
