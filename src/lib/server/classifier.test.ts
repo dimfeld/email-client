@@ -14,6 +14,40 @@ describe('Jev classifier input', () => {
   it('turns an absent message body into an empty string', () => {
     expect(truncateBodyForJev(undefined)).toBe('');
   });
+
+  it('labels quoted reply text as processed context for task and reminder decisions', async () => {
+    const request = spyOn(TypeSafeClient.prototype, 'systemOne').mockResolvedValue({
+      model: 'test',
+      answers: {
+        category: { choice: 'custom', confidence: 1, probabilities: { custom: 1 } },
+        actionItem: { noul: 0 },
+        reminder: { noul: 0 },
+        importance: { choice: 'other', confidence: 1, probabilities: { other: 1 } },
+      },
+    } as never);
+    try {
+      const classify = createJevClassifier('test-key', () => [
+        { id: 'custom', name: 'Work', description: 'Work mail.', level: 'auto' },
+      ]);
+      await classify({
+        id: 'message',
+        bodyText: 'Done.\n\nOn Tuesday, Alex wrote:\n> Please send the report by Friday.',
+      });
+      expect(request.mock.calls[0][0]).toMatchObject({
+        state: {
+          body: 'Latest email:\nDone.\n\nQuoted reply context (already processed; use only for decision context):\nOn Tuesday, Alex wrote:\n> Please send the report by Friday.',
+        },
+      });
+      expect(JSON.stringify(request.mock.calls[0][0].questions.actionItem)).toContain(
+        'never as the source of a new task'
+      );
+      expect(JSON.stringify(request.mock.calls[0][0].questions.reminder)).toContain(
+        'never as the source of a new reminder'
+      );
+    } finally {
+      request.mockRestore();
+    }
+  });
 });
 
 describe('configurable Jev categories', () => {

@@ -1,6 +1,7 @@
 import { choice, noul, TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Category, Classification, IncomingEmail } from './types';
 import { getAccountDisplayName, getDatabase, listCategories } from './db';
+import { formatBodyForDecisions } from './quoted-reply';
 
 export type EmailClassifier = (
   email: IncomingEmail,
@@ -21,19 +22,22 @@ const importanceCriteria = {
 } as const;
 
 const actionItemQuestion = noul(
-  'Is this email likely to make the owner add a specific task to a todo list?',
+  'Is the latest email text likely to make the owner add a specific task to a todo list?',
   {
-    true: 'Choose true only when the email gives the owner a concrete, owner-relevant task, decision, or follow-up that they are likely to track as a todo. The requested action and its subject should be clear enough to identify a specific task. A request or question alone is not enough.',
+    true: 'Choose true only when the latest email gives the owner a concrete, owner-relevant task, decision, or follow-up that they are likely to track as a todo. The requested action and its subject should be clear enough to identify a specific task. A request or question alone is not enough. Quoted reply context has already been processed; use it only to understand the latest email, never as the source of a new task.',
     false:
       'Choose false for routine questions or requests, generic requests to reply or follow up, optional suggestions, marketing calls to action, notifications, information that only needs reading, tasks for someone else, or anything the owner is not likely to add as a specific todo. Use ownerName and ownerEmail in the state to identify the owner. An ask clearly addressed to another person is not an action item for the owner, even if the owner received the email. Do not exclude an ask when its addressee is unclear.',
   }
 );
 
-const reminderQuestion = noul('Is this email likely to make the owner add a specific reminder?', {
-  true: 'Choose true only when the email contains a concrete, owner-relevant future event, deadline, appointment, renewal, expiration, or follow-up that the owner is likely to track with a reminder. The reminder topic and timing should be clear enough to identify a specific reminder.',
-  false:
-    'Choose false for incidental dates, historical information, general schedules, marketing offers, newsletters, routine notifications, or vague future information that the owner is not likely to track as a specific reminder. Use ownerName and ownerEmail in the state to identify the owner. A task or deadline clearly addressed only to another person is not a reminder for the owner.',
-});
+const reminderQuestion = noul(
+  'Is the latest email text likely to make the owner add a specific reminder?',
+  {
+    true: 'Choose true only when the latest email contains a concrete, owner-relevant future event, deadline, appointment, renewal, expiration, or follow-up that the owner is likely to track with a reminder. The reminder topic and timing should be clear enough to identify a specific reminder. Quoted reply context has already been processed; use it only to understand the latest email, never as the source of a new reminder.',
+    false:
+      'Choose false for incidental dates, historical information, general schedules, marketing offers, newsletters, routine notifications, or vague future information that the owner is not likely to track as a specific reminder. Use ownerName and ownerEmail in the state to identify the owner. A task or deadline clearly addressed only to another person is not a reminder for the owner.',
+  }
+);
 
 export function createJevClassifier(
   apiKey = process.env.TYPESAFE_API_KEY,
@@ -63,7 +67,7 @@ export function createJevClassifier(
       subject: email.subject ?? '',
       date: email.date ?? '',
       snippet: email.snippet ?? '',
-      body: truncateBodyForJev(email.bodyText),
+      body: truncateBodyForJev(formatBodyForDecisions(email.bodyText)),
     };
     const response = await client.systemOne({
       state,

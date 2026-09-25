@@ -3,6 +3,7 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 import type { EmailExtraction, IncomingEmail } from './types';
 import { getAccountDisplayName, getDatabase } from './db';
+import { formatBodyForDecisions } from './quoted-reply';
 
 export type ExtractionTargets = {
   actionItems: boolean;
@@ -89,9 +90,9 @@ export function createOpenAIEmailExtractor(
             serviceTier,
           } satisfies OpenAIResponsesProviderOptions,
         },
-        instructions: `Extract only information that is present in the email. Do not invent tasks, dates, or details.
+        instructions: `Extract action items and reminders only from the latest email text. Quoted reply context has already been processed. Use it only to decide what the latest email means. Do not use quoted context as the source of an item, its title, details, or date. Never extract an item stated only in quoted reply context. Do not invent tasks, dates, or details.
 Each returned item must be self-contained in its title and details. Write it so a person can understand what it is without seeing the email. Include concrete context from the email, such as names, the subject, project, event, product, deadline, or reason. Do not use generic text such as "Reply to the email with feedback", "Follow up", or "Remember this" when it does not identify the subject. If the email does not provide enough context to write a self-contained item, omit that item.
-Return an action item only when the email states what the owner must do, decide, reply to, review, schedule, or follow up on. Return a reminder only when the email states what the owner should remember and why. Do not rely on another message, a missing thread, an attachment, a link, or outside context.
+Return an action item only when the latest email states what the owner must do, decide, reply to, review, schedule, or follow up on. Return a reminder only when the latest email states what the owner should remember and why. Do not rely on a missing thread, an attachment, a link, or outside context.
 Return action items only when action item extraction is requested. Return reminders only when reminder extraction is requested.
 Use the owner's name and email address to decide who an ask is for. Omit action items and task reminders clearly addressed to another person, even when the owner received the email. If the addressee is unclear, use the other evidence in the message.
 Use null for a date or time that the email does not state clearly.`,
@@ -107,7 +108,7 @@ Use null for a date or time that the email does not state clearly.`,
             subject: email.subject ?? '',
             date: email.date ?? '',
             snippet: email.snippet ?? '',
-            body: email.bodyText ?? '',
+            body: formatBodyForDecisions(email.bodyText),
           },
         }),
       });

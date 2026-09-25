@@ -27,7 +27,8 @@ describe('OpenAI email extraction', () => {
         id: 'message',
         from: 'alex@example.com',
         subject: 'Plan',
-        bodyText: 'Please reply. The plan starts September 25.',
+        bodyText:
+          'Please reply. The plan starts September 25.\n\nOn Tuesday, Alex wrote:\n> Please send the old report.',
       },
       { actionItems: false, reminders: true },
       'casey@example.com'
@@ -50,12 +51,18 @@ describe('OpenAI email extraction', () => {
     expect(String(request?.instructions)).toContain('Reply to the email with feedback');
     expect(String(request?.instructions)).toContain('clearly addressed to another person');
     expect(String(request?.instructions)).toContain(
+      'Never extract an item stated only in quoted reply context'
+    );
+    expect(String(request?.instructions)).toContain(
       'If the email does not provide enough context to write a self-contained item, omit that item'
     );
     expect(JSON.parse(String(request?.prompt))).toMatchObject({
       extract: { actionItems: false, reminders: true },
       owner: { name: 'Casey Morgan', email: 'casey@example.com' },
-      email: { subject: 'Plan' },
+      email: {
+        subject: 'Plan',
+        body: 'Latest email:\nPlease reply. The plan starts September 25.\n\nQuoted reply context (already processed; use only for decision context):\nOn Tuesday, Alex wrote:\n> Please send the old report.',
+      },
     });
   });
 
