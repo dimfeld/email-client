@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { searchSuggestions } from './search-suggestions';
+import { searchSuggestionLimit, searchSuggestions } from './search-suggestions';
 
 const source = {
   contacts: [
@@ -45,4 +45,9 @@ test('keeps the from: or to: field and ignores other filters and finished words'
   expect(searchSuggestions('"ali', source)).toEqual([]);
   expect(searchSuggestions('ali ', source)).toEqual([]);
   expect(searchSuggestions('', source)).toEqual([]);
+});
+
+test('returns at most the limit of suggestions', () => {
+  const many = { contacts: [], domains: Array.from({ length: 20 }, (_, i) => `site${i}.com`) };
+  expect(searchSuggestions('site', many)).toHaveLength(searchSuggestionLimit);
 });

@@ -11,10 +11,13 @@ export type SearchSuggestion = {
   query: string;
 };
 
+/** The most suggestions that the search list shows. */
+export const searchSuggestionLimit = 5;
+
 /**
  * Suggests contacts and domains for the last word of a search query. A bare word or a `from:`
  * word completes to `from:`, and a `to:` word completes to `to:`. Matches at the start of a
- * word come first.
+ * word come first. The list has at most `searchSuggestionLimit` items.
  */
 export function searchSuggestions(
   query: string,
@@ -54,5 +57,8 @@ export function searchSuggestions(
       suggestion: { kind: 'domain', label: domain, detail: 'Domain', query: complete(domain) },
     });
   }
-  return ranked.sort((a, b) => a.rank - b.rank).map(({ suggestion }) => suggestion);
+  return ranked
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, searchSuggestionLimit)
+    .map(({ suggestion }) => suggestion);
 }
