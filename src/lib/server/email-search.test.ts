@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDatabase, getEmail, markArchived, markDeleted, upsertEmails } from './db';
-import { searchEmailSummaries, searchEmails } from './email-search';
+import { listSearchDomains, searchEmailSummaries, searchEmails } from './email-search';
 
 const directory = mkdtempSync(join(tmpdir(), 'mail-search-'));
 let database = createDatabase(':memory:');
@@ -64,6 +64,21 @@ test('matches addresses and domains exactly and accepts RFC email dates', () => 
   expect(() => searchEmails(database, 'after:2026-02-30')).toThrow('YYYY-MM-DD');
   expect(() => searchEmails(database, '"open quote')).toThrow('Close the quote');
   expect(searchEmails(database, '***')).toEqual([]);
+});
+
+test('lists search domains by frequency in the account scope', () => {
+  upsertEmails(database, 'owner@test.com', [
+    { id: 'a', from: 'Alice <alice@example.com>', to: 'owner@test.com, Bob <bob@example.com>' },
+    { id: 'b', from: 'news@shop.com', to: 'owner@test.com' },
+  ]);
+  upsertEmails(database, 'other@test.com', [{ id: 'c', from: 'x@elsewhere.com', to: 'y@b.com' }]);
+  markDeleted(database, 'owner@test.com', ['b']);
+  expect(listSearchDomains(database, 'owner@test.com', ['carol@contact.org'])).toEqual([
+    'example.com',
+    'test.com',
+    'contact.org',
+  ]);
+  expect(listSearchDomains(database)).toContain('elsewhere.com');
 });
 
 test('filters recent mail by folder and label status', () => {

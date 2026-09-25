@@ -8,6 +8,7 @@
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import SwipeRow, { type SwipeActions } from '$lib/components/SwipeRow.svelte';
   import SnoozeDialog from '$lib/components/SnoozeDialog.svelte';
+  import SearchField from '$lib/components/SearchField.svelte';
   import { formatSnoozeTime } from '$lib/snooze';
   import type { SwipeSide } from '$lib/swipe';
   import { deserialize, enhance } from '$app/forms';
@@ -27,6 +28,7 @@
     getMailList,
     getMailCounts,
     getRemoteImageRules,
+    getSearchSuggestions,
     getSelectedThread,
   } from './mail.remote';
   import type { ActionData } from './$types';
@@ -171,6 +173,11 @@
       .replace(/^(?:(?:re|fw|fwd):\s*)+/gi, '')
       .trim()
       .toLowerCase();
+  }
+  async function loadSearchSuggestions() {
+    const suggestions = getSearchSuggestions({ account: selectedAccount });
+    await suggestions.refresh();
+    return suggestions.current ?? { contacts: [], domains: [] };
   }
   let clearSearchHref = $derived(
     data.selectedAccount ? `/?account=${encodeURIComponent(data.selectedAccount)}` : '/'
@@ -473,6 +480,7 @@
       event.target && typeof event.target === 'object' && 'closest' in event.target
         ? (event.target as Element)
         : null;
+    const inMessageList = !!eventTarget?.closest('.message-list');
     const inMessageDetail =
       !!eventTarget?.closest('.reading-content') ||
       (eventTarget !== null && eventTarget.ownerDocument !== document);
@@ -1002,10 +1010,10 @@
           name="account"
           value={data.selectedAccount}
         />{/if}
-      <input
-        bind:this={searchInput}
-        name="q"
-        aria-label="Search email"
+      <SearchField
+        bind:input={searchInput}
+        value={data.query}
+        loadSource={loadSearchSuggestions}
         onkeydown={(event) => {
           if (event.key !== 'Escape') return;
           event.preventDefault();
@@ -1013,8 +1021,6 @@
           else searchInput?.blur();
           if (data.query) void goto(clearSearchHref, { keepFocus: true, noScroll: true });
         }}
-        placeholder={'Search email · in:inbox · from:example.com'}
-        value={data.query}
       />
       <button type="submit" aria-label="Search"><Icon name="search" /></button>
       {#if data.query}<a href={clearSearchHref} aria-label="Clear search"><Icon name="close" /></a
@@ -2466,16 +2472,6 @@
     max-width: 560px;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-md);
-  }
-  .search-form input {
-    width: 100%;
-    min-width: 0;
-    padding: 8px 10px;
-    background: transparent;
-    border: 0;
-    color: var(--color-text);
-    font: inherit;
-    font-size: 0.75rem;
   }
   .search-form button {
     border: 0;

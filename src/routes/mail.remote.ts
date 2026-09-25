@@ -8,9 +8,10 @@ import {
   listCalendars,
   listCalendarEventsBetween,
   listCategories,
+  listContacts,
   listRemoteImageRules,
 } from '$lib/server/db';
-import { SearchQueryError } from '$lib/server/email-search';
+import { listSearchDomains, SearchQueryError } from '$lib/server/email-search';
 import { countMailFilters, listMail, type MailList } from '$lib/server/mail-list';
 
 const accountInput = z.string().nullable();
@@ -72,3 +73,18 @@ export const getMailCounts = query(
 export const getSelectedThread = query(messageInput, ({ account, id }) =>
   getThreadEmails(getDatabase(), id, account ?? undefined)
 );
+
+export const getSearchSuggestions = query(z.object({ account: accountInput }), ({ account }) => {
+  const database = getDatabase();
+  const contacts = listContacts(database, account ?? undefined).flatMap((contact) =>
+    contact.emails.map((email) => ({ name: contact.displayName, email }))
+  );
+  return {
+    contacts,
+    domains: listSearchDomains(
+      database,
+      account ?? undefined,
+      contacts.map((contact) => contact.email)
+    ),
+  };
+});

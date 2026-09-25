@@ -22,6 +22,41 @@ export function emailBodyText(text: string, html: string | null): string {
   );
 }
 
+function addressesIn(text: string): string[] {
+  return text.toLowerCase().match(/[^\s<>,;"()]+@[^\s<>,;"()]+/g) ?? [];
+}
+
+/** The domains in mail senders, mail recipients, and contacts, most frequent first. */
+export function listSearchDomains(
+  database: DatabaseSync,
+  account?: string,
+  contactEmails: string[] = []
+): string[] {
+  const rows = database
+    .prepare(
+      `SELECT addresses, SUM(n) AS n FROM (
+        SELECT from_address AS addresses, COUNT(*) AS n FROM emails
+        WHERE deleted_at IS NULL AND (?1 IS NULL OR account_email = ?1) GROUP BY from_address
+        UNION ALL
+        SELECT to_addresses, COUNT(*) FROM emails
+        WHERE deleted_at IS NULL AND (?1 IS NULL OR account_email = ?1) GROUP BY to_addresses
+      ) GROUP BY addresses`
+    )
+    .all(account ?? null) as { addresses: string; n: number }[];
+  const counts = new Map<string, number>();
+  const add = (text: string, n: number) => {
+    for (const email of addressesIn(text)) {
+      const domain = email.split('@')[1];
+      counts.set(domain, (counts.get(domain) ?? 0) + n);
+    }
+  };
+  for (const row of rows) add(row.addresses, Number(row.n));
+  for (const email of contactEmails) add(email, 0);
+  return [...counts.entries()]
+    .sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
+    .map(([domain]) => domain);
+}
+
 export function registerSearchFunctions(database: DatabaseSync) {
   database.function('email_search_body', { deterministic: true }, (text, html) =>
     emailBodyText(String(text ?? ''), html === null ? null : String(html))
@@ -33,10 +68,7 @@ export function registerSearchFunctions(database: DatabaseSync) {
   });
   database.function('email_search_address', { deterministic: true }, (addresses, filter) => {
     const query = String(filter).toLowerCase().replace(/^@/, '');
-    const emails =
-      String(addresses)
-        .toLowerCase()
-        .match(/[^\s<>,;"()]+@[^\s<>,;"()]+/g) ?? [];
+    const emails = addressesIn(String(addresses));
     return Number(
       emails.some((email) =>
         query.includes('@')
