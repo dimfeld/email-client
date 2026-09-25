@@ -1,5 +1,6 @@
 <script lang="ts">
   import CalendarEventDialog from './CalendarEventDialog.svelte';
+  import PendingInvites from './PendingInvites.svelte';
   import Icon from './Icon.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -21,8 +22,14 @@
   let {
     calendars,
     events,
+    pendingInvites,
     day,
-  }: { calendars: SyncedCalendar[]; events: SyncedCalendarEvent[]; day: string } = $props();
+  }: {
+    calendars: SyncedCalendar[];
+    events: SyncedCalendarEvent[];
+    pendingInvites: SyncedCalendarEvent[];
+    day: string;
+  } = $props();
   let selection = $state<CalendarSelection>({});
   let eventDialog = $state<CalendarEventDialog>();
   let visibleKeys = $derived(
@@ -50,6 +57,7 @@
 
 <aside aria-label="Daily calendar">
   <header><a href="/calendar">Calendar</a><a href="/contacts">Contacts</a></header>
+  <PendingInvites invites={pendingInvites} />
   <div class="day-heading">
     <strong
       >{new Intl.DateTimeFormat(undefined, {

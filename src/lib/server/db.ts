@@ -24,6 +24,7 @@ import { defaultCategories } from './default-categories';
 import { emailSortTime, installThreadSchema } from './thread-schema';
 import type { RemoteImageRule } from '$lib/remote-images';
 import type { GmailMessageAction } from './gmail-actions';
+import { canRespondToEvent } from '$lib/calendar-response';
 
 const defaultPath = resolve(process.env.DATABASE_PATH ?? 'data/email-check.sqlite');
 let sharedDatabase: DatabaseSync | undefined;
@@ -176,6 +177,13 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 
 CREATE INDEX IF NOT EXISTS idx_calendar_events_start
 ON calendar_events(start_at, end_at);
+
+CREATE TABLE IF NOT EXISTS ignored_calendar_invites (
+  account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+  calendar_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  PRIMARY KEY (account_email, calendar_id, event_id)
+);
 
 CREATE TABLE IF NOT EXISTS google_sync_progress (
   account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
@@ -1490,6 +1498,40 @@ export function saveCalendarResponse(
     )
     .run(responseStatus, new Date().toISOString(), account, calendarId, eventId);
   publishStateChange('calendar');
+}
+
+export function ignoreCalendarInvite(
+  database: DatabaseSync,
+  account: string,
+  calendarId: string,
+  eventId: string
+): boolean {
+  const event = getCalendarEvent(database, account, calendarId, eventId);
+  if (!event || event.responseStatus !== 'needsAction' || !canRespondToEvent(event)) return false;
+  database
+    .prepare(
+      'INSERT OR IGNORE INTO ignored_calendar_invites (account_email, calendar_id, event_id) VALUES (?, ?, ?)'
+    )
+    .run(account, calendarId, eventId);
+  publishStateChange('calendar');
+  return true;
+}
+
+export function listPendingCalendarInvites(
+  database: DatabaseSync,
+  account?: string
+): SyncedCalendarEvent[] {
+  const rows = database
+    .prepare(`SELECT event.* FROM calendar_events event
+      WHERE event.response_status = 'needsAction'
+        AND (? IS NULL OR event.account_email = ?)
+        AND NOT EXISTS (SELECT 1 FROM ignored_calendar_invites ignored
+          WHERE ignored.account_email = event.account_email
+            AND ignored.calendar_id = event.calendar_id
+            AND ignored.event_id = event.event_id)
+      ORDER BY event.start_at, event.summary COLLATE NOCASE`)
+    .all(account ?? null, account ?? null) as Array<Record<string, unknown>>;
+  return rows.map(calendarEventFromRow).filter(canRespondToEvent);
 }
 
 export function listCalendarEvents(

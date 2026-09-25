@@ -7,6 +7,7 @@ import {
   listAccounts,
   listCalendars,
   listCalendarEventsBetween,
+  listPendingCalendarInvites,
   listCategories,
   listContacts,
   listRemoteImageRules,
@@ -42,6 +43,10 @@ export const getMailEvents = query(eventsInput, ({ account, day }) =>
   listCalendarEventsBetween(getDatabase(), day, addDays(day, 1)).filter(
     (event) => !account || event.accountEmail === account
   )
+);
+
+export const getMailPendingInvites = query(accountInput, (account) =>
+  listPendingCalendarInvites(getDatabase(), account ?? undefined)
 );
 
 export const getMailList = query(listInput, ({ account, search, filter, view, limit }) => {

@@ -25,6 +25,7 @@
     getMailCalendars,
     getMailCategories,
     getMailEvents,
+    getMailPendingInvites,
     getMailList,
     getMailCounts,
     getRemoteImageRules,
@@ -61,6 +62,7 @@
   let calendarEvents = $derived(
     await getMailEvents({ account: selectedAccount, day: calendarDay })
   );
+  let pendingInvites = $derived(await getMailPendingInvites(selectedAccount));
   // The URL filter is valid when it is a fixed filter or a category that exists.
   let activeFilter = $derived.by(() => {
     const requested = new URL(currentUrl).searchParams.get('category') ?? 'all';
@@ -94,6 +96,7 @@
     categories,
     calendars,
     calendarEvents,
+    pendingInvites,
     calendarDay,
     selectedAccount,
     query: search,
@@ -885,7 +888,8 @@
         const account = selectedAccount;
         tasks.push(
           getMailCalendars().refresh(),
-          getMailEvents({ account, day: calendarDay }).refresh()
+          getMailEvents({ account, day: calendarDay }).refresh(),
+          getMailPendingInvites(account).refresh()
         );
       }
       if (scopes.has('accounts')) tasks.push(getMailAccounts().refresh());
@@ -1577,6 +1581,7 @@
       <CalendarRail
         calendars={data.calendars}
         events={data.calendarEvents}
+        pendingInvites={data.pendingInvites}
         day={data.calendarDay}
       />
     </div>

@@ -3,6 +3,8 @@ import {
   applyCalendarEventsIncrementalSync,
   createDatabase,
   getCalendarEvent,
+  ignoreCalendarInvite,
+  listPendingCalendarInvites,
   replaceCalendars,
   upsertAccount,
 } from './db';
@@ -42,7 +44,33 @@ function seed() {
     [normalizeCalendarEvent(remote, account.email)]
   );
 }
-afterEach(() => database.exec('DELETE FROM calendars'));
+afterEach(() => database.exec('DELETE FROM calendars; DELETE FROM ignored_calendar_invites'));
+
+test('lists pending invitations and keeps ignored ones hidden after a calendar sync', () => {
+  seed();
+  expect(listPendingCalendarInvites(database).map((event) => event.eventId)).toEqual([remote.id]);
+  expect(ignoreCalendarInvite(database, account.email, account.email, remote.id)).toBe(true);
+  expect(listPendingCalendarInvites(database)).toEqual([]);
+  replaceCalendars(
+    database,
+    account.email,
+    [
+      {
+        calendarId: account.email,
+        summary: 'Mine',
+        timeZone: 'UTC',
+        backgroundColor: null,
+        selected: true,
+      },
+    ],
+    [normalizeCalendarEvent(remote, account.email)]
+  );
+  expect(listPendingCalendarInvites(database)).toEqual([]);
+  expect(getCalendarEvent(database, account.email, account.email, remote.id)?.responseStatus).toBe(
+    'needsAction'
+  );
+  expect(ignoreCalendarInvite(database, account.email, account.email, 'missing')).toBe(false);
+});
 
 for (const response of ['accepted', 'tentative', 'declined'])
   test(`sends ${response} only for the owner and saves the confirmed response`, async () => {

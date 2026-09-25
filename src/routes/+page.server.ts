@@ -5,6 +5,7 @@ import {
   getDatabase,
   getEmail,
   getThreadActionTargets,
+  ignoreCalendarInvite,
   listAccounts,
   saveRemoteImageRule,
 } from '$lib/server/db';
@@ -74,6 +75,20 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
 }
 
 export const actions: Actions = {
+  ignoreInvite: async ({ request }) => {
+    const fields = await request.formData();
+    const account = String(fields.get('account') ?? '');
+    const calendar = String(fields.get('calendar') ?? '');
+    const event = String(fields.get('event') ?? '');
+    if (
+      !account ||
+      !calendar ||
+      !event ||
+      !ignoreCalendarInvite(getDatabase(), account, calendar, event)
+    )
+      return fail(404, { error: 'This invitation is no longer available.' });
+    return { message: 'Invitation hidden from the pending list.' };
+  },
   archive: (event) => changeMessage(event, 'archive'),
   delete: (event) => changeMessage(event, 'delete'),
   unarchive: (event) => changeMessage(event, 'unarchive'),
