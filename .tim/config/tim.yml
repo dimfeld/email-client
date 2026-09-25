@@ -8,6 +8,8 @@ postApplyCommands:
     hideOutputOnSuccess: true
 developmentWorkflow: squash-rebase
 quality: hobby
+generate:
+  queueWhenDone: true
 lifecycle:
   commands:
   - title: Install dependencies
