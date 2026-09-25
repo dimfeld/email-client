@@ -39,7 +39,7 @@ describe('OpenAI email extraction', () => {
       model: 'gpt-6-luna',
     });
     expect((request?.model as { modelId: string }).modelId).toBe('gpt-6-luna');
-    expect(request?.maxRetries).toBe(0);
+    expect(request?.maxRetries).toBe(2);
     expect(request?.providerOptions).toEqual({
       openai: { reasoningEffort: 'medium', serviceTier: 'flex' },
     });
@@ -93,8 +93,8 @@ describe('OpenAI email extraction', () => {
     expect(
       (requests[1].providerOptions as { openai: { serviceTier: string } }).openai.serviceTier
     ).toBe('auto');
-    expect(requests[0].maxRetries).toBe(0);
-    expect(requests[1].maxRetries).toBe(0);
+    expect(requests[0].maxRetries).toBe(2);
+    expect(requests[1].maxRetries).toBe(2);
   });
 
   it('does not retry other errors', async () => {

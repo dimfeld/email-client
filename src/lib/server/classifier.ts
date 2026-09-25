@@ -45,6 +45,7 @@ export function createJevClassifier(
   const client = new TypeSafeClient({
     apiKey,
     defaultModel: process.env.TYPESAFE_MODEL ?? 'jev-latest',
+    retry: { maxRetries: 2 },
   });
 
   return async (email, accountEmail) => {

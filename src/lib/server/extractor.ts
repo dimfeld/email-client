@@ -82,7 +82,7 @@ export function createOpenAIEmailExtractor(
         model: openai.responses('gpt-6-luna'),
         schema: extractionSchema,
         schemaName: 'email_action_items_and_reminders',
-        maxRetries: 0,
+        maxRetries: 2,
         providerOptions: {
           openai: {
             reasoningEffort: 'medium',
