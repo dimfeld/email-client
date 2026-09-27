@@ -10,7 +10,11 @@
 </script>
 
 <script lang="ts">
-  let { active }: { active: (typeof appLinks)[number]['href'] } = $props();
+  import type { Snippet } from 'svelte';
+
+  // `children` holds the controls of the page, such as the mail search and Compose button.
+  let { active, children }: { active: (typeof appLinks)[number]['href']; children?: Snippet } =
+    $props();
 </script>
 
 <header class="masthead">
@@ -22,14 +26,19 @@
         href={link.href}>{link.label}</a
       >{/each}
   </nav>
+  {#if children}<div class="tools">{@render children()}</div>{/if}
 </header>
 
 <style>
+  /* The brand and the links stay in the same place on each page. Page controls go to the right,
+     and move to a second row when the row is too narrow. */
   .masthead {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 24px;
-    padding: 16px 24px;
+    gap: 12px 24px;
+    min-height: 61px;
+    padding: 12px 24px;
     border-bottom: 1px solid var(--color-border);
   }
   .brand {
@@ -37,13 +46,13 @@
     gap: 10px;
     color: var(--color-text);
     text-decoration: none;
+    white-space: nowrap;
   }
   .brand span {
     color: var(--color-accent);
     font-size: 1.4rem;
   }
   nav {
-    margin-left: auto;
     display: flex;
     gap: 18px;
   }
@@ -53,17 +62,45 @@
     text-decoration: none;
     font-size: 0.85rem;
   }
+  nav a:hover {
+    color: var(--color-text);
+  }
   nav a.active {
     color: var(--color-accent);
   }
+  .tools {
+    flex: 1 1 560px;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px 8px;
+  }
   @media (max-width: 760px) {
+    /* The links are the full first row, so the brand does not use a row of its own. */
     .masthead {
-      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 0;
+      padding: 0 8px 8px;
+    }
+    .brand {
+      display: none;
     }
     nav {
-      width: 100%;
-      margin: 0;
+      width: calc(100% + 16px);
+      margin-inline: -8px;
+      padding: 12px 16px 4px;
+      gap: 14px;
       overflow-x: auto;
+      scrollbar-width: none;
+    }
+    nav a {
+      font-size: var(--text-sm);
+    }
+    .tools {
+      flex-basis: 100%;
+      justify-content: flex-start;
     }
   }
 </style>

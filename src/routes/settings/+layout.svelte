@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import AppMasthead from '$lib/components/AppMasthead.svelte';
   import type { Snippet } from 'svelte';
   import type { LayoutData } from './$types';
 
@@ -29,68 +30,50 @@
 <svelte:head><title>{active ? `${active.label} — ` : ''}Settings — Email Check</title></svelte:head>
 
 <main>
-  <header>
-    <nav class="apps">
-      <a href="/">Mail</a><a href="/notes">Notes</a><a href="/todos">To-dos</a><a href="/contacts"
-        >Contacts</a
-      ><a href="/calendar">Calendar</a>
-    </nav>
+  <AppMasthead active="/settings" />
+  <div class="settings-page">
     <h1>Settings</h1>
-  </header>
-  <div class="settings-body">
-    <nav class="sections" aria-label="Settings">
-      <a
-        href="/settings/accounts"
-        aria-current={active?.href === '/settings/accounts' ? 'page' : undefined}
-        data-sveltekit-noscroll>Accounts</a
-      >
-      {#each accountLinks as account (account.href)}
+    <div class="settings-body">
+      <nav class="sections" aria-label="Settings">
         <a
-          class="sub"
-          href={account.href}
-          title={account.label}
-          aria-current={active?.href === account.href ? 'page' : undefined}
-          data-sveltekit-noscroll>{account.label}</a
+          href="/settings/accounts"
+          aria-current={active?.href === '/settings/accounts' ? 'page' : undefined}
+          data-sveltekit-noscroll>Accounts</a
         >
-      {/each}
-      {#each sections as section (section.href)}
-        <a
-          href={section.href}
-          aria-current={active?.href === section.href ? 'page' : undefined}
-          data-sveltekit-noscroll>{section.label}</a
-        >
-      {/each}
-    </nav>
-    <div class="settings-content">
-      {#if form?.error}<p class="feedback error" role="alert">{form.error}</p>{/if}
-      {#if form?.message}<p class="feedback" role="status">{form.message}</p>{/if}
-      {@render children()}
+        {#each accountLinks as account (account.href)}
+          <a
+            class="sub"
+            href={account.href}
+            title={account.label}
+            aria-current={active?.href === account.href ? 'page' : undefined}
+            data-sveltekit-noscroll>{account.label}</a
+          >
+        {/each}
+        {#each sections as section (section.href)}
+          <a
+            href={section.href}
+            aria-current={active?.href === section.href ? 'page' : undefined}
+            data-sveltekit-noscroll>{section.label}</a
+          >
+        {/each}
+      </nav>
+      <div class="settings-content">
+        {#if form?.error}<p class="feedback error" role="alert">{form.error}</p>{/if}
+        {#if form?.message}<p class="feedback" role="status">{form.message}</p>{/if}
+        {@render children()}
+      </div>
     </div>
   </div>
 </main>
 
 <style>
-  main {
+  .settings-page {
     max-width: 1100px;
     margin: auto;
     padding: 32px 24px 64px;
   }
-  header {
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--color-border);
-    margin-bottom: 28px;
-  }
-  .apps {
-    display: flex;
-    gap: 18px;
-  }
-  .apps a {
-    color: var(--color-accent);
-    text-decoration: none;
-    font-size: 0.9rem;
-  }
   h1 {
-    margin: 24px 0 0;
+    margin: 0 0 28px;
     font-size: 2rem;
   }
   .settings-body {
@@ -240,7 +223,7 @@
     }
   }
   @media (max-width: 760px) {
-    main {
+    .settings-page {
       padding: 24px 16px;
     }
     .settings-body {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
+  import AppMasthead from '$lib/components/AppMasthead.svelte';
   import { openComposer } from '$lib/composer';
   import { showToast } from '$lib/toast.svelte';
   import { MAIL_PAGE_SIZE, senderName } from '$lib/mail-list';
@@ -996,8 +997,8 @@
 </svelte:head>
 
 <main>
-  <header class="masthead">
-    <div class="brand">
+  <AppMasthead active="/">
+    <div class="mail-view">
       <button
         class="menu-button"
         aria-label="Toggle mail categories"
@@ -1059,10 +1060,7 @@
         {/each}
       </div>
     </form>
-    <a class="settings-link" href="/settings" aria-label="Settings" title="Settings"
-      ><Icon name="settings" size="1.25rem" /></a
-    >
-  </header>
+  </AppMasthead>
 
   <div class="content-shell">
     {#if showChat}{#key data.selectedAccount}<EmailChat
@@ -1101,12 +1099,6 @@
               >
             </button>
           {/each}{/if}
-        <p class="eyebrow app-heading">APPS</p>
-        <a class="filter" href="/notes">Notes</a>
-        <a class="filter" href="/todos">To-dos</a>
-        <a class="filter" href="/calendar">Calendar</a>
-        <a class="filter" href="/contacts">Contacts</a>
-        <a class="filter" href="/settings">Settings</a>
       </nav>
 
       <section class="list-pane" aria-label="Message list">
@@ -1729,15 +1721,8 @@
     min-height: 0;
     min-width: 0;
   }
-  .masthead {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .brand {
+  .mail-view {
+    margin-right: auto;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1754,7 +1739,6 @@
     white-space: nowrap;
   }
   .compose-button {
-    margin-left: auto;
     border: 0;
     border-radius: var(--radius-md);
     padding: 8px 14px;
@@ -1779,19 +1763,6 @@
   .text-button:hover,
   .text-button[aria-pressed='true'] {
     background: var(--color-accent-bg-subtle);
-  }
-  .settings-link {
-    padding: 8px;
-    color: var(--color-text-muted);
-  }
-  .settings-link:hover {
-    color: var(--color-text);
-  }
-  .app-heading {
-    margin-top: 24px;
-  }
-  a.filter {
-    text-decoration: none;
   }
   .account-picker {
     display: flex;
@@ -2538,19 +2509,11 @@
     }
   }
   @media (max-width: 760px) {
-    .masthead {
-      flex-wrap: wrap;
-      gap: 10px 6px;
-      padding-inline: 8px;
-    }
-    .brand {
+    .mail-view {
       gap: 6px;
     }
     .compose-button {
       padding-inline: 8px;
-    }
-    .account-picker {
-      margin-left: auto;
     }
     .mailbox,
     .mailbox.show-detail,
