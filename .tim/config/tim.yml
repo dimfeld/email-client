@@ -12,8 +12,8 @@ generate:
   queueWhenDone: true
 lifecycle:
   commands:
-  - title: Install dependencies
-    command: bun install
-    mode: run
+    - title: Install dependencies
+      command: bun install
+      mode: run
 prCreation:
   draft: true
