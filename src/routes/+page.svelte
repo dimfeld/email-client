@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from '$lib/components/Icon.svelte';
-  import AppMasthead from '$lib/components/AppMasthead.svelte';
+  import AppMasthead, { handleAppLinkShortcut } from '$lib/components/AppMasthead.svelte';
   import { openComposer } from '$lib/composer';
   import { showToast } from '$lib/toast.svelte';
   import { MAIL_PAGE_SIZE, senderName } from '$lib/mail-list';
@@ -435,7 +435,7 @@
       if (!document) return;
       observer = new ResizeObserver(() => fitMessageFrame(frame, false));
       observer.observe(document.body ?? document.documentElement);
-      document.addEventListener('keydown', handleKeydown);
+      document.addEventListener('keydown', handleFrameKeydown);
       document.addEventListener('click', handleMessageLinkClick);
       document.addEventListener('auxclick', handleMessageLinkClick);
     }
@@ -446,29 +446,13 @@
     };
   }
 
+  // Key events in the message frame do not reach the window, so the frame also handles the
+  // app shortcuts that the layout handles.
+  function handleFrameKeydown(event: KeyboardEvent) {
+    if (!handleAppLinkShortcut(event)) void handleKeydown(event);
+  }
+
   async function handleKeydown(event: KeyboardEvent) {
-    if (
-      event.ctrlKey &&
-      !event.metaKey &&
-      !event.altKey &&
-      !event.shiftKey &&
-      /^[1-9]$/.test(event.key)
-    ) {
-      const accountIndex = Number(event.key) - 2;
-      const account = event.key === '1' ? null : data.accounts[accountIndex]?.email;
-      if (event.key === '1' || account) {
-        event.preventDefault();
-        const url = new URL(currentUrl);
-        if (account) url.searchParams.set('account', account);
-        else url.searchParams.delete('account');
-        url.searchParams.delete('message');
-        void goto(`${url.pathname}${url.search}${url.hash}`, {
-          keepFocus: true,
-          noScroll: true,
-        });
-        return;
-      }
-    }
     if (snoozeTarget) return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     if (event.key === '`' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat) {
@@ -1622,12 +1606,8 @@
       </div>
       <dl>
         <div>
-          <dt><kbd>Ctrl</kbd> + <kbd>1</kbd></dt>
-          <dd>Show all accounts</dd>
-        </div>
-        <div>
-          <dt><kbd>Ctrl</kbd> + <kbd>2–9</kbd></dt>
-          <dd>Select an account by its position in the account list</dd>
+          <dt><kbd>Ctrl</kbd> + <kbd>1–6</kbd></dt>
+          <dd>Go to Mail, Notes, To-dos, Contacts, Calendar, or Settings</dd>
         </div>
         <div>
           <dt><kbd>`</kbd></dt>

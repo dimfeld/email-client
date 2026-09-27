@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { goto } from '$app/navigation';
+
   export const appLinks = [
     { href: '/', label: 'Mail' },
     { href: '/notes', label: 'Notes' },
@@ -7,6 +9,16 @@
     { href: '/calendar', label: 'Calendar' },
     { href: '/settings', label: 'Settings' },
   ] as const;
+
+  /** Ctrl + 1–6 opens the app page at that position in `appLinks`. Returns true if it navigated. */
+  export function handleAppLinkShortcut(event: KeyboardEvent) {
+    if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+    const link = /^[1-9]$/.test(event.key) ? appLinks[Number(event.key) - 1] : undefined;
+    if (!link) return false;
+    event.preventDefault();
+    void goto(link.href);
+    return true;
+  }
 </script>
 
 <script lang="ts">

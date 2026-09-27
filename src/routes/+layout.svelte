@@ -1,5 +1,6 @@
 <script lang="ts">
   import '../app.css';
+  import { handleAppLinkShortcut } from '$lib/components/AppMasthead.svelte';
   import ComposerHost from '$lib/components/ComposerHost.svelte';
   import Toaster from '$lib/components/Toaster.svelte';
   import type { LayoutData } from './$types';
@@ -71,6 +72,8 @@
     content="A local Gmail inbox that uses Jev to sort useful email by category."
   />
 </svelte:head>
+
+<svelte:window onkeydown={handleAppLinkShortcut} />
 
 {@render children()}
 <ComposerHost data={data.composer} />
