@@ -2,6 +2,7 @@
   import Icon from './Icon.svelte';
   import { onMount } from 'svelte';
   import {
+    AUTOSAVE_DELAY_MS,
     UNDO_SEND_SECONDS,
     type ComposeRequest,
     type Draft,
@@ -56,9 +57,7 @@
     window.dispatchEvent(new Event('email:state'));
     return result;
   }
-  // The owner chose a 1-second pause after the last change before an autosave. Blur, close,
-  // and send save at once.
-  const AUTOSAVE_DELAY_MS = 1000;
+  // Autosave waits for AUTOSAVE_DELAY_MS after the last change. Blur, close, and send save at once.
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
   function changed() {
     dirty = true;

@@ -9,6 +9,8 @@
   import SwipeRow, { type SwipeActions } from '$lib/components/SwipeRow.svelte';
   import SnoozeDialog from '$lib/components/SnoozeDialog.svelte';
   import SearchField from '$lib/components/SearchField.svelte';
+  import PimSearchResults from '$lib/components/PimSearchResults.svelte';
+  import AddTodoButton from '$lib/components/AddTodoButton.svelte';
   import { formatSnoozeTime } from '$lib/snooze';
   import type { SwipeSide } from '$lib/swipe';
   import { deserialize, enhance } from '$app/forms';
@@ -1100,6 +1102,8 @@
             </button>
           {/each}{/if}
         <p class="eyebrow app-heading">APPS</p>
+        <a class="filter" href="/notes">Notes</a>
+        <a class="filter" href="/todos">To-dos</a>
         <a class="filter" href="/calendar">Calendar</a>
         <a class="filter" href="/contacts">Contacts</a>
         <a class="filter" href="/settings">Settings</a>
@@ -1127,6 +1131,7 @@
         {#if data.query}<p class="search-summary">
             Search results · Best match first · Includes archived mail
           </p>{/if}
+        {#if data.query && !data.searchError}<PimSearchResults query={data.query} />{/if}
         <div
           class="message-list"
           bind:this={messageList}
@@ -1366,6 +1371,12 @@
                               {#if extractedDate(item.dueAt)}<small
                                   >Due {extractedDate(item.dueAt)}</small
                                 >{/if}
+                              <AddTodoButton
+                                emailId={selectedEmail.id}
+                                title={item.title}
+                                details={item.details}
+                                due={item.dueAt}
+                              />
                             </li>
                           {/each}
                         </ul>
@@ -1382,6 +1393,12 @@
                               {#if extractedDate(reminder.remindAt)}<small
                                   >Reminder {extractedDate(reminder.remindAt)}</small
                                 >{/if}
+                              <AddTodoButton
+                                emailId={selectedEmail.id}
+                                title={reminder.title}
+                                details={reminder.details}
+                                due={reminder.remindAt}
+                              />
                             </li>
                           {/each}
                         </ul>

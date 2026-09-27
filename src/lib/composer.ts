@@ -1,5 +1,7 @@
 // The owner requested a 10-second Undo Send delay.
 export const UNDO_SEND_SECONDS = 10;
+// The owner chose a 1-second pause after the last change before an autosave.
+export const AUTOSAVE_DELAY_MS = 1000;
 export type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward';
 export type DraftStatus = 'draft' | 'queued' | 'sending' | 'sent' | 'failed' | 'uncertain';
 export type DraftAttachment = { id: string; filename: string; contentType: string; size: number };

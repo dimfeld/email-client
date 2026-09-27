@@ -6,14 +6,22 @@
   import Image from '@tiptap/extension-image';
   import TextAlign from '@tiptap/extension-text-align';
   let {
-    html,
+    html = '',
+    markdown: initialMarkdown,
+    label = 'Message body',
     onchange,
     disabled = false,
   }: {
-    html: string;
+    html?: string;
+    /** Markdown content. When set, `onchange` receives Markdown instead of HTML. */
+    markdown?: string;
+    label?: string;
     disabled?: boolean;
-    onchange: (html: string, text: string) => void;
+    onchange: (value: string, text: string) => void;
   } = $props();
+  // Markdown has no alignment, and data URL images make stored Markdown very large.
+  const uid = $props.id();
+  const markdownMode = untrack(() => initialMarkdown !== undefined);
   let element: HTMLDivElement;
   let editor = $state.raw<Editor>();
   let markdownOpen = $state(false);
@@ -30,11 +38,17 @@
         Image.configure({ allowBase64: true }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
       ],
-      content: html,
+      content: untrack(() => (markdownMode ? initialMarkdown : html)),
+      contentType: markdownMode ? 'markdown' : 'html',
       editorProps: {
-        attributes: { 'aria-label': 'Message body', role: 'textbox', 'aria-multiline': 'true' },
+        attributes: {
+          'aria-label': untrack(() => label),
+          role: 'textbox',
+          'aria-multiline': 'true',
+        },
       },
-      onUpdate: ({ editor }) => onchange(editor.getHTML(), editor.getText()),
+      onUpdate: ({ editor }) =>
+        onchange(markdownMode ? editor.getMarkdown() : editor.getHTML(), editor.getText()),
       onTransaction: () => {
         version++;
       },
@@ -132,16 +146,16 @@
         linkOpen = !linkOpen;
       }}>Link</button
     >
-    <select
-      aria-label="Text alignment"
-      onchange={(event) => editor?.chain().focus().setTextAlign(event.currentTarget.value).run()}
-      ><option value="left">Left</option><option value="center">Center</option><option value="right"
-        >Right</option
-      ></select
-    >
-    <label class="image-button"
-      >Image<input type="file" accept="image/*" multiple onchange={insertImages} /></label
-    >
+    {#if !markdownMode}<select
+        aria-label="Text alignment"
+        onchange={(event) => editor?.chain().focus().setTextAlign(event.currentTarget.value).run()}
+        ><option value="left">Left</option><option value="center">Center</option><option
+          value="right">Right</option
+        ></select
+      >
+      <label class="image-button"
+        >Image<input type="file" accept="image/*" multiple onchange={insertImages} /></label
+      >{/if}
     <button type="button" title="Undo edit" onclick={() => editor?.chain().focus().undo().run()}
       >↶</button
     ><button type="button" title="Redo edit" onclick={() => editor?.chain().focus().redo().run()}
@@ -163,8 +177,8 @@
       >
     </div>{/if}
   {#if markdownOpen}<div class="insert">
-      <label for="markdown-input">Markdown</label><textarea
-        id="markdown-input"
+      <label for="{uid}-markdown">Markdown</label><textarea
+        id="{uid}-markdown"
         bind:value={markdown}
         rows="5"
         placeholder="## Heading"></textarea><button

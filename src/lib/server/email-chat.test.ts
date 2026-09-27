@@ -35,7 +35,18 @@ function seed() {
 test('tools enforce account scope and record only messages read', async () => {
   const { one, two } = seed();
   const { tools, readSources } = createEmailChatTools(database, 'a@test.com');
-  expect(Object.keys(tools)).toEqual(['search', 'read', 'changeMessage', 'createReplyDraft']);
+  expect(Object.keys(tools)).toEqual([
+    'search',
+    'read',
+    'changeMessage',
+    'createReplyDraft',
+    'searchNotesAndTodos',
+    'readNote',
+    'createNote',
+    'updateNote',
+    'createTodo',
+    'updateTodo',
+  ]);
   const found = await tools.search.execute!({ query: '', offset: 0, limit: 10 }, context);
   expect(found).toMatchObject({ results: [{ id: one }] });
   expect(readSources.size).toBe(0);

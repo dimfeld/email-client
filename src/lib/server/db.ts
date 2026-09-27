@@ -17,6 +17,7 @@ import type {
 import { composerSchema } from './composer-schema';
 import { historicalBackfillSchema } from './historical-backfill-schema';
 import { snoozeSchema } from './snooze-schema';
+import { pimSchema } from './pim-schema';
 import { installEmailSearch, registerSearchFunctions } from './email-search';
 import { publishStateChange } from './state-events';
 import type { StateScope } from '$lib/state-scopes';
@@ -280,6 +281,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
   database.exec(historicalBackfillSchema);
   database.exec(composerSchema);
   database.exec(snoozeSchema);
+  database.exec(pimSchema);
   const accountColumns = database.prepare('PRAGMA table_info(accounts)').all() as Array<{
     name: string;
   }>;

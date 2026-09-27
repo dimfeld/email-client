@@ -8,6 +8,7 @@ export const stateScopes = [
   'calendar',
   'drafts',
   'backfill',
+  'pim',
 ] as const;
 export type StateScope = (typeof stateScopes)[number] | 'all';
 

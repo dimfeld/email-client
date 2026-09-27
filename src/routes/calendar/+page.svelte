@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AppMasthead from '$lib/components/AppMasthead.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import CalendarEventDialog from '$lib/components/CalendarEventDialog.svelte';
   import { onMount } from 'svelte';
@@ -153,14 +154,7 @@
 <main>
   {#if form?.error}<p role="alert">{form.error}</p>{/if}
   {#if form?.message}<p role="status">{form.message}</p>{/if}
-  <header class="masthead">
-    <a class="brand" href="/"><span aria-hidden="true">@</span><strong>Email Check</strong></a>
-    <nav aria-label="Application">
-      <a href="/">Mail</a><a href="/contacts">Contacts</a><a class="active" href="/calendar"
-        >Calendar</a
-      ><a href="/settings">Settings</a>
-    </nav>
-  </header>
+  <AppMasthead active="/calendar" />
   <section class="content">
     <div class="toolbar">
       <div class="range-nav">
@@ -331,36 +325,6 @@
 
 <style>
   a {
-    color: var(--color-accent);
-  }
-  .masthead {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .brand {
-    display: flex;
-    gap: 10px;
-    color: var(--color-text);
-    text-decoration: none;
-  }
-  .brand span {
-    color: var(--color-accent);
-    font-size: 1.4rem;
-  }
-  nav {
-    margin-left: auto;
-    display: flex;
-    gap: 18px;
-  }
-  nav a {
-    color: var(--color-text-muted);
-    text-decoration: none;
-    font-size: 0.85rem;
-  }
-  nav a.active {
     color: var(--color-accent);
   }
   .content {
@@ -760,14 +724,6 @@
   }
 
   @media (max-width: 900px) {
-    .masthead {
-      flex-wrap: wrap;
-    }
-    nav {
-      width: 100%;
-      margin: 0;
-      overflow-x: auto;
-    }
     .content {
       padding: 16px;
     }

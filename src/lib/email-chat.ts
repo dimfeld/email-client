@@ -7,7 +7,13 @@ export type ChatSource = {
   date: string | null;
   href: string;
 };
-export type ChatAction = { kind: 'message' | 'draft'; id: number | string; label: string };
+export type ChatAction = {
+  kind: 'message' | 'draft' | 'note' | 'todo';
+  id: number | string;
+  label: string;
+  /** The page for a note or to-do. */
+  href?: string;
+};
 export type ChatReference = { id: number; href: string };
 export type ChatAnswer = {
   answer: string;

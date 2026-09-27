@@ -25,6 +25,9 @@
     star: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z',
     clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
     important: 'M4 6h11l5 6-5 6H4l4-6z',
+    grip: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
+    todo: 'M4 4h16v16H4zM8 12l3 3 5-6',
+    note: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',
     more: 'M5 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M19 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
   } as const;
   export type IconName = keyof typeof paths;

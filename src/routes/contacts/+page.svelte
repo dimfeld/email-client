@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AppMasthead from '$lib/components/AppMasthead.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
   import type { SyncedContact } from '$lib/server/types';
@@ -37,14 +38,7 @@
 <svelte:head><title>Contacts — Email Check</title></svelte:head>
 
 <main>
-  <header class="masthead">
-    <a class="brand" href="/"><span aria-hidden="true">@</span><strong>Email Check</strong></a>
-    <nav aria-label="Application">
-      <a href="/">Mail</a><a class="active" href="/contacts">Contacts</a><a href="/calendar"
-        >Calendar</a
-      ><a href="/settings">Settings</a>
-    </nav>
-  </header>
+  <AppMasthead active="/contacts" />
   <section class="book" class:detail-open={detailOpen}>
     <div class="list-pane">
       <div class="list-tools">
@@ -175,36 +169,6 @@
   h2,
   p {
     margin: 0;
-  }
-  .masthead {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .brand {
-    display: flex;
-    gap: 10px;
-    color: var(--color-text);
-    text-decoration: none;
-  }
-  .brand span {
-    color: var(--color-accent);
-    font-size: 1.4rem;
-  }
-  nav {
-    margin-left: auto;
-    display: flex;
-    gap: 18px;
-  }
-  nav a {
-    color: var(--color-text-muted);
-    text-decoration: none;
-    font-size: 0.85rem;
-  }
-  nav a.active {
-    color: var(--color-accent);
   }
 
   .book {
@@ -418,14 +382,6 @@
   }
 
   @media (max-width: 760px) {
-    .masthead {
-      flex-wrap: wrap;
-    }
-    nav {
-      width: 100%;
-      margin: 0;
-      overflow-x: auto;
-    }
     .book {
       grid-template-columns: 1fr;
       height: auto;

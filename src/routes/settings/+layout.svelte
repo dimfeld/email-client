@@ -31,7 +31,9 @@
 <main>
   <header>
     <nav class="apps">
-      <a href="/">Mail</a><a href="/contacts">Contacts</a><a href="/calendar">Calendar</a>
+      <a href="/">Mail</a><a href="/notes">Notes</a><a href="/todos">To-dos</a><a href="/contacts"
+        >Contacts</a
+      ><a href="/calendar">Calendar</a>
     </nav>
     <h1>Settings</h1>
   </header>

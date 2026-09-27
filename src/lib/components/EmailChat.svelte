@@ -147,6 +147,7 @@
                     onclick={() => openComposer({ mode: 'reply', draftId: String(action.id) })}
                     >{action.label}</button
                   >
+                {:else if action.href}<a href={action.href}>{action.label}</a>
                 {:else}{action.label}{/if}
               </li>{/each}
           </ul>{/if}
