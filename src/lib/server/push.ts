@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import webpush, { WebPushError, type PushSubscription } from 'web-push';
-import type { EmailPushPayload } from '$lib/push';
+import type { PushPayload } from '$lib/push';
 import { senderName } from '$lib/mail-list';
 import { deletePushSubscription, getEmailRowId, listPushSubscriptions } from './db';
 import type { Importance } from '$lib/categories';
@@ -12,7 +12,7 @@ export type EmailNotifier = (
   emails: IncomingEmail[]
 ) => Promise<void>;
 
-type SendPush = (subscription: PushSubscription, payload: string) => Promise<unknown>;
+export type SendPush = (subscription: PushSubscription, payload: string) => Promise<unknown>;
 
 export function getVapidPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY || null;
@@ -41,7 +41,7 @@ export function shouldNotify(email: IncomingEmail, importance: Importance | null
   );
 }
 
-export function emailPushPayload(email: IncomingEmail, rowId: number | null): EmailPushPayload {
+export function emailPushPayload(email: IncomingEmail, rowId: number | null): PushPayload {
   return {
     title: senderName(email.from ?? ''),
     body: email.subject || '(no subject)',
@@ -57,13 +57,24 @@ export async function sendEmailPushNotifications(
   emails: IncomingEmail[],
   send: SendPush = defaultSend
 ): Promise<void> {
-  if (emails.length === 0) return;
+  await sendPushNotifications(
+    database,
+    emails.map((email) => emailPushPayload(email, getEmailRowId(database, accountEmail, email.id))),
+    send
+  );
+}
+
+/** Sends each payload to every saved subscription. */
+export async function sendPushNotifications(
+  database: DatabaseSync,
+  payloads: PushPayload[],
+  send: SendPush = defaultSend
+): Promise<void> {
+  if (payloads.length === 0) return;
   const subscriptions = listPushSubscriptions(database);
   if (subscriptions.length === 0) return;
-  for (const email of emails) {
-    const payload = JSON.stringify(
-      emailPushPayload(email, getEmailRowId(database, accountEmail, email.id))
-    );
+  for (const item of payloads) {
+    const payload = JSON.stringify(item);
     await Promise.all(
       subscriptions.map(async (subscription) => {
         try {

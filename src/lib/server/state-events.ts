@@ -19,6 +19,14 @@ export function publishStateChange(scope: StateScope = 'all'): void {
   });
 }
 
+/** Calls `listener` with the scopes of each change on the server. Returns an unsubscribe. */
+export function subscribeStateChanges(
+  listener: (scopes: Iterable<StateScope>) => void
+): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 export function createStateEvents(signal: AbortSignal): Response {
   const encoder = new TextEncoder();
   // Scopes that the client has not read yet. A slow client gets one merged frame.

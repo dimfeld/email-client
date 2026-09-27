@@ -34,6 +34,17 @@ export type Todo = {
   updatedAt: string;
 };
 
+// The owner chose 06:00 local time for the notification of a reminder that has no time.
+export const DATE_ONLY_REMINDER_TIME = '06:00';
+
+/** When the reminder notification is due, in local time. Null for a to-do without a date. */
+export function reminderTime(todo: Pick<Todo, 'dueDate' | 'dueTime'>): Date | null {
+  if (!todo.dueDate) return null;
+  const [year, month, day] = todo.dueDate.split('-').map(Number);
+  const [hours, minutes] = (todo.dueTime ?? DATE_ONLY_REMINDER_TIME).split(':').map(Number);
+  return new Date(year, month - 1, day, hours, minutes);
+}
+
 /** Markdown as plain text for one-line previews and search results. */
 export function markdownPreview(markdown: string): string {
   return markdown

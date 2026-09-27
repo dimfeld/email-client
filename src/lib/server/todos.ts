@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDateKey } from '$lib/calendar';
-import type { Todo } from '$lib/pim';
+import { reminderTime, type Todo } from '$lib/pim';
 import { PimValidationError, requireCategory } from './pim-categories';
 import { pimMatchQuery } from './pim-schema';
 import { publishStateChange } from './state-events';
@@ -65,6 +65,15 @@ function validDue(dueDate: string | null, dueTime: string | null) {
   return { date, time };
 }
 
+/**
+ * The `reminder_sent_at` value for a new due time. A time that already passed counts as sent,
+ * so a new overdue to-do does not send a notification.
+ */
+function reminderState(dueDate: string | null, dueTime: string | null, now: Date): string | null {
+  const time = reminderTime({ dueDate, dueTime });
+  return time && time <= now ? now.toISOString() : null;
+}
+
 function nextPosition(database: DatabaseSync, categoryId: number | null): number {
   const row = database
     .prepare('SELECT COALESCE(MAX(position), -1) + 1 AS next FROM todos WHERE category_id IS ?')
@@ -108,11 +117,13 @@ export function createTodo(database: DatabaseSync, input: TodoInput): Todo {
   const title = validTitle(input.title);
   const due = validDue(input.dueDate ?? null, input.dueTime ?? null);
   const categoryId = requireCategory(database, input.categoryId ?? null);
-  const now = new Date().toISOString();
+  const date = new Date();
+  const now = date.toISOString();
   const result = database
     .prepare(
       `INSERT INTO todos (title, description, category_id, position, due_date, due_time,
-       source_email_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       reminder_sent_at, source_email_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       title,
@@ -121,6 +132,7 @@ export function createTodo(database: DatabaseSync, input: TodoInput): Todo {
       nextPosition(database, categoryId),
       due.date,
       due.time,
+      reminderState(due.date, due.time, date),
       input.sourceEmailId ?? null,
       now,
       now
@@ -144,17 +156,29 @@ export function updateTodo(database: DatabaseSync, id: number, change: TodoChang
       : requireCategory(database, change.categoryId);
   const position =
     categoryId === todo.categoryId ? todo.position : nextPosition(database, categoryId);
-  const now = new Date().toISOString();
+  const date = new Date();
+  const now = date.toISOString();
   const completedAt =
     change.completed === undefined
       ? todo.completedAt
       : change.completed
         ? (todo.completedAt ?? now)
         : null;
+  // A new due time, or a to-do opened again, needs a new notification.
+  const reopened = todo.completedAt !== null && completedAt === null;
+  const dueChanged = due.date !== todo.dueDate || due.time !== todo.dueTime;
+  const reminderSentAt =
+    dueChanged || reopened
+      ? reminderState(due.date, due.time, date)
+      : (
+          database.prepare('SELECT reminder_sent_at FROM todos WHERE id = ?').get(id) as {
+            reminder_sent_at: string | null;
+          }
+        ).reminder_sent_at;
   database
     .prepare(
       `UPDATE todos SET title = ?, description = ?, category_id = ?, position = ?, due_date = ?,
-       due_time = ?, completed_at = ?, updated_at = ? WHERE id = ?`
+       due_time = ?, completed_at = ?, reminder_sent_at = ?, updated_at = ? WHERE id = ?`
     )
     .run(
       title,
@@ -164,6 +188,7 @@ export function updateTodo(database: DatabaseSync, id: number, change: TodoChang
       due.date,
       due.time,
       completedAt,
+      reminderSentAt,
       now,
       id
     );
@@ -201,4 +226,25 @@ export function reorderTodos(database: DatabaseSync, categoryId: number | null, 
     throw error;
   }
   publishStateChange('pim');
+}
+
+/** Open to-dos whose reminder time has come and whose notification has not gone out. */
+export function listDueReminders(database: DatabaseSync, now = new Date()): Todo[] {
+  return listPendingReminders(database).filter((todo) => reminderTime(todo)! <= now);
+}
+
+/** Open to-dos with a due date whose notification has not gone out. */
+export function listPendingReminders(database: DatabaseSync): Todo[] {
+  return (
+    database
+      .prepare(
+        `SELECT * FROM todos WHERE due_date IS NOT NULL AND completed_at IS NULL
+         AND reminder_sent_at IS NULL`
+      )
+      .all() as TodoRow[]
+  ).map(todoFromRow);
+}
+
+export function markReminderSent(database: DatabaseSync, id: number, now = new Date()): void {
+  database.prepare('UPDATE todos SET reminder_sent_at = ? WHERE id = ?').run(now.toISOString(), id);
 }

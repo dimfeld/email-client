@@ -4,7 +4,7 @@
 /// <reference types="@sveltejs/kit" />
 
 import { build, files, version } from '$service-worker';
-import type { EmailPushPayload } from '$lib/push';
+import type { PushPayload } from '$lib/push';
 import { incrementBadgeCount } from '$lib/push-badge';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
@@ -49,7 +49,7 @@ worker.addEventListener('fetch', (event) => {
 
 // iOS can cancel the subscription if a push does not show a notification.
 worker.addEventListener('push', (event) => {
-  const payload = (event.data?.json() ?? {}) as Partial<EmailPushPayload>;
+  const payload = (event.data?.json() ?? {}) as Partial<PushPayload>;
   event.waitUntil(
     (async () => {
       await worker.registration.showNotification(payload.title ?? 'New email', {

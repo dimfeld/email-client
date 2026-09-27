@@ -1,3 +1,6 @@
+import type { DatabaseSync } from 'node:sqlite';
+import { reminderTime } from '$lib/pim';
+
 // Notes and to-dos. A to-do with a due date is a reminder. Notes and to-dos share one list of
 // user categories. The FTS tables use the row IDs.
 export const pimSchema = `
@@ -24,6 +27,8 @@ CREATE TABLE IF NOT EXISTS todos (
  due_date TEXT,
  due_time TEXT,
  completed_at TEXT,
+ -- When the reminder notification went out, or when its time passed before it could matter.
+ reminder_sent_at TEXT,
  source_email_id INTEGER REFERENCES emails(id) ON DELETE SET NULL,
  created_at TEXT NOT NULL,
  updated_at TEXT NOT NULL
@@ -70,4 +75,21 @@ export function pimMatchQuery(query: string): string | null {
     terms.push(phrase ? `"${value}"` : `"${value}"*`);
   }
   return terms.length ? terms.join(' AND ') : null;
+}
+
+/** Adds columns that are newer than the first notes and to-dos schema. */
+export function migratePimSchema(database: DatabaseSync): void {
+  const columns = database.prepare('PRAGMA table_info(todos)').all() as { name: string }[];
+  if (columns.some((column) => column.name === 'reminder_sent_at')) return;
+  database.exec('ALTER TABLE todos ADD COLUMN reminder_sent_at TEXT');
+  // Reminders that were due before notifications existed do not send one now.
+  const now = new Date();
+  const rows = database
+    .prepare('SELECT id, due_date, due_time FROM todos WHERE due_date IS NOT NULL')
+    .all() as { id: number; due_date: string; due_time: string | null }[];
+  const mark = database.prepare('UPDATE todos SET reminder_sent_at = ? WHERE id = ?');
+  for (const row of rows) {
+    const time = reminderTime({ dueDate: row.due_date, dueTime: row.due_time });
+    if (time && time <= now) mark.run(now.toISOString(), row.id);
+  }
 }

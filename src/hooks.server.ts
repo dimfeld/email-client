@@ -1,6 +1,7 @@
 import { outboxWorker } from '$lib/server/outbox';
 import { historicalBackfillWorker } from '$lib/server/historical-backfill';
 import { snoozeWorker } from '$lib/server/snooze';
+import { reminderWorker } from '$lib/server/reminders';
 import { startGmailSubscribers } from '$lib/server/gmail-subscriber';
 import { startGmailBackfill } from '$lib/server/gmail-backfill';
 import { startGmailHistoryPoll } from '$lib/server/gmail-history-poll';
@@ -24,3 +25,4 @@ historicalBackfillWorker();
 
 outboxWorker();
 snoozeWorker();
+reminderWorker();
