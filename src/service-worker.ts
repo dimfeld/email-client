@@ -4,6 +4,8 @@
 /// <reference types="@sveltejs/kit" />
 
 import { build, files, version } from '$service-worker';
+import type { EmailPushPayload } from '$lib/push';
+import { incrementBadgeCount } from '$lib/push-badge';
 
 const worker = globalThis as unknown as ServiceWorkerGlobalScope;
 const cacheName = `email-check-${version}`;
@@ -43,6 +45,45 @@ worker.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(networkFirst(event.request));
   }
+});
+
+// iOS can cancel the subscription if a push does not show a notification.
+worker.addEventListener('push', (event) => {
+  const payload = (event.data?.json() ?? {}) as Partial<EmailPushPayload>;
+  event.waitUntil(
+    (async () => {
+      await worker.registration.showNotification(payload.title ?? 'New email', {
+        body: payload.body,
+        tag: payload.tag,
+        data: { url: payload.url ?? '/' },
+        icon: '/icons/email-check-192.png',
+      });
+      try {
+        await worker.navigator.setAppBadge?.(await incrementBadgeCount());
+      } catch (error) {
+        console.error('The app badge was not updated.', error);
+      }
+    })()
+  );
+});
+
+worker.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL(
+    (event.notification.data as { url?: string } | null)?.url ?? '/',
+    worker.location.origin
+  ).href;
+  event.waitUntil(
+    (async () => {
+      const [client] = await worker.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (client) {
+        await client.focus();
+        await client.navigate(url);
+      } else {
+        await worker.clients.openWindow(url);
+      }
+    })()
+  );
 });
 
 async function cacheFirst(request: Request): Promise<Response> {

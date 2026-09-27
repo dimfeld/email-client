@@ -2,7 +2,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { openComposer } from '$lib/composer';
   import { showToast } from '$lib/toast.svelte';
-  import { MAIL_PAGE_SIZE } from '$lib/mail-list';
+  import { MAIL_PAGE_SIZE, senderName } from '$lib/mail-list';
   import { onStateChange } from '$lib/state-change';
   import EmailChat from '$lib/components/EmailChat.svelte';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
@@ -236,10 +236,6 @@
     } catch {
       frame.style.removeProperty('height');
     }
-  }
-
-  function senderName(from: string): string {
-    return from.replace(/\s*<[^>]+>\s*$/, '').replace(/^"|"$/g, '') || from || 'Unknown sender';
   }
 
   function formatDate(value: string | null): string {

@@ -10,6 +10,7 @@
     { href: '/settings/calendars', label: 'Mail sidebar calendars' },
     { href: '/settings/import', label: 'Historical import' },
     { href: '/settings/categories', label: 'Categories' },
+    { href: '/settings/notifications', label: 'Notifications' },
   ];
   let accountLinks = $derived(
     data.settingsAccounts.map((account) => ({

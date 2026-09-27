@@ -288,4 +288,28 @@ describe('Gmail account ingestion', () => {
     expect(listAccounts(database)[0].subscription).toBe('projects/p/subscriptions/mail');
     expect(listAccounts(database)[0].refreshToken).toBe('token');
   });
+
+  it('notifies for newly classified unread inbox mail that is important or useful', async () => {
+    database = createDatabase(':memory:');
+    const notified: string[] = [];
+    await ingestGmailPayload(
+      database,
+      {
+        source: 'gmail',
+        account: 'me@example.com',
+        deletedMessageIds: [],
+        messages: [
+          { id: 'unread-reply', subject: 'Reply requested', labels: ['INBOX', 'UNREAD'] },
+          { id: 'unread-news', subject: 'Weekly news', labels: ['INBOX', 'UNREAD'] },
+          { id: 'read-reply', subject: 'Reply later', labels: ['INBOX'] },
+        ],
+      },
+      classify,
+      null,
+      async (_database, _account, emails) => {
+        notified.push(...emails.map((email) => email.id));
+      }
+    );
+    expect(notified).toEqual(['unread-reply', 'unread-news']);
+  });
 });

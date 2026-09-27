@@ -10,27 +10,34 @@ import {
   upsertEmails,
 } from './db';
 import type { EmailExtractor } from './extractor';
-import type { GmailWatchPayload } from './types';
+import { sendEmailPushNotifications, shouldNotify, type EmailNotifier } from './push';
+import type { GmailWatchPayload, IncomingEmail } from './types';
 
 export async function ingestGmailPayload(
   database: DatabaseSync,
   payload: GmailWatchPayload,
   classify: EmailClassifier,
-  extract: EmailExtractor | null = null
+  extract: EmailExtractor | null = null,
+  notify: EmailNotifier = sendEmailPushNotifications
 ): Promise<{ stored: number; classified: number; extracted: number; deleted: number }> {
   markDeleted(database, payload.account, payload.deletedMessageIds);
   const messages = payload.messages.filter((email) => !email.labels?.includes('DRAFT'));
   const pending = upsertEmails(database, payload.account, messages);
   let failures = 0;
+  const notifiable: IncomingEmail[] = [];
   for (const email of pending) {
     try {
       const classification = await classify(email, payload.account);
       saveClassification(database, payload.account, email.id, classification);
+      if (shouldNotify(email, classification.importance)) notifiable.push(email);
     } catch (error) {
       failures += 1;
       saveClassificationError(database, payload.account, email.id, error);
     }
   }
+  await notify(database, payload.account, notifiable).catch((error) =>
+    console.error('Email push notifications failed.', error)
+  );
   let extracted = 0;
   if (extract) {
     for (const pendingExtraction of listEmailsNeedingExtraction(database, payload.account)) {

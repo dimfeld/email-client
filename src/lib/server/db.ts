@@ -51,6 +51,13 @@ CREATE TABLE IF NOT EXISTS accounts (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  endpoint TEXT PRIMARY KEY,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS remote_image_rules (
   kind TEXT NOT NULL CHECK (kind IN ('address', 'domain')),
   value TEXT NOT NULL,
@@ -475,6 +482,42 @@ export function deleteRemoteImageRule(database: DatabaseSync, rule: RemoteImageR
   database
     .prepare('DELETE FROM remote_image_rules WHERE kind = ? AND value = ?')
     .run(rule.kind, rule.value);
+}
+
+export type StoredPushSubscription = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+};
+
+export function listPushSubscriptions(database: DatabaseSync): StoredPushSubscription[] {
+  return (
+    database.prepare('SELECT endpoint, p256dh, auth FROM push_subscriptions').all() as Array<{
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+    }>
+  ).map(({ endpoint, p256dh, auth }) => ({ endpoint, keys: { p256dh, auth } }));
+}
+
+export function savePushSubscription(
+  database: DatabaseSync,
+  subscription: StoredPushSubscription
+): void {
+  database
+    .prepare(
+      `INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth`
+    )
+    .run(
+      subscription.endpoint,
+      subscription.keys.p256dh,
+      subscription.keys.auth,
+      new Date().toISOString()
+    );
+}
+
+export function deletePushSubscription(database: DatabaseSync, endpoint: string): void {
+  database.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
 }
 
 export function upsertAccount(
@@ -1622,6 +1665,17 @@ function hashEmail(email: IncomingEmail): string {
       })
     )
     .digest('hex');
+}
+
+export function getEmailRowId(
+  database: DatabaseSync,
+  accountEmail: string,
+  gmailId: string
+): number | null {
+  const row = database
+    .prepare('SELECT id FROM emails WHERE account_email = ? AND gmail_id = ?')
+    .get(accountEmail, gmailId) as { id: number } | undefined;
+  return row?.id ?? null;
 }
 
 export function getIncomingEmail(

@@ -10,6 +10,8 @@
   import { createStateRefresh } from '$lib/state-refresh';
   import { parseStateScopes, type StateScope } from '$lib/state-scopes';
   import { dispatchStateChange } from '$lib/state-change';
+  import { clearBadgeCount } from '$lib/push-badge';
+  import { resendPushSubscription } from '$lib/push-subscription';
 
   // Load functions declare `depends('app:<scope>')`. Pages with remote queries listen for the
   // state change event. `all` refreshes everything, for example after a reconnect.
@@ -30,6 +32,16 @@
     // The event stream sends `all` when it reconnects, so focus needs no refresh of its own.
     const onOnline = () => refresh.request(['all']);
     const onDrafts = () => refresh.request(['drafts']);
+    // The badge counts notifications since the app was last open.
+    const clearBadge = () => {
+      if (document.visibilityState === 'visible')
+        clearBadgeCount().catch((error) => console.error('The app badge was not cleared.', error));
+    };
+    clearBadge();
+    resendPushSubscription().catch((error) =>
+      console.error('The push subscription was not sent.', error)
+    );
+    document.addEventListener('visibilitychange', clearBadge);
     events.addEventListener('message', onMessage);
     window.addEventListener('online', onOnline);
     window.addEventListener('email:state', onDrafts);
@@ -38,6 +50,7 @@
       events.close();
       window.removeEventListener('online', onOnline);
       window.removeEventListener('email:state', onDrafts);
+      document.removeEventListener('visibilitychange', clearBadge);
     };
   });
 

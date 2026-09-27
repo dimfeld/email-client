@@ -21,7 +21,9 @@ const ingested = await ingestGmailPayload(
   getDatabase(),
   { source: 'gmail', account, deletedMessageIds: [], messages },
   createJevClassifier(),
-  createOpenAIEmailExtractor()
+  createOpenAIEmailExtractor(),
+  // A manual sync can load old mail, so it sends no push notifications.
+  async () => {}
 );
 
 console.log(`Stored ${ingested.stored} and classified ${ingested.classified} message(s).`);
