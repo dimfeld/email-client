@@ -10,7 +10,7 @@ import {
   upsertEmails,
 } from './db';
 import type { EmailExtractor } from './extractor';
-import { sendEmailPushNotifications, shouldNotify, type EmailNotifier } from './push';
+import { notifyNewEmails, shouldNotify, type EmailNotifier } from './push';
 import type { GmailWatchPayload, IncomingEmail } from './types';
 
 export async function ingestGmailPayload(
@@ -18,7 +18,7 @@ export async function ingestGmailPayload(
   payload: GmailWatchPayload,
   classify: EmailClassifier,
   extract: EmailExtractor | null = null,
-  notify: EmailNotifier = sendEmailPushNotifications
+  notify: EmailNotifier = notifyNewEmails
 ): Promise<{ stored: number; classified: number; extracted: number; deleted: number }> {
   markDeleted(database, payload.account, payload.deletedMessageIds);
   const messages = payload.messages.filter((email) => !email.labels?.includes('DRAFT'));

@@ -50,19 +50,60 @@ export function emailPushPayload(email: IncomingEmail, rowId: number | null): Pu
   };
 }
 
-/** Sends one notification for each email to every saved subscription. */
-export async function sendEmailPushNotifications(
-  database: DatabaseSync,
-  accountEmail: string,
+/** One email gets its own notification. More emails get one notification with the count. */
+export function emailBatchPushPayload(
   emails: IncomingEmail[],
-  send: SendPush = defaultSend
-): Promise<void> {
-  await sendPushNotifications(
-    database,
-    emails.map((email) => emailPushPayload(email, getEmailRowId(database, accountEmail, email.id))),
-    send
-  );
+  rowId: (email: IncomingEmail) => number | null
+): PushPayload {
+  if (emails.length === 1) return emailPushPayload(emails[0], rowId(emails[0]));
+  const senders = new Set(emails.map((email) => senderName(email.from ?? '')));
+  return {
+    title: senders.size === 1 ? [...senders][0] : 'New email',
+    body: `${emails.length} new emails`,
+    url: '/',
+    tag: 'new-emails',
+  };
 }
+
+export const EMAIL_PUSH_DEBOUNCE_MS = 15_000;
+
+/**
+ * Waits `delayMs` before it sends a notification. Each new email starts the wait again.
+ * All emails that arrive during the wait go into one notification.
+ */
+export function createDebouncedEmailNotifier(
+  delayMs = EMAIL_PUSH_DEBOUNCE_MS,
+  send: SendPush = defaultSend
+): EmailNotifier {
+  let pending: Array<{ database: DatabaseSync; accountEmail: string; email: IncomingEmail }> = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  async function flush() {
+    const batch = pending;
+    pending = [];
+    timer = undefined;
+    if (batch.length === 0) return;
+    const { database } = batch[0];
+    const accounts = new Map(batch.map((item) => [item.email, item.accountEmail]));
+    const payload = emailBatchPushPayload(
+      batch.map((item) => item.email),
+      (email) => getEmailRowId(database, accounts.get(email)!, email.id)
+    );
+    await sendPushNotifications(database, [payload], send);
+  }
+
+  return async (database, accountEmail, emails) => {
+    if (emails.length === 0) return;
+    pending.push(...emails.map((email) => ({ database, accountEmail, email })));
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      flush().catch((error) => console.error('Email push notifications failed.', error));
+    }, delayMs);
+    timer.unref?.();
+  };
+}
+
+export const notifyNewEmails: EmailNotifier = createDebouncedEmailNotifier();
 
 /** Sends each payload to every saved subscription. */
 export async function sendPushNotifications(
