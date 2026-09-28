@@ -18,6 +18,10 @@ const personalMailDomains = new Set([
   'fastmail.com',
 ]);
 
+// The mail list shows avatars at up to 40 CSS pixels, which is 120 device pixels on a 3x
+// phone screen. Both image sources take the size in the URL.
+const avatarSize = 128;
+
 function contactPhoto(account: string, address: string): string | null {
   const row = getDatabase()
     .prepare(`SELECT photo_url FROM (
@@ -35,7 +39,8 @@ function contactPhoto(account: string, address: string): string | null {
     const url = new URL(row.photo_url);
     return url.protocol === 'https:' &&
       (url.hostname === 'googleusercontent.com' || url.hostname.endsWith('.googleusercontent.com'))
-      ? url.href
+      ? // Google photo URLs end with a size such as "=s100".
+        url.href.replace(/=s\d+(-c)?$/, `=s${avatarSize}$1`)
       : null;
   } catch {
     return null;
@@ -101,6 +106,6 @@ export const GET: RequestHandler = async ({ url }) => {
   }
   const domain = address.split('@')[1];
   if (personalMailDomains.has(domain)) return new Response(null, { status: 404 });
-  const iconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+  const iconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${avatarSize}`;
   return (await cachedImage(database, iconUrl)) ?? new Response(null, { status: 404 });
 };
