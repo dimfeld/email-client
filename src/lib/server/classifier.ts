@@ -1,6 +1,11 @@
 import { choice, noul, TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Category, Classification, IncomingEmail } from './types';
-import { getAccountDisplayName, getDatabase, listCategories } from './db';
+import {
+  getAccountDisplayName,
+  getAccountImportanceGuidance,
+  getDatabase,
+  listCategories,
+} from './db';
 import { formatBodyForDecisions } from './quoted-reply';
 
 export type EmailClassifier = (
@@ -39,11 +44,22 @@ const reminderQuestion = noul(
   }
 );
 
+const importanceQuestion = 'How important is this email to its owner?';
+
+export function importanceQuestionText(guidance: string | null | undefined): string {
+  const trimmed = guidance?.trim();
+  return trimmed
+    ? `${importanceQuestion}\n\nThe owner gave this guidance for judging importance:\n${trimmed}`
+    : importanceQuestion;
+}
+
 export function createJevClassifier(
   apiKey = process.env.TYPESAFE_API_KEY,
   getCategories: () => Category[] = () => listCategories(getDatabase()),
   getOwnerName: (accountEmail: string) => string | null = (accountEmail) =>
-    getAccountDisplayName(getDatabase(), accountEmail)
+    getAccountDisplayName(getDatabase(), accountEmail),
+  getImportanceGuidance: (accountEmail: string) => string | null = (accountEmail) =>
+    getAccountImportanceGuidance(getDatabase(), accountEmail)
 ): EmailClassifier {
   if (!apiKey) throw new Error('Set TYPESAFE_API_KEY before classifying email.');
   const client = new TypeSafeClient({
@@ -75,7 +91,10 @@ export function createJevClassifier(
         category: choice('What is the primary category of this email?', categoryCriteria),
         actionItem: actionItemQuestion,
         reminder: reminderQuestion,
-        importance: choice('How important is this email to its owner?', importanceCriteria),
+        importance: choice(
+          importanceQuestionText(accountEmail ? getImportanceGuidance(accountEmail) : null),
+          importanceCriteria
+        ),
       },
     });
     const category = categories.find(

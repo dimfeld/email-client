@@ -5,6 +5,7 @@ import {
   populateAccountDisplayName,
   setAccountAlias,
   setAccountDisplayName,
+  setAccountImportanceGuidance,
 } from '$lib/server/db';
 import { fetchGoogleAccountName } from '$lib/server/google-api';
 import { syncConfiguredGoogleAccounts } from '$lib/server/google-sync';
@@ -42,6 +43,21 @@ export const actions: Actions = {
     } catch (error) {
       return fail(400, {
         error: error instanceof Error ? error.message : 'Could not save the account settings.',
+      });
+    }
+  },
+  saveImportanceGuidance: async ({ request, params }) => {
+    const fields = await request.formData();
+    try {
+      setAccountImportanceGuidance(
+        getDatabase(),
+        params.email,
+        String(fields.get('importanceGuidance') ?? '')
+      );
+      return { message: 'Importance guidance saved.' };
+    } catch (error) {
+      return fail(400, {
+        error: error instanceof Error ? error.message : 'Could not save the importance guidance.',
       });
     }
   },

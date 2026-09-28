@@ -1,7 +1,12 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Category } from './types';
-import { createJevClassifier, JEV_BODY_MAX_LENGTH, truncateBodyForJev } from './classifier';
+import {
+  createJevClassifier,
+  importanceQuestionText,
+  JEV_BODY_MAX_LENGTH,
+  truncateBodyForJev,
+} from './classifier';
 
 describe('Jev classifier input', () => {
   it('truncates the message body to 16,000 characters', () => {
@@ -175,3 +180,33 @@ for (const importance of ['important', 'useful', 'other'] as const) {
     }
   });
 }
+
+it('adds the account importance guidance to the importance question', async () => {
+  const request = spyOn(TypeSafeClient.prototype, 'systemOne').mockResolvedValue({
+    model: 'test',
+    answers: {
+      category: { choice: 'custom', confidence: 0.8, probabilities: { custom: 0.8 } },
+      actionItem: { noul: 0.5 },
+      reminder: { noul: 0.5 },
+      importance: { choice: 'useful', confidence: 0.7, probabilities: { useful: 0.7 } },
+    },
+  } as never);
+  try {
+    const classify = createJevClassifier(
+      'test-key',
+      () => [{ id: 'custom', name: 'Travel', description: 'Travel messages.', level: 'auto' }],
+      () => null,
+      (accountEmail) => (accountEmail === 'casey@example.com' ? ' Landlord mail matters. ' : null)
+    );
+    await classify({ id: 'message' }, 'casey@example.com');
+    await classify({ id: 'message' }, 'other@example.com');
+    const [withGuidance, without] = request.mock.calls.map(
+      ([call]) => call.questions.importance as { instructions: string }
+    );
+    expect(withGuidance.instructions).toContain('Landlord mail matters.');
+    expect(without.instructions).toBe(importanceQuestionText(null));
+    expect(without.instructions).not.toContain('guidance');
+  } finally {
+    request.mockRestore();
+  }
+});

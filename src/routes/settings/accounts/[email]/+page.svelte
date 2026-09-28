@@ -43,6 +43,25 @@
   </form>
 </section>
 
+<section aria-labelledby="account-importance-heading">
+  <h3 id="account-importance-heading">Importance guidance</h3>
+  <form method="POST" action="?/saveImportanceGuidance" use:enhance>
+    <label for="account-importance-guidance">Guidance for Jev</label>
+    <p class="help">
+      Jev decides whether each message in this account is important, useful, or neither. Describe
+      what matters to you, for example "Messages from my landlord are important" or "Receipts are
+      useful". Jev reads this text with the importance question. It applies to new messages. Leave
+      it empty to use no extra guidance.
+    </p>
+    <textarea
+      id="account-importance-guidance"
+      name="importanceGuidance"
+      rows="6"
+      value={data.account.importanceGuidance ?? ''}></textarea>
+    <p class="actions"><button type="submit">Save</button></p>
+  </form>
+</section>
+
 <section aria-labelledby="account-sync-heading">
   <h3 id="account-sync-heading">Google data sync</h3>
   <p class="help">

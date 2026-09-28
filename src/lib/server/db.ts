@@ -292,6 +292,9 @@ export function createDatabase(path = defaultPath): DatabaseSync {
   if (!accountColumns.some((column) => column.name === 'alias')) {
     database.exec('ALTER TABLE accounts ADD COLUMN alias TEXT');
   }
+  if (!accountColumns.some((column) => column.name === 'importance_guidance')) {
+    database.exec('ALTER TABLE accounts ADD COLUMN importance_guidance TEXT');
+  }
   if (!accountColumns.some((column) => column.name === 'history_id')) {
     database.exec('ALTER TABLE accounts ADD COLUMN history_id TEXT');
   }
@@ -572,6 +575,25 @@ export function setAccountAlias(database: DatabaseSync, email: string, alias: st
   publishStateChange('accounts');
 }
 
+export function setAccountImportanceGuidance(
+  database: DatabaseSync,
+  email: string,
+  guidance: string
+): void {
+  const result = database
+    .prepare('UPDATE accounts SET importance_guidance = ?, updated_at = ? WHERE email = ?')
+    .run(guidance.trim() || null, new Date().toISOString(), email);
+  if (!result.changes) throw new Error('The Google account was not found.');
+  publishStateChange('accounts');
+}
+
+export function getAccountImportanceGuidance(database: DatabaseSync, email: string): string | null {
+  const row = database
+    .prepare('SELECT importance_guidance FROM accounts WHERE email = ?')
+    .get(email) as { importance_guidance: string | null } | undefined;
+  return row?.importance_guidance ?? null;
+}
+
 export function populateAccountDisplayName(
   database: DatabaseSync,
   email: string,
@@ -597,6 +619,7 @@ export function listAccounts(database: DatabaseSync): Array<{
   email: string;
   displayName: string | null;
   alias: string | null;
+  importanceGuidance: string | null;
   refreshToken: string | null;
   topic: string | null;
   subscription: string | null;
@@ -608,13 +631,14 @@ export function listAccounts(database: DatabaseSync): Array<{
 }> {
   const rows = database
     .prepare(
-      'SELECT email, display_name, alias, google_refresh_token, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
+      'SELECT email, display_name, alias, importance_guidance, google_refresh_token, topic, subscription, history_id, last_backfill_at, contacts_synced_at, calendar_synced_at, enabled FROM accounts ORDER BY email'
     )
     .all() as Array<Record<string, unknown>>;
   return rows.map((row) => ({
     email: String(row.email),
     displayName: row.display_name === null ? null : String(row.display_name),
     alias: row.alias === null ? null : String(row.alias),
+    importanceGuidance: row.importance_guidance === null ? null : String(row.importance_guidance),
     refreshToken: row.google_refresh_token === null ? null : String(row.google_refresh_token),
     topic: row.topic === null ? null : String(row.topic),
     subscription: row.subscription === null ? null : String(row.subscription),
