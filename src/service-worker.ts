@@ -59,6 +59,12 @@ worker.addEventListener('push', (event) => {
         icon: '/icons/email-check-192.png',
       });
       try {
+        const clients = await worker.clients.matchAll({
+          type: 'window',
+          includeUncontrolled: true,
+        });
+        if (clients.some((client) => client.focused && client.visibilityState === 'visible'))
+          return;
         await worker.navigator.setAppBadge?.(await incrementBadgeCount());
       } catch (error) {
         console.error('The app badge was not updated.', error);

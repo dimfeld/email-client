@@ -43,7 +43,8 @@
   <h2 id="notifications-heading">Notifications</h2>
   <p class="help">
     This device gets a notification for each new unread inbox message that Jev marks important or
-    useful. The app icon badge shows the number of notifications since you last opened the app.
+    useful. The app icon badge shows the number of notifications received while the app was
+    inactive.
   </p>
   <div class="sync-card">
     <div>

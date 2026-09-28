@@ -1,5 +1,5 @@
 // The service worker and the page share the badge count through IndexedDB.
-// The service worker adds one for each notification, and the page sets it to zero when it opens.
+// The service worker adds one when no app window is active, and the page clears it on focus.
 
 const databaseName = 'email-check-push';
 const storeName = 'badge';
