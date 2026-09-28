@@ -59,8 +59,22 @@ export async function disablePush(): Promise<void> {
   await subscription.unsubscribe();
 }
 
-/** The push endpoint can change, and iOS does not reliably tell the service worker. */
-export async function resendPushSubscription(): Promise<void> {
+/**
+ * Makes sure the server has this device's subscription. The push endpoint can change, and iOS does
+ * not reliably tell the service worker. Returns `needs-tap` when only a user action can request
+ * permission.
+ */
+export async function connectPush(
+  publicKey: string | null
+): Promise<'connected' | 'needs-tap' | 'off'> {
+  if (pushSupport() !== 'supported') return 'off';
   const subscription = await currentPushSubscription();
-  if (subscription) await saveSubscription(subscription);
+  if (subscription) {
+    await saveSubscription(subscription);
+    return 'connected';
+  }
+  if (!publicKey || Notification.permission === 'denied') return 'off';
+  if (Notification.permission === 'default') return 'needs-tap';
+  await enablePush(publicKey);
+  return 'connected';
 }

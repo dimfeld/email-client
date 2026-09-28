@@ -12,7 +12,8 @@
   import { parseStateScopes, type StateScope } from '$lib/state-scopes';
   import { dispatchStateChange } from '$lib/state-change';
   import { clearBadgeCount } from '$lib/push-badge';
-  import { resendPushSubscription } from '$lib/push-subscription';
+  import { connectPush, enablePush } from '$lib/push-subscription';
+  import { showToast } from '$lib/toast.svelte';
 
   // Load functions declare `depends('app:<scope>')`. Pages with remote queries listen for the
   // state change event. `all` refreshes everything, for example after a reconnect.
@@ -39,9 +40,22 @@
         clearBadgeCount().catch((error) => console.error('The app badge was not cleared.', error));
     };
     clearBadge();
-    resendPushSubscription().catch((error) =>
-      console.error('The push subscription was not sent.', error)
-    );
+    // Notifications are on by default, but iOS lets only a tap request permission.
+    const pushKey = data.vapidPublicKey;
+    connectPush(pushKey)
+      .then((result) => {
+        if (result !== 'needs-tap' || !pushKey) return;
+        showToast('Get notifications for important email and reminders.', {
+          action: {
+            label: 'Turn on',
+            run: () =>
+              void enablePush(pushKey).catch((error) =>
+                showToast(`Notifications were not turned on. ${error}`, { tone: 'error' })
+              ),
+          },
+        });
+      })
+      .catch((error) => console.error('The push subscription was not sent.', error));
     document.addEventListener('visibilitychange', clearBadge);
     events.addEventListener('message', onMessage);
     window.addEventListener('online', onOnline);
