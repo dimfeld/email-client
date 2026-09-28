@@ -2500,10 +2500,38 @@
     .show-detail .list-pane {
       display: none;
     }
+    /* Two lines: the sender on the first and the subject on the second. The avatar
+       fills the height of both lines. */
     .message {
-      grid-template-columns: 22px 96px minmax(0, 1fr) 12px 14px 60px;
-      padding-inline: 8px;
-      height: 44px;
+      grid-template-columns: 40px minmax(0, 1fr) auto auto auto;
+      grid-template-areas:
+        'avatar sender importance star time'
+        'avatar line line line line';
+      column-gap: 8px;
+      row-gap: 2px;
+      padding: 8px;
+      height: 58px;
+    }
+    .message > .sender-avatar {
+      grid-area: avatar;
+      width: 40px;
+      height: 40px;
+      font-size: var(--text-md);
+    }
+    .message > .sender {
+      grid-area: sender;
+    }
+    .message > .message-line {
+      grid-area: line;
+    }
+    .message > .importance {
+      grid-area: importance;
+    }
+    .message > .star {
+      grid-area: star;
+    }
+    .message > time {
+      grid-area: time;
     }
     .message > .category-tag,
     .message > span:empty:not(.star, .importance) {
