@@ -23,10 +23,12 @@
 
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { getChatContext } from '$lib/chat-context';
 
   // `children` holds the controls of the page, such as the mail search and Compose button.
   let { active, children }: { active: (typeof appLinks)[number]['href']; children?: Snippet } =
     $props();
+  const chat = getChatContext();
 </script>
 
 <header class="masthead">
@@ -38,7 +40,12 @@
         href={link.href}>{link.label}</a
       >{/each}
   </nav>
-  {#if children}<div class="tools">{@render children()}</div>{/if}
+  <div class="tools">
+    {#if children}{@render children()}{/if}
+    <button class="chat-button" aria-pressed={chat.open} onclick={() => (chat.open = !chat.open)}
+      >Chat</button
+    >
+  </div>
 </header>
 
 <style>
@@ -88,6 +95,20 @@
     align-items: center;
     justify-content: flex-end;
     gap: 10px 8px;
+  }
+  .chat-button {
+    border: 0;
+    border-radius: var(--radius-md);
+    padding: 8px;
+    background: none;
+    color: var(--color-accent);
+    font-size: var(--text-sm);
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .chat-button:hover,
+  .chat-button[aria-pressed='true'] {
+    background: var(--color-accent-bg-subtle);
   }
   @media (max-width: 760px) {
     /* The links are the full first row, so the brand does not use a row of its own. */

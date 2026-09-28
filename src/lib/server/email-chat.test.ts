@@ -42,6 +42,7 @@ test('tools enforce account scope and record only messages read', async () => {
     'createReplyDraft',
     'searchNotesAndTodos',
     'readNote',
+    'readTodo',
     'createNote',
     'updateNote',
     'createTodo',
@@ -142,6 +143,30 @@ test('adds the message open at chat start to the instructions', async () => {
     },
     one
   );
+});
+
+test('adds the open note or to-do to the instructions', async () => {
+  for (const item of [
+    { kind: 'note' as const, id: 4, tool: 'readNote' },
+    { kind: 'todo' as const, id: 7, tool: 'readTodo' },
+  ]) {
+    const stream = ((options: Parameters<typeof streamText>[0]) => {
+      expect(options.instructions).toContain(`${item.id} was open when this chat started`);
+      expect(options.instructions).toContain(`Read it with ${item.tool}`);
+      return fakeResult({ answer: 'Done.', sourceIds: [] });
+    }) as unknown as typeof streamText;
+    await chatWithEmail(
+      database,
+      [{ role: 'user', content: 'Help with this.' }],
+      undefined,
+      undefined,
+      { apiKey: 'test', stream },
+      undefined,
+      undefined,
+      undefined,
+      { kind: item.kind, id: item.id }
+    );
+  }
 });
 
 test('reports tool progress and asks for stable message numbers', async () => {

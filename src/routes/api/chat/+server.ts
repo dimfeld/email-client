@@ -2,12 +2,21 @@ import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getDatabase, getEmail, listAccounts } from '$lib/server/db';
 import { chatWithEmail } from '$lib/server/email-chat';
+import { getNote } from '$lib/server/notes';
+import { getTodo } from '$lib/server/todos';
 import type { ChatStreamEvent } from '$lib/email-chat';
 import type { RequestHandler } from './$types';
 
 const requestSchema = z.object({
   account: z.string().nullable(),
   currentMessageId: z.number().int().positive().nullable().optional(),
+  currentItem: z
+    .discriminatedUnion('kind', [
+      z.object({ kind: z.literal('note'), id: z.number().int().positive() }),
+      z.object({ kind: z.literal('todo'), id: z.number().int().positive() }),
+    ])
+    .nullable()
+    .optional(),
   messages: z
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().trim().min(1) }))
     .min(1),
@@ -33,6 +42,14 @@ export const POST: RequestHandler = async ({ request, url }) => {
     !getEmail(database, input.currentMessageId, input.account ?? undefined)
   )
     return json({ error: 'The open message is not available.' }, { status: 400 });
+  if (
+    input.messages.length === 1 &&
+    input.currentItem &&
+    !(input.currentItem.kind === 'note'
+      ? getNote(database, input.currentItem.id)
+      : getTodo(database, input.currentItem.id))
+  )
+    return json({ error: 'The open item is not available.' }, { status: 400 });
   const encoder = new TextEncoder();
   let cancelled = false;
   const stream = new ReadableStream<Uint8Array>({
@@ -49,7 +66,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
           {},
           input.currentMessageId ?? undefined,
           (progress) => send({ type: 'progress', progress }),
-          (text) => send({ type: 'answer-text', text })
+          (text) => send({ type: 'answer-text', text }),
+          input.currentItem ?? undefined
         );
         send({ type: 'answer', answer });
       } catch (error) {

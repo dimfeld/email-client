@@ -78,6 +78,16 @@ export function createPimChatTools(
         return { ...noteResult(note), body: note.body };
       },
     }),
+    readTodo: tool({
+      description: 'Read one to-do or reminder, including its complete description.',
+      inputSchema: z.object({ id: z.number().int().positive() }),
+      execute: async ({ id }) => {
+        signal?.throwIfAborted();
+        const todo = getTodo(database, id);
+        if (!todo) throw new Error('This to-do does not exist.');
+        return todoResult(todo);
+      },
+    }),
     createNote: tool({
       description:
         'Create a note. The body is Markdown. Only call when the user asks for a note. The change takes effect immediately.',

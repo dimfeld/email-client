@@ -2,10 +2,13 @@
   import '../app.css';
   import { handleAppLinkShortcut } from '$lib/components/AppMasthead.svelte';
   import ComposerHost from '$lib/components/ComposerHost.svelte';
+  import EmailChat from '$lib/components/EmailChat.svelte';
   import Toaster from '$lib/components/Toaster.svelte';
+  import { chatContextKey, type ChatContext } from '$lib/chat-context';
+  import { page } from '$app/state';
   import type { LayoutData } from './$types';
   import type { Snippet } from 'svelte';
-  import { onMount } from 'svelte';
+  import { onMount, setContext } from 'svelte';
   import { afterNavigate, beforeNavigate, invalidate, refreshAll } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { createStateRefresh } from '$lib/state-refresh';
@@ -72,6 +75,49 @@
   });
 
   let { children, data }: { children: Snippet; data: LayoutData } = $props();
+  const chat = $state<ChatContext>({
+    open: false,
+    account: null,
+    currentMessageId: null,
+    currentItem: null,
+  });
+  setContext(chatContextKey, chat);
+
+  $effect(() => {
+    const path = page.url.pathname;
+    const itemKind = path === '/notes' ? 'note' : path === '/todos' ? 'todo' : null;
+    const requestedItemId = itemKind ? Number(page.url.searchParams.get(itemKind)) : NaN;
+    chat.currentItem =
+      itemKind && Number.isInteger(requestedItemId) && requestedItemId > 0
+        ? { kind: itemKind, id: requestedItemId }
+        : null;
+    if (path !== '/') {
+      chat.currentMessageId = null;
+      return;
+    }
+    const requestedAccount = page.url.searchParams.get('account');
+    chat.account = data.composer.accounts.some((account) => account.email === requestedAccount)
+      ? requestedAccount
+      : null;
+    const requestedId = Number(page.url.searchParams.get('message'));
+    chat.currentMessageId = Number.isInteger(requestedId) && requestedId > 0 ? requestedId : null;
+  });
+
+  function handleChatShortcut(event: KeyboardEvent) {
+    if (
+      event.key !== '`' ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.repeat ||
+      (event.target instanceof Element &&
+        (event.target.closest('input, textarea, select, [contenteditable="true"]') ||
+          event.target.closest('a[href]')))
+    )
+      return;
+    event.preventDefault();
+    chat.open = !chat.open;
+  }
 </script>
 
 <svelte:head>
@@ -89,8 +135,56 @@
   />
 </svelte:head>
 
-<svelte:window onkeydown={handleAppLinkShortcut} />
+<svelte:window
+  onkeydown={(event) => {
+    handleAppLinkShortcut(event);
+    handleChatShortcut(event);
+  }}
+/>
 
-{@render children()}
+<div class="app-shell">
+  <div class="page-content">{@render children()}</div>
+  {#if chat.open}
+    <div class="chat-panel">
+      {#key chat.account}<EmailChat
+          account={chat.account}
+          currentMessageId={chat.currentMessageId}
+          currentItem={chat.currentItem}
+          close={() => (chat.open = false)}
+        />{/key}
+    </div>
+  {/if}
+</div>
 <ComposerHost data={data.composer} />
 <Toaster />
+
+<style>
+  .app-shell {
+    display: flex;
+    min-width: 0;
+  }
+  .page-content {
+    flex: 1;
+    min-width: 0;
+  }
+  .chat-panel {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex: 0 0 min(420px, 34vw);
+    height: 100dvh;
+    min-width: 0;
+  }
+  .chat-panel :global(.chat) {
+    flex: 1;
+  }
+  @media (max-width: 760px) {
+    .chat-panel {
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      width: 100vw;
+      height: 100dvh;
+    }
+  }
+</style>

@@ -12,8 +12,14 @@
   let {
     account,
     currentMessageId,
+    currentItem,
     close,
-  }: { account: string | null; currentMessageId: number | null; close: () => void } = $props();
+  }: {
+    account: string | null;
+    currentMessageId: number | null;
+    currentItem: { kind: 'note' | 'todo'; id: number } | null;
+    close: () => void;
+  } = $props();
   let messages = $state<
     (ChatMessage & {
       sources?: ChatAnswer['sources'];
@@ -25,6 +31,7 @@
   let progress = $state<ChatProgress[]>([]);
   let draftAnswer = $state('');
   let threadMessageId = $state<number | null>(null);
+  let threadItem = $state<typeof currentItem>(null);
   let question = $state('');
   let pending = $state(false);
   let error = $state('');
@@ -40,7 +47,10 @@
   async function ask(content: string) {
     if (!content.trim() || pending) return;
     content = content.trim();
-    if (messages.length === 0) threadMessageId = currentMessageId;
+    if (messages.length === 0) {
+      threadMessageId = currentMessageId;
+      threadItem = currentItem;
+    }
     question = '';
     error = '';
     progress = [];
@@ -57,7 +67,12 @@
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ account, currentMessageId: threadMessageId, messages: history }),
+        body: JSON.stringify({
+          account,
+          currentMessageId: threadMessageId,
+          currentItem: threadItem,
+          messages: history,
+        }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -105,6 +120,7 @@
   function newChat() {
     messages = [];
     threadMessageId = null;
+    threadItem = null;
     error = '';
     progress = [];
     draftAnswer = '';

@@ -28,6 +28,14 @@ test('chat tools create, find, and change notes and to-dos', async () => {
     context
   )) as { id: number };
   expect(listPimCategories(database).map((category) => category.name)).toEqual(['Travel']);
+  expect(await tools.readTodo.execute!({ id: todo.id }, context)).toMatchObject({
+    title: 'Book hotel',
+    dueDate: '2026-10-02',
+    category: 'Travel',
+  });
+  await expect(tools.readTodo.execute!({ id: todo.id + 1 }, context)).rejects.toThrow(
+    'does not exist'
+  );
 
   const found = await tools.searchNotesAndTodos.execute!(
     { query: 'pass', offset: 0, limit: 10 },

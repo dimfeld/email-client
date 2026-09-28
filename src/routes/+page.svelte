@@ -5,7 +5,7 @@
   import { showToast } from '$lib/toast.svelte';
   import { MAIL_PAGE_SIZE, senderName } from '$lib/mail-list';
   import { onStateChange } from '$lib/state-change';
-  import EmailChat from '$lib/components/EmailChat.svelte';
+  import { getChatContext } from '$lib/chat-context';
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import SwipeRow, { type SwipeActions } from '$lib/components/SwipeRow.svelte';
   import SnoozeDialog from '$lib/components/SnoozeDialog.svelte';
@@ -130,7 +130,7 @@
   // The server filters the list and counts each filter over the whole mailbox.
   let filterCounts = $derived(counts);
   let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
-  let showChat = $state(false);
+  const chat = getChatContext();
   let showCategories = $state(false);
   let showShortcuts = $state(false);
   let shortcutDialog = $state<HTMLDialogElement | null>(null);
@@ -449,17 +449,15 @@
   // Key events in the message frame do not reach the window, so the frame also handles the
   // app shortcuts that the layout handles.
   function handleFrameKeydown(event: KeyboardEvent) {
-    if (!handleAppLinkShortcut(event)) void handleKeydown(event);
+    if (event.key === '`' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat) {
+      event.preventDefault();
+      chat.open = !chat.open;
+    } else if (!handleAppLinkShortcut(event)) void handleKeydown(event);
   }
 
   async function handleKeydown(event: KeyboardEvent) {
     if (snoozeTarget) return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
-    if (event.key === '`' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat) {
-      event.preventDefault();
-      showChat = !showChat;
-      return;
-    }
     if (isInteractiveTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
     const eventTarget =
@@ -1018,9 +1016,6 @@
       onclick={() => openComposer({ mode: 'new', account: data.selectedAccount ?? undefined })}
       >Compose</button
     >
-    <button class="text-button" aria-pressed={showChat} onclick={() => (showChat = !showChat)}
-      >Chat</button
-    >
     <form method="GET" class="account-picker">
       {#if data.query}<input type="hidden" name="q" value={data.query} />{/if}
       <button
@@ -1047,11 +1042,6 @@
   </AppMasthead>
 
   <div class="content-shell">
-    {#if showChat}{#key data.selectedAccount}<EmailChat
-          account={data.selectedAccount}
-          currentMessageId={selectedEmail?.id ?? null}
-          close={() => (showChat = false)}
-        />{/key}{/if}
     <div class="mailbox" class:show-detail={mobileDetail} class:show-categories={showCategories}>
       <nav class="sidebar" aria-label="Mailbox">
         <p class="eyebrow">MAILBOX</p>
@@ -1730,19 +1720,6 @@
   }
   .compose-button:hover {
     background: var(--color-accent-hover);
-  }
-  .text-button {
-    border: 0;
-    border-radius: var(--radius-md);
-    padding: 8px;
-    background: none;
-    color: var(--color-accent);
-    font-size: var(--text-sm);
-    white-space: nowrap;
-  }
-  .text-button:hover,
-  .text-button[aria-pressed='true'] {
-    background: var(--color-accent-bg-subtle);
   }
   .account-picker {
     display: flex;
