@@ -34,9 +34,9 @@
     // The event stream sends `all` when it reconnects, so focus needs no refresh of its own.
     const onOnline = () => refresh.request(['all']);
     const onDrafts = () => refresh.request(['drafts']);
-    // The badge counts notifications since the app was last open.
+    // The badge counts notifications since the app was last focused.
     const clearBadge = () => {
-      if (document.visibilityState === 'visible')
+      if (document.visibilityState === 'visible' && document.hasFocus())
         clearBadgeCount().catch((error) => console.error('The app badge was not cleared.', error));
     };
     clearBadge();
@@ -57,6 +57,7 @@
       })
       .catch((error) => console.error('The push subscription was not sent.', error));
     document.addEventListener('visibilitychange', clearBadge);
+    window.addEventListener('focus', clearBadge);
     events.addEventListener('message', onMessage);
     window.addEventListener('online', onOnline);
     window.addEventListener('email:state', onDrafts);
@@ -66,6 +67,7 @@
       window.removeEventListener('online', onOnline);
       window.removeEventListener('email:state', onDrafts);
       document.removeEventListener('visibilitychange', clearBadge);
+      window.removeEventListener('focus', clearBadge);
     };
   });
 
