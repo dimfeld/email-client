@@ -236,6 +236,14 @@
       if (reset) frame.style.height = '0px';
       const root = frame.contentDocument?.documentElement;
       if (!root) return;
+      // Scale down emails that are wider than the frame, such as fixed-width newsletters on mobile.
+      // The scale is set again in the same task, so the resize observer sees only the final size.
+      const body = frame.contentDocument?.body;
+      if (body) {
+        body.style.removeProperty('zoom');
+        if (root.scrollWidth > root.clientWidth)
+          body.style.zoom = `${root.clientWidth / root.scrollWidth}`;
+      }
       frame.style.height = `${root.scrollHeight}px`;
       // A horizontal scrollbar takes height from the frame. Add that height back.
       const scrollbarHeight = root.scrollHeight - root.clientHeight;
