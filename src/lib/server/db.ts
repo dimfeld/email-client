@@ -24,6 +24,7 @@ import type { StateScope } from '$lib/state-scopes';
 import { defaultCategories } from './default-categories';
 import { emailSortTime, installThreadSchema } from './thread-schema';
 import type { RemoteImageRule } from '$lib/remote-images';
+import type { ImportanceRule } from './importance-rules';
 import type { GmailMessageAction } from './gmail-actions';
 import { canRespondToEvent } from '$lib/calendar-response';
 
@@ -63,6 +64,16 @@ CREATE TABLE IF NOT EXISTS remote_image_rules (
   kind TEXT NOT NULL CHECK (kind IN ('address', 'domain')),
   value TEXT NOT NULL,
   PRIMARY KEY (kind, value)
+);
+
+CREATE TABLE IF NOT EXISTS importance_rules (
+  id INTEGER PRIMARY KEY,
+  account_email TEXT NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('sender', 'domain', 'subject')),
+  pattern TEXT NOT NULL,
+  importance TEXT NOT NULL CHECK (importance IN ('important', 'useful', 'other')),
+  created_at TEXT NOT NULL,
+  UNIQUE (account_email, kind, pattern)
 );
 
 CREATE TABLE IF NOT EXISTS avatar_images (
@@ -592,6 +603,37 @@ export function getAccountImportanceGuidance(database: DatabaseSync, email: stri
     .prepare('SELECT importance_guidance FROM accounts WHERE email = ?')
     .get(email) as { importance_guidance: string | null } | undefined;
   return row?.importance_guidance ?? null;
+}
+
+export function listImportanceRules(database: DatabaseSync, email: string): ImportanceRule[] {
+  return database
+    .prepare(
+      'SELECT id, kind, pattern, importance FROM importance_rules WHERE account_email = ? ORDER BY id'
+    )
+    .all(email) as ImportanceRule[];
+}
+
+/** Adds a rule, or changes the importance of an existing rule with the same type and value. */
+export function saveImportanceRule(
+  database: DatabaseSync,
+  email: string,
+  rule: Omit<ImportanceRule, 'id'>
+): void {
+  database
+    .prepare(
+      `INSERT INTO importance_rules (account_email, kind, pattern, importance, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (account_email, kind, pattern) DO UPDATE SET importance = excluded.importance`
+    )
+    .run(email, rule.kind, rule.pattern, rule.importance, new Date().toISOString());
+  publishStateChange('accounts');
+}
+
+export function deleteImportanceRule(database: DatabaseSync, email: string, id: number): void {
+  database
+    .prepare('DELETE FROM importance_rules WHERE account_email = ? AND id = ?')
+    .run(email, id);
+  publishStateChange('accounts');
 }
 
 export function populateAccountDisplayName(

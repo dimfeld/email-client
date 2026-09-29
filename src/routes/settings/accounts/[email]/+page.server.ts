@@ -1,13 +1,17 @@
 import { error, fail } from '@sveltejs/kit';
 import {
+  deleteImportanceRule,
   getDatabase,
   listAccounts,
+  listImportanceRules,
   populateAccountDisplayName,
+  saveImportanceRule,
   setAccountAlias,
   setAccountDisplayName,
   setAccountImportanceGuidance,
 } from '$lib/server/db';
 import { fetchGoogleAccountName } from '$lib/server/google-api';
+import { normalizeImportanceRule } from '$lib/server/importance-rules';
 import { syncConfiguredGoogleAccounts } from '$lib/server/google-sync';
 import { listAccountStats, listSettingsAccounts } from '$lib/server/settings';
 import type { Actions, PageServerLoad } from './$types';
@@ -29,6 +33,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   return {
     account: listSettingsAccounts(database).find((account) => account.email === params.email)!,
     stats: listAccountStats(database).get(params.email)!,
+    importanceRules: listImportanceRules(database, params.email),
   };
 };
 
@@ -60,6 +65,29 @@ export const actions: Actions = {
         error: error instanceof Error ? error.message : 'Could not save the importance guidance.',
       });
     }
+  },
+  addImportanceRule: async ({ request, params }) => {
+    const fields = await request.formData();
+    try {
+      const rule = normalizeImportanceRule(
+        fields.get('kind'),
+        fields.get('pattern'),
+        fields.get('importance')
+      );
+      saveImportanceRule(getDatabase(), params.email, rule);
+      return { message: 'Importance rule saved.' };
+    } catch (error) {
+      return fail(400, {
+        error: error instanceof Error ? error.message : 'Could not save the importance rule.',
+      });
+    }
+  },
+  removeImportanceRule: async ({ request, params }) => {
+    const fields = await request.formData();
+    const id = Number(fields.get('id'));
+    if (!Number.isInteger(id)) return fail(400, { error: 'The importance rule is invalid.' });
+    deleteImportanceRule(getDatabase(), params.email, id);
+    return { message: 'Importance rule removed.' };
   },
   syncGoogle: async ({ params }) => {
     try {

@@ -196,7 +196,8 @@ it('adds the account importance guidance to the importance question', async () =
       'test-key',
       () => [{ id: 'custom', name: 'Travel', description: 'Travel messages.', level: 'auto' }],
       () => null,
-      (accountEmail) => (accountEmail === 'casey@example.com' ? ' Landlord mail matters. ' : null)
+      (accountEmail) => (accountEmail === 'casey@example.com' ? ' Landlord mail matters. ' : null),
+      () => []
     );
     await classify({ id: 'message' }, 'casey@example.com');
     await classify({ id: 'message' }, 'other@example.com');
@@ -206,6 +207,38 @@ it('adds the account importance guidance to the importance question', async () =
     expect(withGuidance.instructions).toContain('Landlord mail matters.');
     expect(without.instructions).toBe(importanceQuestionText(null));
     expect(without.instructions).not.toContain('guidance');
+  } finally {
+    request.mockRestore();
+  }
+});
+
+it('uses a matching importance rule instead of the Jev answer and the category level', async () => {
+  const request = spyOn(TypeSafeClient.prototype, 'systemOne').mockResolvedValue({
+    model: 'test',
+    answers: {
+      category: { choice: 'custom', confidence: 0.8, probabilities: { custom: 0.8 } },
+      actionItem: { noul: 0.5 },
+      reminder: { noul: 0.5 },
+      importance: { choice: 'other', confidence: 0.7, probabilities: { other: 0.7 } },
+    },
+  } as never);
+  try {
+    const classify = createJevClassifier(
+      'test-key',
+      () => [{ id: 'custom', name: 'News', description: 'Newsletters.', level: 'other' }],
+      () => null,
+      () => null,
+      (accountEmail) =>
+        accountEmail === 'casey@example.com'
+          ? [{ id: 1, kind: 'domain', pattern: 'bank.com', importance: 'important' }]
+          : []
+    );
+    const email = { id: 'message', from: 'Bank <alerts@mail.bank.com>' };
+    const ruled = await classify(email, 'casey@example.com');
+    expect(ruled.importance).toBe('important');
+    expect(ruled.importanceConfidence).toBeNull();
+    expect(ruled.importanceProbabilities).toEqual({});
+    expect((await classify(email, 'other@example.com')).importance).toBe('other');
   } finally {
     request.mockRestore();
   }

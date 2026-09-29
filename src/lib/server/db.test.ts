@@ -7,13 +7,16 @@ import {
   applyCalendarEventsIncrementalSync,
   applyCalendarListIncrementalSync,
   createDatabase,
+  deleteImportanceRule,
   getEmail,
   getGoogleSyncState,
   listAccounts,
   listCalendarEventsBetween,
   listEmailSummaries,
   listEmails,
+  listImportanceRules,
   populateAccountDisplayName,
+  saveImportanceRule,
   setAccountAlias,
   setAccountDisplayName,
   upsertAccount,
@@ -287,5 +290,32 @@ describe('calendar event range listing', () => {
     expect(
       listCalendarEventsBetween(database, '2026-09-20', '2026-09-27').map((event) => event.eventId)
     ).toEqual(['spanning', 'edge', 'inside']);
+  });
+});
+
+describe('importance rules', () => {
+  it('stores rules per account, updates a repeated rule, and deletes a rule', () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com' });
+    upsertAccount(database, { email: 'two@example.com' });
+    saveImportanceRule(database, 'one@example.com', {
+      kind: 'domain',
+      pattern: 'example.org',
+      importance: 'other',
+    });
+    saveImportanceRule(database, 'one@example.com', {
+      kind: 'domain',
+      pattern: 'example.org',
+      importance: 'important',
+    });
+    const [rule] = listImportanceRules(database, 'one@example.com');
+    expect(listImportanceRules(database, 'one@example.com')).toEqual([
+      { id: rule.id, kind: 'domain', pattern: 'example.org', importance: 'important' },
+    ]);
+    expect(listImportanceRules(database, 'two@example.com')).toEqual([]);
+    deleteImportanceRule(database, 'two@example.com', rule.id);
+    expect(listImportanceRules(database, 'one@example.com')).toHaveLength(1);
+    deleteImportanceRule(database, 'one@example.com', rule.id);
+    expect(listImportanceRules(database, 'one@example.com')).toEqual([]);
   });
 });

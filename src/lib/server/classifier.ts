@@ -5,7 +5,9 @@ import {
   getAccountImportanceGuidance,
   getDatabase,
   listCategories,
+  listImportanceRules,
 } from './db';
+import { matchImportanceRule, type ImportanceRule } from './importance-rules';
 import { formatBodyForDecisions } from './quoted-reply';
 
 export type EmailClassifier = (
@@ -59,7 +61,9 @@ export function createJevClassifier(
   getOwnerName: (accountEmail: string) => string | null = (accountEmail) =>
     getAccountDisplayName(getDatabase(), accountEmail),
   getImportanceGuidance: (accountEmail: string) => string | null = (accountEmail) =>
-    getAccountImportanceGuidance(getDatabase(), accountEmail)
+    getAccountImportanceGuidance(getDatabase(), accountEmail),
+  getImportanceRules: (accountEmail: string) => ImportanceRule[] = (accountEmail) =>
+    listImportanceRules(getDatabase(), accountEmail)
 ): EmailClassifier {
   if (!apiKey) throw new Error('Set TYPESAFE_API_KEY before classifying email.');
   const client = new TypeSafeClient({
@@ -101,10 +105,13 @@ export function createJevClassifier(
       (category) => category.id === response.answers.category.choice
     );
     if (!category) throw new Error('Jev returned an unknown category.');
-    const automatic = category.level === 'auto';
-    // A fixed category level is stored as the message's importance when it is classified.
+    // An importance rule comes first. Then a fixed category level is stored as the message's
+    // importance when it is classified.
+    const rule = accountEmail ? matchImportanceRule(email, getImportanceRules(accountEmail)) : null;
+    const automatic = !rule && category.level === 'auto';
     const importance =
-      category.level === 'auto' ? response.answers.importance.choice : category.level;
+      rule?.importance ??
+      (category.level === 'auto' ? response.answers.importance.choice : category.level);
     return {
       category: category.id,
       importance,

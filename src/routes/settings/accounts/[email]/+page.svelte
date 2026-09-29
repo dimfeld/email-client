@@ -4,6 +4,12 @@
 
   let { data }: { data: PageData } = $props();
   const numberFormat = new Intl.NumberFormat();
+  const ruleKindLabels = {
+    sender: 'Sender address',
+    domain: 'Sender domain',
+    subject: 'Subject pattern',
+  } as const;
+  const importanceLabels = { important: 'Important', useful: 'Useful', other: 'Other' } as const;
   const syncedAt = (value: string | null) =>
     value ? new Date(value).toLocaleString() : 'Not synced';
 </script>
@@ -62,6 +68,57 @@
   </form>
 </section>
 
+<section aria-labelledby="account-importance-rules-heading">
+  <h3 id="account-importance-rules-heading">Importance rules</h3>
+  <p class="help">
+    A rule sets the importance of a matching message. It replaces the Jev answer and the category
+    level. A sender address rule has priority over a domain rule, and a domain rule has priority
+    over a subject rule. A domain rule also matches subdomains. A subject pattern is a regular
+    expression, and case is not important. Rules apply to new messages.
+  </p>
+  <div class="sync-list">
+    {#each data.importanceRules as rule (rule.id)}
+      <form method="POST" action="?/removeImportanceRule" use:enhance class="sync-card">
+        <input type="hidden" name="id" value={rule.id} />
+        <div>
+          <strong class="rule-pattern">{rule.pattern}</strong>
+          <p>{ruleKindLabels[rule.kind]} · {importanceLabels[rule.importance]}</p>
+        </div>
+        <button type="submit" class="remove">Remove</button>
+      </form>
+    {:else}<p class="help">No importance rules are saved.</p>{/each}
+  </div>
+  <form method="POST" action="?/addImportanceRule" use:enhance class="rule-form">
+    <div>
+      <label for="importance-rule-kind">Type</label>
+      <select id="importance-rule-kind" name="kind">
+        {#each Object.entries(ruleKindLabels) as [value, label] (value)}
+          <option {value}>{label}</option>
+        {/each}
+      </select>
+    </div>
+    <div class="rule-value">
+      <label for="importance-rule-pattern">Value</label>
+      <input
+        id="importance-rule-pattern"
+        name="pattern"
+        required
+        autocomplete="off"
+        placeholder="name@example.com, example.com, or ^Invoice"
+      />
+    </div>
+    <div>
+      <label for="importance-rule-importance">Importance</label>
+      <select id="importance-rule-importance" name="importance">
+        {#each Object.entries(importanceLabels) as [value, label] (value)}
+          <option {value}>{label}</option>
+        {/each}
+      </select>
+    </div>
+    <button type="submit">Add rule</button>
+  </form>
+</section>
+
 <section aria-labelledby="account-sync-heading">
   <h3 id="account-sync-heading">Google data sync</h3>
   <p class="help">
@@ -98,6 +155,19 @@
   }
   .sync-card {
     margin-top: 12px;
+  }
+  .rule-pattern {
+    overflow-wrap: anywhere;
+  }
+  .rule-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .rule-value {
+    flex: 1 1 240px;
   }
   .sync-card p {
     margin: 0;
