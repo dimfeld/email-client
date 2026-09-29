@@ -68,7 +68,7 @@ export function buildEmailDocument(
   const queryScheme = colorMode === 'light' ? 'light' : 'dark';
   const canvasScheme = colorMode === 'dark' ? 'dark' : 'light';
   const colorStyles = `html{color-scheme:${canvasScheme}}${colorMode === 'inverted' ? invertedMediaStyles : ''}`;
-  const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; font-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="referrer" content="no-referrer"><style>${compatibilityStyles}${colorStyles}</style>`;
+  const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; font-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${compatibilityStyles}${colorStyles}</style>`;
   const schemeHtml = forceColorScheme(html, queryScheme);
 
   if (/<head\b[^>]*>/i.test(schemeHtml))

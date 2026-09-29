@@ -393,17 +393,17 @@
     );
   }
 
+  // Allowed links open in a new window by the browser's own link handling, because of the
+  // <base target="_blank"> in the message document. Links opened with window.open from here
+  // did not work in the installed iOS app.
   function handleMessageLinkClick(event: MouseEvent) {
     if (event.type === 'auxclick' && event.button !== 1) return;
     const anchor = (event.target as Element | null)?.closest?.(
       'a[href]'
     ) as HTMLAnchorElement | null;
     if (!anchor) return;
-    event.preventDefault();
-    const url = new URL(anchor.href);
-    if (['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) {
-      window.open(url.href, '_blank', 'noopener,noreferrer');
-    }
+    if (!['http:', 'https:', 'mailto:', 'tel:'].includes(new URL(anchor.href).protocol))
+      event.preventDefault();
   }
 
   function attachReadingContent(element: HTMLElement) {
@@ -1615,7 +1615,7 @@
                     <iframe
                       class="html-message"
                       title="Email message content"
-                      sandbox="allow-same-origin"
+                      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                       referrerpolicy="no-referrer"
                       srcdoc={buildEmailDocument(
                         selectedEmail.bodyHtml,

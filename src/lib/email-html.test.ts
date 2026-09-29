@@ -29,6 +29,19 @@ describe('email HTML documents', () => {
     expect(document).toContain('<body><p>Hello</p></body>');
   });
 
+  it('opens links in a new window before any base element in the email', () => {
+    const document = buildEmailDocument(
+      '<html><head><base target="_self"></head><body><a href="https://example.com">Link</a></body></html>',
+      false,
+      'dark'
+    );
+
+    expect(document.indexOf('<base target="_blank">')).toBeGreaterThan(-1);
+    expect(document.indexOf('<base target="_blank">')).toBeLessThan(
+      document.indexOf('<base target="_self">')
+    );
+  });
+
   it('detects remote image sources and CSS background images', () => {
     expect(hasRemoteImages('<img src="https://example.com/image.png">')).toBe(true);
     expect(hasRemoteImages('<div style="background:url(http://example.com/image.png)">')).toBe(
