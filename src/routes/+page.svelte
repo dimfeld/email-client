@@ -415,6 +415,38 @@
     };
   }
 
+  // Opening a thread with several messages shows the start of its latest message. Earlier
+  // message frames grow as they load, so the view follows that message until the reader scrolls.
+  let latestMessageThreadId: number | null = null;
+  function showLatestMessage(threadId: number) {
+    return (article: HTMLElement) => {
+      const container = article.parentElement;
+      if (!container || untrack(() => latestMessageThreadId === threadId)) return;
+      latestMessageThreadId = threadId;
+      const target = () =>
+        Math.min(
+          container.scrollTop +
+            article.getBoundingClientRect().top -
+            container.getBoundingClientRect().top,
+          container.scrollHeight - container.clientHeight
+        );
+      const observer = new ResizeObserver(() => {
+        container.scrollTop = target();
+      });
+      const stop = () => {
+        observer.disconnect();
+        container.removeEventListener('scroll', onScroll);
+      };
+      const onScroll = () => {
+        if (Math.abs(container.scrollTop - target()) > 1) stop();
+      };
+      container.scrollTop = target();
+      for (const child of container.children) observer.observe(child);
+      container.addEventListener('scroll', onScroll);
+      return stop;
+    };
+  }
+
   async function focusMessage(emailId: number) {
     focusReadingPaneOnLoad = true;
     const href = mailboxHref({ message: emailId });
@@ -1242,6 +1274,8 @@
             >{/if}
         </header>
         {#if selectedEmail}
+          {@const threadId = selectedThread.length > 1 ? selectedThread[0].id : null}
+          {@const latestId = selectedEmail.id}
           <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
             <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
             {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
@@ -1254,7 +1288,14 @@
                 : selectedEmail.fromAddress}
               {@const fromAddress = senderAddress(from)}
               {@const showMessageDetails = messageDetailsIds.has(selectedEmail.id)}
-              <article {@attach attachReadingContent} class="reading-content" tabindex="-1">
+              <article
+                {@attach attachReadingContent}
+                {@attach threadId !== null && selectedEmail.id === latestId
+                  ? showLatestMessage(threadId)
+                  : null}
+                class="reading-content"
+                tabindex="-1"
+              >
                 {#if memberIndex > 0 && meaningfulSubject(selectedEmail.subject) !== meaningfulSubject(selectedThread[memberIndex - 1].subject)}
                   <h3>{selectedEmail.subject || '(No subject)'}</h3>
                 {/if}
