@@ -1435,6 +1435,28 @@
                 {/if}
                 {#if form?.error}<p class="notice action-error" role="alert">{form.error}</p>{/if}
                 <div class="message-actions">
+                  {#snippet remoteImageRuleForms(email: typeof selectedEmail)}
+                    {@const address = senderAddress(email.fromAddress)}
+                    {#if address}
+                      {#each [{ kind: 'address', value: address }, { kind: 'domain', value: senderDomain(email.fromAddress) }] as rule (rule.kind)}
+                        <form
+                          method="POST"
+                          action="?/saveRemoteImageRule"
+                          use:enhance={saveRemoteImageRule}
+                        >
+                          <input type="hidden" name="id" value={email.id} />
+                          <input type="hidden" name="kind" value={rule.kind} />
+                          <!-- A submit button cannot close its popover with popovertarget. -->
+                          <button
+                            type="submit"
+                            onclick={(event) =>
+                              event.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover()}
+                            >Always load from {rule.value}</button
+                          >
+                        </form>
+                      {/each}
+                    {:else}<p>No sender address is available for this message.</p>{/if}
+                  {/snippet}
                   <button
                     class="icon-action"
                     aria-label="Reply"
@@ -1507,6 +1529,10 @@
                   </form>
                   {#if selectedEmail}
                     {@const menuId = `message-options-${selectedEmail.id}`}
+                    {@const remoteImagesBlocked =
+                      !!selectedEmail.bodyHtml &&
+                      hasRemoteImages(selectedEmail.bodyHtml) &&
+                      !remoteImagesAllowed(selectedEmail)}
                     <button
                       type="button"
                       class="icon-action"
@@ -1515,6 +1541,20 @@
                       popovertarget={menuId}><Icon name="more" /></button
                     >
                     <div id={menuId} class="action-menu message-options" popover="auto">
+                      <!-- On mobile the remote image options are in this menu. -->
+                      {#if remoteImagesBlocked}
+                        <div class="mobile-only">
+                          <button
+                            type="button"
+                            popovertarget={menuId}
+                            popovertargetaction="hide"
+                            onclick={() => {
+                              remoteImagesFor = selectedEmail.id;
+                            }}>Load remote images</button
+                          >
+                          {@render remoteImageRuleForms(selectedEmail)}
+                        </div>
+                      {/if}
                       {#if selectedEmail.bodyHtml}
                         <button
                           type="button"
@@ -1543,55 +1583,27 @@
                           })}>Add importance rule</button
                       >
                     </div>
-                  {/if}
-                  {#if selectedEmail.bodyHtml && hasRemoteImages(selectedEmail.bodyHtml) && !remoteImagesAllowed(selectedEmail)}
-                    {@const remoteImagesMenuId = `remote-images-options-${selectedEmail.id}`}
-                    <div class="remote-images-control">
-                      <button
-                        type="button"
-                        class="remote-images-button"
-                        aria-label="Load remote images"
-                        title="Load remote images"
-                        onclick={() => {
-                          remoteImagesFor = selectedEmail.id;
-                        }}
-                        ><Icon name="image" /><span class="remote-images-label"
-                          >Load remote images</span
-                        ></button
-                      >
-                      <button
-                        type="button"
-                        class="remote-images-menu"
-                        aria-label="Remote image options"
-                        popovertarget={remoteImagesMenuId}><Icon name="chevron-down" /></button
-                      >
-                      <div id={remoteImagesMenuId} class="action-menu" popover="auto">
-                        {#if senderAddress(selectedEmail.fromAddress)}
-                          <form
-                            method="POST"
-                            action="?/saveRemoteImageRule"
-                            use:enhance={saveRemoteImageRule}
-                          >
-                            <input type="hidden" name="id" value={selectedEmail.id} />
-                            <input type="hidden" name="kind" value="address" />
-                            <button type="submit"
-                              >Always load from {senderAddress(selectedEmail.fromAddress)}</button
-                            >
-                          </form>
-                          <form
-                            method="POST"
-                            action="?/saveRemoteImageRule"
-                            use:enhance={saveRemoteImageRule}
-                          >
-                            <input type="hidden" name="id" value={selectedEmail.id} />
-                            <input type="hidden" name="kind" value="domain" />
-                            <button type="submit"
-                              >Always load from {senderDomain(selectedEmail.fromAddress)}</button
-                            >
-                          </form>
-                        {:else}<p>No sender address is available for this message.</p>{/if}
+                    {#if remoteImagesBlocked}
+                      {@const remoteImagesMenuId = `remote-images-options-${selectedEmail.id}`}
+                      <div class="remote-images-control">
+                        <button
+                          type="button"
+                          class="remote-images-button"
+                          onclick={() => {
+                            remoteImagesFor = selectedEmail.id;
+                          }}>Load remote images</button
+                        >
+                        <button
+                          type="button"
+                          class="remote-images-menu"
+                          aria-label="Remote image options"
+                          popovertarget={remoteImagesMenuId}><Icon name="chevron-down" /></button
+                        >
+                        <div id={remoteImagesMenuId} class="action-menu" popover="auto">
+                          {@render remoteImageRuleForms(selectedEmail)}
+                        </div>
                       </div>
-                    </div>
+                    {/if}
                   {/if}
                 </div>
                 {#if selectedEmail.bodyHtml}
@@ -2371,9 +2383,6 @@
     position: relative;
   }
   .message-actions .remote-images-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
     border-color: var(--color-border-strong);
     border-radius: 4px 0 0 4px;
     background: transparent;
@@ -2406,6 +2415,9 @@
     background: var(--color-surface-raised);
     color: inherit;
     box-shadow: 0 8px 24px var(--color-shadow);
+  }
+  .message-options .mobile-only {
+    display: none;
   }
   .message-options[popover] {
     position-area: block-end span-inline-start;
@@ -2697,15 +2709,15 @@
     .message-actions > * {
       flex: none;
     }
-    .message-actions .icon-action,
-    .message-actions .remote-images-button {
+    .message-actions .icon-action {
       padding: 6px;
     }
-    .message-actions .remote-images-menu {
-      padding: 6px 7px;
-    }
-    .remote-images-label {
+    /* The More actions menu has the remote image options. */
+    .remote-images-control {
       display: none;
+    }
+    .message-options .mobile-only {
+      display: block;
     }
     .message-body,
     .message-paper {
