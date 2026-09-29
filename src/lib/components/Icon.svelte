@@ -5,6 +5,7 @@
     accounts: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 20v-2a8 8 0 0 1 16 0v2z',
     search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
     close: 'M6 6l12 12M18 6L6 18',
+    check: 'M5 12l5 5L20 7',
     minimize: 'M5 12h14',
     expand: 'M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7',
     collapse: 'M20 10h-6V4M14 10l7-7M4 14h6v6M10 14l-7 7',

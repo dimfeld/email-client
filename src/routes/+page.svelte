@@ -503,6 +503,11 @@
     if (snoozeTarget || importanceRuleTarget) return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     if (isInteractiveTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === 'Escape' && pickedRows.size > 0 && !showShortcuts) {
+      event.preventDefault();
+      pickedRows.clear();
+      return;
+    }
     const key = event.key.toLowerCase();
     const eventTarget =
       event.target && typeof event.target === 'object' && 'closest' in event.target
@@ -842,6 +847,78 @@
     importance: Importance | null;
   } | null>(null);
 
+  // Rows picked for a bulk action. The list is in selection mode while a row is picked.
+  const pickedRows = new SvelteSet<number>();
+  function togglePicked(rowId: number) {
+    if (pickedRows.has(rowId)) pickedRows.delete(rowId);
+    else pickedRows.add(rowId);
+  }
+  // A different list has different rows, so a new list starts with no picked rows.
+  $effect.pre(() => {
+    void [activeFilter, search, selectedAccount, mailView];
+    untrack(() => pickedRows.clear());
+  });
+
+  // Archives or deletes the threads of all picked rows, with one Undo for all of them.
+  async function runBulkAction(action: 'archive' | 'delete') {
+    const rowIds = visibleEmails.filter((email) => pickedRows.has(email.id)).map(({ id }) => id);
+    pickedRows.clear();
+    if (!rowIds.length) return;
+    // The open thread closes when it leaves the list.
+    const closedRowId = await queueMailTransition(async () => {
+      const openRowId = selectedSummary?.id ?? null;
+      for (const rowId of rowIds) removedIds.add(rowId);
+      if (openRowId === null || !rowIds.includes(openRowId)) return null;
+      await updateMailboxUrl({ message: null });
+      return openRowId;
+    });
+    const results = await Promise.all(
+      rowIds.map(async (id) => ({ id, result: await postMessageAction(action, id) }))
+    );
+    const done: { id: number; succeededIds: number[] }[] = [];
+    let partial = false;
+    let failure: string | null = null;
+    for (const { id, result } of results) {
+      const data = result.type === 'success' ? result.data : undefined;
+      if (Array.isArray(data?.succeededIds) && data.succeededIds.length) {
+        done.push({ id, succeededIds: data.succeededIds });
+        if (data.error) partial = true;
+      } else {
+        removedIds.delete(id);
+        failure ??= actionError(result);
+      }
+    }
+    if (partial) {
+      // Some messages of a thread did not change, so the list shows the thread again.
+      await getMailList(mailListArgs()).refresh();
+      for (const { id } of done) removedIds.delete(id);
+    }
+    if (failure) showToast(failure, { tone: 'error' });
+    if (!done.length) {
+      if (closedRowId !== null) await updateMailboxUrl({ message: closedRowId });
+      return;
+    }
+    const count = `${done.length} ${done.length === 1 ? 'thread' : 'threads'}`;
+    showToast(action === 'archive' ? `${count} archived.` : `${count} moved to Trash.`, {
+      action: { label: 'Undo', run: () => void undoBulkAction(action, done) },
+    });
+  }
+
+  async function undoBulkAction(
+    action: 'archive' | 'delete',
+    done: { id: number; succeededIds: number[] }[]
+  ) {
+    const results = await Promise.all(
+      done.map(({ id, succeededIds }) =>
+        postMessageAction(undoActions[action], id, { succeededIds })
+      )
+    );
+    await getMailList(mailListArgs()).refresh();
+    for (const { id } of done) removedIds.delete(id);
+    const failed = results.find((result) => result.type !== 'success');
+    if (failed) showToast(actionError(failed), { tone: 'error' });
+  }
+
   // The list row that shows its swipe buttons. Only one row is open at a time.
   let swipeOpen = $state<{ id: number; side: SwipeSide } | null>(null);
   function swipeActions(email: EmailSummary, canArchive: boolean, starred: boolean) {
@@ -1157,6 +1234,7 @@
           {#if visibleEmails.length > 0}
             {@const canArchive = mailView === 'inbox' && !search}
             {@const openRow = swipeOpen}
+            {@const picking = pickedRows.size > 0}
             <ul
               aria-label="Messages"
               style:padding-top="{rowWindow.start * rowHeight}px"
@@ -1166,10 +1244,11 @@
                 {@const starred = starOverrides.get(email.id) ?? email.starred ?? false}
                 {@const important = email.importance === 'important'}
                 {@const swipe = swipeActions(email, canArchive, starred)}
+                {@const picked = pickedRows.has(email.id)}
                 <li aria-posinset={rowWindow.start + index + 1} aria-setsize={listSize}>
                   <SwipeRow
-                    left={swipe.left}
-                    right={swipe.right}
+                    left={picking ? null : swipe.left}
+                    right={picking ? null : swipe.right}
                     open={openRow?.id === email.id ? openRow.side : null}
                     onOpenChange={(side) => (swipeOpen = side ? { id: email.id, side } : null)}
                   >
@@ -1182,14 +1261,35 @@
                       class:unread={email.unread && !readIds.has(email.id)}
                       class:selected={selectedEmail?.threadKey === email.threadKey &&
                         selectedEmail?.accountEmail === email.accountEmail}
+                      class:picked
+                      onclick={(event) => {
+                        // In selection mode a click picks the row instead of opening it.
+                        if (!picking) return;
+                        event.preventDefault();
+                        togglePicked(email.id);
+                      }}
                       aria-current={selectedEmail?.threadKey === email.threadKey &&
                       selectedEmail?.accountEmail === email.accountEmail
                         ? 'true'
                         : undefined}
                     >
-                      <span class="sender-avatar" aria-hidden="true">
-                        {senderName(email.fromAddress).slice(0, 1).toUpperCase()}
-                        {#if senderAddress(email.fromAddress)}
+                      <span
+                        class="sender-avatar"
+                        aria-hidden="true"
+                        onclick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          togglePicked(email.id);
+                        }}
+                      >
+                        {#if picking}
+                          <span class="pick-box" class:checked={picked}
+                            >{#if picked}<Icon name="check" size="80%" />{/if}</span
+                          >
+                        {:else}
+                          {senderName(email.fromAddress).slice(0, 1).toUpperCase()}
+                        {/if}
+                        {#if !picking && senderAddress(email.fromAddress)}
                           <img
                             src={`/avatar?account=${encodeURIComponent(email.accountEmail)}&from=${encodeURIComponent(senderAddress(email.fromAddress)!)}`}
                             alt=""
@@ -1198,6 +1298,7 @@
                           />
                         {/if}
                       </span>
+                      {#if picked}<span class="visually-hidden">Selected.</span>{/if}
                       <strong class="sender" title={email.fromAddress}
                         >{senderName(email.fromAddress)}</strong
                       >
@@ -1260,6 +1361,25 @@
             </div>
           {/if}
         </div>
+        {#if pickedRows.size > 0}
+          <div class="bulk-toolbar" role="toolbar" aria-label="Selected messages">
+            <button
+              class="icon-action"
+              aria-label="Clear selection"
+              title="Clear selection (Esc)"
+              onclick={() => pickedRows.clear()}><Icon name="close" /></button
+            >
+            <span class="bulk-count" aria-live="polite">{pickedRows.size} selected</span>
+            {#if mailView === 'inbox' && !search}
+              <button onclick={() => void runBulkAction('archive')}
+                ><Icon name="archive" /> Archive</button
+              >
+            {/if}
+            <button class="delete-button" onclick={() => void runBulkAction('delete')}
+              ><Icon name="trash" /> Delete</button
+            >
+          </div>
+        {/if}
       </section>
 
       <section class="detail-pane" aria-label="Message detail">
@@ -1993,6 +2113,63 @@
     color: var(--color-avatar-text);
     font-size: var(--text-xs);
     overflow: hidden;
+  }
+  .sender-avatar {
+    cursor: pointer;
+  }
+  .pick-box {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--color-border-hover);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-on-accent);
+  }
+  .pick-box.checked {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+  }
+  .message.picked {
+    background: var(--color-accent-bg-subtle);
+  }
+  .bulk-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface-raised);
+  }
+  .bulk-count {
+    flex: 1;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+  .bulk-toolbar button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--color-accent-text);
+    font-size: 0.8rem;
+    font-weight: 650;
+  }
+  .bulk-toolbar button:hover {
+    border-color: var(--color-border-hover);
+    background: var(--color-surface-hover);
+  }
+  .bulk-toolbar .icon-action {
+    padding: 8px;
+    color: var(--color-text-secondary);
+  }
+  .bulk-toolbar .delete-button {
+    border-color: var(--color-danger-border);
+    color: var(--color-danger);
   }
   .sender-avatar img {
     position: absolute;
