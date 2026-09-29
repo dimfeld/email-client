@@ -1776,7 +1776,7 @@
     margin: 0;
   }
   main {
-    height: 100dvh;
+    height: calc(100dvh - var(--app-inset-top, 0px));
     display: flex;
     flex-direction: column;
   }

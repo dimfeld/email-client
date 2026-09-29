@@ -664,7 +664,7 @@
       right: 8px;
       bottom: 8px;
       width: calc(100vw - 16px);
-      max-height: calc(100dvh - 16px);
+      max-height: calc(100dvh - 16px - var(--app-inset-top, 0px));
     }
     .save-status {
       display: none;

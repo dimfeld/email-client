@@ -228,7 +228,7 @@
   @media (max-width: 760px) {
     .chat {
       position: fixed;
-      inset: 0;
+      inset: var(--app-inset-top, 0px) 0 0;
       z-index: 8;
       width: 100vw;
       background: var(--color-surface);

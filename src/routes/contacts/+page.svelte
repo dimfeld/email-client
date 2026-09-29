@@ -385,7 +385,7 @@
     .book {
       grid-template-columns: 1fr;
       height: auto;
-      min-height: calc(100vh - 61px);
+      min-height: calc(100vh - 61px - var(--app-inset-top, 0px));
     }
     .list-pane {
       border-right: 0;

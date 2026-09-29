@@ -284,7 +284,7 @@
       grid-template-columns: 1fr;
       align-content: start;
       height: auto;
-      min-height: calc(100vh - 61px);
+      min-height: calc(100vh - 61px - var(--app-inset-top, 0px));
     }
     .list {
       overflow: visible;

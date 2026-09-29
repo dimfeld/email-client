@@ -162,6 +162,7 @@
   .app-shell {
     display: flex;
     min-width: 0;
+    padding-top: var(--app-inset-top, 0px);
   }
   .page-content {
     flex: 1;
@@ -181,10 +182,10 @@
   @media (max-width: 760px) {
     .chat-panel {
       position: fixed;
-      inset: 0;
+      inset: var(--app-inset-top, 0px) 0 0;
       z-index: 8;
       width: 100vw;
-      height: 100dvh;
+      height: calc(100dvh - var(--app-inset-top, 0px));
     }
   }
 </style>

@@ -68,6 +68,14 @@
   box-sizing: border-box;
 }
 
+/* iOS draws a blur under the status bar of an installed app, and no setting turns it off.
+   The page starts lower, so that content does not go into the blur. */
+@media (display-mode: standalone) and (max-width: 760px) {
+  :root {
+    --app-inset-top: 8px;
+  }
+}
+
 html {
   background: var(--color-bg);
   font-family: var(--font-sans);
