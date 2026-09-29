@@ -1,8 +1,20 @@
 import { importanceLevels, type Importance } from '$lib/categories';
-import { senderAddress } from '$lib/remote-images';
+import { senderAddress, senderDomain } from '$lib/remote-images';
 
 export const importanceRuleKinds = ['sender', 'domain', 'subject'] as const;
 export type ImportanceRuleKind = (typeof importanceRuleKinds)[number];
+
+export const importanceRuleKindLabels: Record<ImportanceRuleKind, string> = {
+  sender: 'Sender address',
+  domain: 'Sender domain',
+  subject: 'Subject pattern',
+};
+
+export const importanceLabels: Record<Importance, string> = {
+  important: 'Important',
+  useful: 'Useful',
+  other: 'Other',
+};
 
 export type ImportanceRule = {
   id: number;
@@ -38,6 +50,20 @@ export function normalizeImportanceRule(
     }
   }
   return { kind: kind as ImportanceRuleKind, pattern: value, importance: importance as Importance };
+}
+
+/**
+ * Returns a rule value that matches a message: its sender address, its sender domain, or a
+ * regular expression for its subject without reply and forward prefixes.
+ */
+export function suggestImportanceRulePattern(
+  kind: ImportanceRuleKind,
+  email: { fromAddress: string; subject: string }
+): string {
+  if (kind === 'sender') return senderAddress(email.fromAddress) ?? '';
+  if (kind === 'domain') return senderDomain(email.fromAddress) ?? '';
+  const subject = email.subject.replace(/^(?:(?:re|fw|fwd):\s*)+/i, '').trim();
+  return subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

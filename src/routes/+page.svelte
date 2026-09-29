@@ -9,6 +9,8 @@
   import CalendarRail from '$lib/components/CalendarRail.svelte';
   import SwipeRow, { type SwipeActions } from '$lib/components/SwipeRow.svelte';
   import SnoozeDialog from '$lib/components/SnoozeDialog.svelte';
+  import type { Importance } from '$lib/categories';
+  import ImportanceRuleDialog from '$lib/components/ImportanceRuleDialog.svelte';
   import SearchField from '$lib/components/SearchField.svelte';
   import PimSearchResults from '$lib/components/PimSearchResults.svelte';
   import AddTodoButton from '$lib/components/AddTodoButton.svelte';
@@ -456,7 +458,7 @@
   }
 
   async function handleKeydown(event: KeyboardEvent) {
-    if (snoozeTarget) return;
+    if (snoozeTarget || importanceRuleTarget) return;
     if (showShortcuts && event.key !== 'Escape' && event.key !== '?') return;
     if (isInteractiveTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
@@ -791,6 +793,12 @@
 
   // The row that the snooze dialog is open for.
   let snoozeTarget = $state<{ id: number; rowId: number } | null>(null);
+  let importanceRuleTarget = $state<{
+    id: number;
+    fromAddress: string;
+    subject: string;
+    importance: Importance | null;
+  } | null>(null);
 
   // The list row that shows its swipe buttons. Only one row is open at a time.
   let swipeOpen = $state<{ id: number; side: SwipeSide } | null>(null);
@@ -1447,7 +1455,7 @@
                       title="Delete"><Icon name="trash" /></button
                     >
                   </form>
-                  {#if selectedEmail.bodyHtml}
+                  {#if selectedEmail}
                     {@const menuId = `message-options-${selectedEmail.id}`}
                     <button
                       type="button"
@@ -1457,18 +1465,32 @@
                       popovertarget={menuId}><Icon name="more" /></button
                     >
                     <div id={menuId} class="action-menu message-options" popover="auto">
+                      {#if selectedEmail.bodyHtml}
+                        <button
+                          type="button"
+                          popovertarget={menuId}
+                          popovertargetaction="hide"
+                          onclick={() => {
+                            if (originalColorIds.has(selectedEmail.id))
+                              originalColorIds.delete(selectedEmail.id);
+                            else originalColorIds.add(selectedEmail.id);
+                          }}
+                          >{originalColorIds.has(selectedEmail.id)
+                            ? 'Show in dark mode'
+                            : 'Show original colors'}</button
+                        >
+                      {/if}
                       <button
                         type="button"
                         popovertarget={menuId}
                         popovertargetaction="hide"
-                        onclick={() => {
-                          if (originalColorIds.has(selectedEmail.id))
-                            originalColorIds.delete(selectedEmail.id);
-                          else originalColorIds.add(selectedEmail.id);
-                        }}
-                        >{originalColorIds.has(selectedEmail.id)
-                          ? 'Show in dark mode'
-                          : 'Show original colors'}</button
+                        onclick={() =>
+                          (importanceRuleTarget = {
+                            id: selectedEmail.id,
+                            fromAddress: selectedEmail.fromAddress,
+                            subject: selectedEmail.subject,
+                            importance: selectedEmail.importance,
+                          })}>Add importance rule</button
                       >
                     </div>
                   {/if}
@@ -1565,6 +1587,12 @@
       />
     </div>
   </div>
+  {#if importanceRuleTarget}
+    <ImportanceRuleDialog
+      email={importanceRuleTarget}
+      onClose={() => (importanceRuleTarget = null)}
+    />
+  {/if}
   {#if snoozeTarget}
     {@const target = snoozeTarget}
     <SnoozeDialog

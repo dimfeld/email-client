@@ -1,15 +1,10 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
+  import { importanceLabels, importanceRuleKindLabels } from '$lib/importance-rules';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
   const numberFormat = new Intl.NumberFormat();
-  const ruleKindLabels = {
-    sender: 'Sender address',
-    domain: 'Sender domain',
-    subject: 'Subject pattern',
-  } as const;
-  const importanceLabels = { important: 'Important', useful: 'Useful', other: 'Other' } as const;
   const syncedAt = (value: string | null) =>
     value ? new Date(value).toLocaleString() : 'Not synced';
 </script>
@@ -82,7 +77,7 @@
         <input type="hidden" name="id" value={rule.id} />
         <div>
           <strong class="rule-pattern">{rule.pattern}</strong>
-          <p>{ruleKindLabels[rule.kind]} · {importanceLabels[rule.importance]}</p>
+          <p>{importanceRuleKindLabels[rule.kind]} · {importanceLabels[rule.importance]}</p>
         </div>
         <button type="submit" class="remove">Remove</button>
       </form>
@@ -92,7 +87,7 @@
     <div>
       <label for="importance-rule-kind">Type</label>
       <select id="importance-rule-kind" name="kind">
-        {#each Object.entries(ruleKindLabels) as [value, label] (value)}
+        {#each Object.entries(importanceRuleKindLabels) as [value, label] (value)}
           <option {value}>{label}</option>
         {/each}
       </select>

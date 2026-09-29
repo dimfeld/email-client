@@ -11,7 +11,7 @@ import {
   setAccountImportanceGuidance,
 } from '$lib/server/db';
 import { fetchGoogleAccountName } from '$lib/server/google-api';
-import { normalizeImportanceRule } from '$lib/server/importance-rules';
+import { normalizeImportanceRule } from '$lib/importance-rules';
 import { syncConfiguredGoogleAccounts } from '$lib/server/google-sync';
 import { listAccountStats, listSettingsAccounts } from '$lib/server/settings';
 import type { Actions, PageServerLoad } from './$types';

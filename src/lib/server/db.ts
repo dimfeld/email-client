@@ -24,7 +24,7 @@ import type { StateScope } from '$lib/state-scopes';
 import { defaultCategories } from './default-categories';
 import { emailSortTime, installThreadSchema } from './thread-schema';
 import type { RemoteImageRule } from '$lib/remote-images';
-import type { ImportanceRule } from './importance-rules';
+import type { ImportanceRule } from '$lib/importance-rules';
 import type { GmailMessageAction } from './gmail-actions';
 import { canRespondToEvent } from '$lib/calendar-response';
 

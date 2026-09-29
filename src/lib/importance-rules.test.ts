@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   matchImportanceRule,
   normalizeImportanceRule,
+  suggestImportanceRulePattern,
   type ImportanceRule,
 } from './importance-rules';
 
@@ -54,5 +55,25 @@ describe('normalizeImportanceRule', () => {
     expect(() => normalizeImportanceRule('subject', ' ', 'other')).toThrow('Enter a value');
     expect(() => normalizeImportanceRule('body', 'x', 'other')).toThrow('rule type');
     expect(() => normalizeImportanceRule('subject', 'x', 'urgent')).toThrow('importance');
+  });
+});
+
+describe('suggestImportanceRulePattern', () => {
+  const email = { fromAddress: 'Pat <Pat@Mail.Example.com>', subject: 'Re: FWD: Invoice (#4) $5?' };
+
+  it('suggests the sender address, the domain, or an escaped subject', () => {
+    expect(suggestImportanceRulePattern('sender', email)).toBe('pat@mail.example.com');
+    expect(suggestImportanceRulePattern('domain', email)).toBe('mail.example.com');
+    const subject = suggestImportanceRulePattern('subject', email);
+    expect(subject).toBe('Invoice \\(#4\\) \\$5\\?');
+    expect(
+      matchImportanceRule({ subject: 'Invoice (#4) $5?' }, [
+        { id: 1, kind: 'subject', pattern: subject, importance: 'other' },
+      ])
+    ).not.toBeNull();
+  });
+
+  it('suggests an empty value when the sender address is not valid', () => {
+    expect(suggestImportanceRulePattern('sender', { fromAddress: 'nobody', subject: '' })).toBe('');
   });
 });

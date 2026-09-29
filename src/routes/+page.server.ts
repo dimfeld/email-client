@@ -7,9 +7,11 @@ import {
   getThreadActionTargets,
   ignoreCalendarInvite,
   listAccounts,
+  saveImportanceRule,
   saveRemoteImageRule,
 } from '$lib/server/db';
 import { senderAddress, senderDomain } from '$lib/remote-images';
+import { normalizeImportanceRule } from '$lib/importance-rules';
 import type { GmailMessageAction } from '$lib/server/gmail-actions';
 import type { Actions } from './$types';
 
@@ -156,5 +158,26 @@ export const actions: Actions = {
     if (!value) return fail(400, { error: 'This message has no valid sender address.' });
     saveRemoteImageRule(database, { kind, value });
     return { message: `Remote images will load from ${value}.` };
+  },
+  saveImportanceRule: async ({ request }) => {
+    const fields = await request.formData();
+    const id = Number(fields.get('id'));
+    if (!Number.isInteger(id) || id <= 0) return fail(400, { error: 'The message is invalid.' });
+    const database = getDatabase();
+    const email = getEmail(database, id);
+    if (!email) return fail(404, { error: 'The message is no longer available.' });
+    try {
+      const rule = normalizeImportanceRule(
+        fields.get('kind'),
+        fields.get('pattern'),
+        fields.get('importance')
+      );
+      saveImportanceRule(database, email.accountEmail, rule);
+      return { message: 'Importance rule saved. It applies to new messages.' };
+    } catch (error) {
+      return fail(400, {
+        error: error instanceof Error ? error.message : 'Could not save the importance rule.',
+      });
+    }
   },
 };
