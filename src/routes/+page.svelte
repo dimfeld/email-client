@@ -21,7 +21,7 @@
   import { page } from '$app/state';
   import type { ActionResult, SubmitFunction } from '@sveltejs/kit';
   import { tick, untrack } from 'svelte';
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
   import { buildEmailDocument, emailColorMode, hasRemoteImages } from '$lib/email-html';
   import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
@@ -132,6 +132,8 @@
   // The server filters the list and counts each filter over the whole mailbox.
   let filterCounts = $derived(counts);
   let mobileDetail = $derived(new URL(currentUrl).searchParams.has('message'));
+  // Matches the mobile breakpoint in the styles. Extracted items start collapsed there.
+  const narrowScreen = new MediaQuery('max-width: 760px');
   const chat = getChatContext();
   let showCategories = $state(false);
   let showShortcuts = $state(false);
@@ -1018,7 +1020,7 @@
   <title>Email Check — {data.selectedAccount ?? 'All accounts'}</title>
 </svelte:head>
 
-<main>
+<main class:detail-open={mobileDetail}>
   <AppMasthead active="/">
     <div class="mail-view">
       <button
@@ -1276,6 +1278,7 @@
         {#if selectedEmail}
           {@const threadId = selectedThread.length > 1 ? selectedThread[0].id : null}
           {@const latestId = selectedEmail.id}
+          {@const extractionOpen = !narrowScreen.current}
           <div {@attach markReadOnOpen(selectedEmail)} class="thread-content">
             <h2 class="thread-subject">{selectedThread[0]?.subject || '(No subject)'}</h2>
             {#each selectedThread as selectedEmail, memberIndex (selectedEmail.id)}
@@ -1376,8 +1379,11 @@
                     aria-label="Extracted action items and reminders"
                   >
                     {#if selectedEmail.actionItems.length > 0}
-                      <div class="extraction-group">
-                        <h3>Action items</h3>
+                      <details class="extraction-group" open={extractionOpen}>
+                        <summary
+                          ><h3>Action items ({selectedEmail.actionItems.length})</h3>
+                          <Icon name="chevron-down" /></summary
+                        >
                         <ul>
                           {#each selectedEmail.actionItems as item}
                             <li>
@@ -1395,11 +1401,14 @@
                             </li>
                           {/each}
                         </ul>
-                      </div>
+                      </details>
                     {/if}
                     {#if selectedEmail.reminders.length > 0}
-                      <div class="extraction-group">
-                        <h3>Reminders</h3>
+                      <details class="extraction-group" open={extractionOpen}>
+                        <summary
+                          ><h3>Reminders ({selectedEmail.reminders.length})</h3>
+                          <Icon name="chevron-down" /></summary
+                        >
                         <ul>
                           {#each selectedEmail.reminders as reminder}
                             <li>
@@ -1417,7 +1426,7 @@
                             </li>
                           {/each}
                         </ul>
-                      </div>
+                      </details>
                     {/if}
                     {#if selectedEmail.extractionError}<p class="notice extraction-error">
                         Extraction failed: {selectedEmail.extractionError}
@@ -1541,9 +1550,14 @@
                       <button
                         type="button"
                         class="remote-images-button"
+                        aria-label="Load remote images"
+                        title="Load remote images"
                         onclick={() => {
                           remoteImagesFor = selectedEmail.id;
-                        }}>Load remote images</button
+                        }}
+                        ><Icon name="image" /><span class="remote-images-label"
+                          >Load remote images</span
+                        ></button
                       >
                       <button
                         type="button"
@@ -2073,7 +2087,7 @@
     background: var(--color-surface);
   }
   .reading-content {
-    padding: 24px;
+    padding: 12px 24px 24px;
     overflow-wrap: anywhere;
     border-top: 1px solid var(--color-border);
   }
@@ -2082,7 +2096,7 @@
     min-height: 0;
   }
   .thread-subject {
-    padding: 20px 24px;
+    padding: 14px 24px;
     margin: 0;
     font-size: 1.1rem;
   }
@@ -2091,6 +2105,7 @@
     outline: none;
   }
   .reading-content h3 {
+    margin-bottom: 6px;
     font-size: 1.05rem;
     line-height: 1.35;
     letter-spacing: -0.025em;
@@ -2100,7 +2115,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
-    margin: 16px 0 8px;
+    margin-bottom: 4px;
     font-size: var(--text-sm);
   }
   .account-badge {
@@ -2197,7 +2212,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
-    margin-top: 24px;
+    margin-top: 12px;
     padding: 16px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -2206,7 +2221,25 @@
   .extraction-group {
     min-width: 0;
   }
+  .extraction-group summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--color-accent-text);
+    list-style: none;
+    cursor: pointer;
+  }
+  .extraction-group summary::-webkit-details-marker {
+    display: none;
+  }
+  .extraction-group summary :global(svg) {
+    transition: transform var(--motion-fast);
+  }
+  .extraction-group[open] summary :global(svg) {
+    transform: rotate(180deg);
+  }
   .extraction-group h3 {
+    margin: 0;
     color: var(--color-accent-text);
     font-size: 0.78rem;
     letter-spacing: 0.02em;
@@ -2303,8 +2336,8 @@
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin: 10px -24px 0;
-    padding: 10px 24px;
+    margin: 4px -24px 0;
+    padding: 6px 24px;
     background: var(--color-surface);
   }
   .message-actions button {
@@ -2338,6 +2371,9 @@
     position: relative;
   }
   .message-actions .remote-images-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     border-color: var(--color-border-strong);
     border-radius: 4px 0 0 4px;
     background: transparent;
@@ -2612,8 +2648,71 @@
     .detail-toolbar {
       flex-wrap: wrap;
     }
+    /* The message gets the full screen. The detail toolbar has the Back button. */
+    main.detail-open > :global(.masthead) {
+      display: none;
+    }
+    .detail-toolbar {
+      flex: none;
+      min-height: 0;
+      padding: 2px 12px;
+    }
+    /* The badge and the sender shrink so that the time stays on the row. */
+    .account-badge,
+    .message-sender {
+      flex-shrink: 1;
+      min-width: 0;
+    }
+    .message-sender-address {
+      display: none;
+    }
+    .back-button {
+      padding: 6px 0;
+    }
+    .thread-subject {
+      padding: 8px 12px;
+      font-size: 1rem;
+    }
+    .reading-content {
+      padding: 6px 12px 16px;
+    }
     .extraction-panel {
       grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+      margin-top: 6px;
+      padding: 6px 10px;
+    }
+    .extraction-group ul {
+      margin: 8px 0 4px;
+    }
+    /* All actions fit on one row. The row scrolls if the screen is very narrow. */
+    .message-actions {
+      flex-wrap: nowrap;
+      gap: 4px;
+      margin: 2px -12px 0;
+      padding: 4px 12px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .message-actions > * {
+      flex: none;
+    }
+    .message-actions .icon-action,
+    .message-actions .remote-images-button {
+      padding: 6px;
+    }
+    .message-actions .remote-images-menu {
+      padding: 6px 7px;
+    }
+    .remote-images-label {
+      display: none;
+    }
+    .message-body,
+    .message-paper {
+      margin-top: 8px;
+    }
+    .message-body {
+      padding-top: 12px;
     }
   }
 </style>

@@ -28,6 +28,7 @@
     grip: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
     todo: 'M4 4h16v16H4zM8 12l3 3 5-6',
     note: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5',
+    image: 'M4 4h16v16H4zM4 16l5-5 4 4 3-3 4 4M15 9h.01',
     more: 'M5 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M12 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0M19 12m-1 0a1 1 0 1 0 2 0 1 1 0 1 0-2 0',
   } as const;
   export type IconName = keyof typeof paths;
