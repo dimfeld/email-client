@@ -243,6 +243,10 @@
   }
 
   function fitMessageFrame(frame: HTMLIFrameElement, reset: boolean) {
+    // The reset makes the thread short for a moment, and the browser then clamps its scroll
+    // position. Put the position back so that the reset does not move the view.
+    const scroller = frame.closest('.thread-content');
+    const scrollTop = scroller?.scrollTop;
     try {
       // A reset lets the frame shrink. Later fits only follow content growth, such as images.
       if (reset) frame.style.height = '0px';
@@ -263,6 +267,8 @@
     } catch {
       frame.style.removeProperty('height');
     }
+    if (scroller && scrollTop !== undefined && scroller.scrollTop !== scrollTop)
+      scroller.scrollTop = scrollTop;
   }
 
   function formatDate(value: string | null): string {
@@ -446,12 +452,18 @@
 
   // Opening a thread with several messages shows the start of its latest message. Earlier
   // message frames grow as they load, so the view follows that message until the reader scrolls.
+  // The attachment runs again when the thread data refreshes, such as after the message is
+  // marked read. It continues to follow until the reader scrolls.
   let latestMessageThreadId: number | null = null;
+  let readerScrolledThread = false;
   function showLatestMessage(threadId: number) {
     return (article: HTMLElement) => {
       const container = article.parentElement;
-      if (!container || untrack(() => latestMessageThreadId === threadId)) return;
-      latestMessageThreadId = threadId;
+      if (!container) return;
+      if (latestMessageThreadId !== threadId) {
+        latestMessageThreadId = threadId;
+        readerScrolledThread = false;
+      } else if (readerScrolledThread) return;
       const target = () =>
         Math.min(
           container.scrollTop +
@@ -472,7 +484,16 @@
         container.removeEventListener('scroll', onScroll);
       };
       const onScroll = () => {
-        if (Math.abs(container.scrollTop - followedTop) > 1) stop();
+        const scrollTop = container.scrollTop;
+        if (Math.abs(scrollTop - followedTop) <= 1) return;
+        // When the thread gets shorter, the browser moves the view up to the new end.
+        // That is not a reader scroll, so keep following.
+        const end = container.scrollHeight - container.clientHeight;
+        if (scrollTop < followedTop && scrollTop >= end - 1) follow();
+        else {
+          readerScrolledThread = true;
+          stop();
+        }
       };
       follow();
       for (const child of container.children) observer.observe(child);
