@@ -25,14 +25,18 @@
   import type { Snippet } from 'svelte';
   import { getChatContext } from '$lib/chat-context';
 
-  // `children` holds the controls of the page, such as the mail search and Compose button.
-  let { active, children }: { active: (typeof appLinks)[number]['href']; children?: Snippet } =
-    $props();
+  // `start` goes before the links, such as the mail view menu. `children` holds the controls of
+  // the page, such as the mail search and Compose button.
+  let {
+    active,
+    start,
+    children,
+  }: { active: (typeof appLinks)[number]['href']; start?: Snippet; children?: Snippet } = $props();
   const chat = getChatContext();
 </script>
 
-<header class="masthead">
-  <a class="brand" href="/"><span aria-hidden="true">@</span><strong>Email Check</strong></a>
+<header class="masthead" class:has-start={start}>
+  {#if start}{@render start()}{/if}
   <nav aria-label="Application">
     {#each appLinks as link (link.href)}<a
         class:active={link.href === active}
@@ -49,8 +53,8 @@
 </header>
 
 <style>
-  /* The brand and the links stay in the same place on each page. Page controls go to the right,
-     and move to a second row when the row is too narrow. */
+  /* The links stay in the same place on each page. Page controls go to the right, and move to a
+     second row when the row is too narrow. */
   .masthead {
     display: flex;
     flex-wrap: wrap;
@@ -59,17 +63,6 @@
     min-height: 61px;
     padding: 12px 24px;
     border-bottom: 1px solid var(--color-border);
-  }
-  .brand {
-    display: flex;
-    gap: 10px;
-    color: var(--color-text);
-    text-decoration: none;
-    white-space: nowrap;
-  }
-  .brand span {
-    color: var(--color-accent);
-    font-size: 1.4rem;
   }
   nav {
     display: flex;
@@ -111,16 +104,14 @@
     background: var(--color-accent-bg-subtle);
   }
   @media (max-width: 760px) {
-    /* The links are the full first row, so the brand does not use a row of its own. */
+    /* The links are the full first row. The start content and the page controls go below. */
     .masthead {
       gap: 8px;
       min-height: 0;
       padding: 0 8px 8px;
     }
-    .brand {
-      display: none;
-    }
     nav {
+      order: -1;
       width: calc(100% + 16px);
       margin-inline: -8px;
       padding: 12px 16px 4px;
@@ -134,6 +125,10 @@
     .tools {
       flex-basis: 100%;
       justify-content: flex-start;
+    }
+    .has-start .tools {
+      flex-basis: 0;
+      justify-content: flex-end;
     }
   }
 </style>

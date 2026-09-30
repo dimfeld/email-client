@@ -1219,15 +1219,17 @@
 
 <main class:detail-open={mobileDetail}>
   <AppMasthead active="/">
-    <div class="mail-view">
-      <button
-        class="menu-button"
-        aria-label="Toggle mail categories"
-        aria-expanded={showCategories}
-        onclick={() => (showCategories = !showCategories)}><Icon name="menu" /></button
-      >
-      <h1>{mailViews[mailView]}</h1>
-    </div>
+    {#snippet start()}
+      <div class="mail-view">
+        <button
+          class="menu-button"
+          aria-label="Toggle mail categories"
+          aria-expanded={showCategories}
+          onclick={() => (showCategories = !showCategories)}><Icon name="menu" /></button
+        >
+        <h1>{mailViews[mailView]}</h1>
+      </div>
+    {/snippet}
     <form method="GET" class="search-form">
       {#if data.selectedAccount}<input
           type="hidden"
@@ -2050,7 +2052,6 @@
     min-width: 0;
   }
   .mail-view {
-    margin-right: auto;
     display: flex;
     align-items: center;
     gap: 12px;
