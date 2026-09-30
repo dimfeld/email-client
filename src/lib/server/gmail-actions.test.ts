@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
 import { createDatabase, listEmails, upsertAccount, upsertEmails } from './db';
 import {
+  applyGmailBulkThreadAction,
   applyGmailMessageAction,
   applyGmailThreadAction,
   runGmailMessageAction,
@@ -226,6 +227,47 @@ it('keeps completed thread changes on a partial Gmail failure and undoes only th
       .map((email) => email.gmailId)
       .sort()
   ).toEqual(['first', 'late', 'second']);
+});
+
+it('archives each thread of a bulk action and reports a failed thread without stopping', async () => {
+  database = createDatabase(':memory:');
+  const account = { email: 'one@example.com', refreshToken: 'token' };
+  upsertAccount(database, account);
+  upsertEmails(database, account.email, [
+    { id: 'a1', threadId: 'a', labels: ['INBOX'] },
+    { id: 'a2', threadId: 'a', labels: ['INBOX'] },
+    { id: 'b1', threadId: 'b', labels: ['INBOX'] },
+  ]);
+  const idOf = (gmailId: string) =>
+    Number(database!.prepare('SELECT id FROM emails WHERE gmail_id = ?').get(gmailId)!.id);
+  const request = (async (_account: GoogleAccount, url: string) => {
+    if (url.includes('/b1/')) throw new Error('Gmail failed');
+    return {};
+  }) as Parameters<typeof applyGmailBulkThreadAction>[3];
+  const results = await applyGmailBulkThreadAction(
+    database,
+    [{ id: idOf('a1') }, { id: idOf('b1') }, { id: 999 }],
+    'archive',
+    request
+  );
+  expect(results).toEqual([
+    { id: idOf('a1'), succeededIds: [idOf('a1'), idOf('a2')], error: null },
+    { id: idOf('b1'), succeededIds: [], error: 'Gmail failed' },
+    { id: 999, succeededIds: [], error: 'The thread is no longer available.' },
+  ]);
+  expect(listEmails(database).map((email) => email.gmailId)).toEqual(['b1']);
+
+  await applyGmailBulkThreadAction(
+    database,
+    [{ id: idOf('a1'), succeededIds: results[0].succeededIds }],
+    'unarchive',
+    request
+  );
+  expect(
+    listEmails(database)
+      .map((email) => email.gmailId)
+      .sort()
+  ).toEqual(['a1', 'a2', 'b1']);
 });
 
 it('stars the latest thread message and unstars every starred message', async () => {

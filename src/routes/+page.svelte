@@ -39,6 +39,7 @@
   } from './mail.remote';
   import type { ActionData } from './$types';
   import type { EmailSummary, StoredEmail } from '$lib/server/types';
+  import type { BulkThreadItem, BulkThreadResult } from '$lib/server/gmail-actions';
 
   let { form }: { form: ActionData } = $props();
   let currentUrl = $derived(page.url.href);
@@ -345,6 +346,12 @@
     return visibleEmails.find((email) => email.id === id) ?? null;
   }
 
+  // The row that X picks: the focused row or list cursor, or else the open thread's row.
+  function pickTargetId(): number | null {
+    const id = listCursorId() ?? selectedSummary?.id ?? null;
+    return visibleEmails.some((email) => email.id === id) ? id : null;
+  }
+
   // Reply and forward from the list open the thread, then the composer for its latest message.
   async function composeFromList(email: EmailSummary, mode: 'reply' | 'replyAll' | 'forward') {
     await focusMessage(email.id);
@@ -353,8 +360,8 @@
     if (source) openComposer({ mode, sourceEmailId: source.id });
   }
 
-  // J and K change the open message when the reading pane is open. When it is closed,
-  // they move the list cursor and the pane stays closed.
+  // J and K change the open message when the reading pane is open. When it is closed, or
+  // while rows are picked, they move the list cursor and do not open a message.
   // Held J/K/arrow keys drop repeats while a move is still in progress, so the
   // reading pane does not start a new navigation before the previous one lands.
   let movingSelection = false;
@@ -370,7 +377,8 @@
 
   async function moveSelection(offset: number) {
     if (visibleEmails.length === 0) return;
-    const currentId = selectedEmail ? selectedEmail.id : listCursorId();
+    const picking = pickedRows.size > 0;
+    const currentId = picking ? pickTargetId() : selectedEmail ? selectedEmail.id : listCursorId();
     const currentIndex = visibleEmails.findIndex((email) => email.id === currentId);
     const nextIndex =
       currentIndex < 0
@@ -380,7 +388,7 @@
         : Math.max(0, Math.min(visibleEmails.length - 1, currentIndex + offset));
     if (nextIndex === currentIndex && offset > 0 && data.hasMore) pageCount += 1;
     const nextId = visibleEmails[nextIndex].id;
-    if (selectedId !== null) {
+    if (selectedId !== null && !picking) {
       await updateMailboxUrl({ message: nextId });
       return;
     }
@@ -556,6 +564,13 @@
         event.preventDefault();
         await focusMessage(emailId);
       }
+    } else if (key === 'x') {
+      const rowId = pickTargetId();
+      if (rowId !== null) {
+        event.preventDefault();
+        togglePicked(rowId);
+        cursorId = rowId;
+      }
     } else if (moveOffset !== 0) {
       event.preventDefault();
       void repeatableMoveSelection(moveOffset, event.repeat);
@@ -671,6 +686,25 @@
       headers: { 'x-sveltekit-action': 'true' },
     });
     return deserialize(await response.text());
+  }
+
+  // Sends one request for all threads. Each thread has its own result.
+  async function postBulkAction(
+    action: 'archive' | 'delete' | 'unarchive' | 'undelete',
+    items: BulkThreadItem[]
+  ): Promise<{ results: BulkThreadResult[] } | { results?: undefined; error: string }> {
+    const body = new FormData();
+    body.set('action', action);
+    body.set('items', JSON.stringify(items));
+    const response = await fetch('?/bulkChange', {
+      method: 'POST',
+      body,
+      headers: { 'x-sveltekit-action': 'true' },
+    });
+    const result = deserialize(await response.text());
+    return result.type === 'success' && Array.isArray(result.data?.results)
+      ? { results: result.data.results as BulkThreadResult[] }
+      : { error: actionError(result) };
   }
 
   // Opened messages are marked read at once, here and in Gmail. This runs from the rendered
@@ -872,27 +906,26 @@
       await updateMailboxUrl({ message: null });
       return openRowId;
     });
-    const results = await Promise.all(
-      rowIds.map(async (id) => ({ id, result: await postMessageAction(action, id) }))
+    const response = await postBulkAction(
+      action,
+      rowIds.map((id) => ({ id }))
     );
-    const done: { id: number; succeededIds: number[] }[] = [];
-    let partial = false;
-    let failure: string | null = null;
-    for (const { id, result } of results) {
-      const data = result.type === 'success' ? result.data : undefined;
-      if (Array.isArray(data?.succeededIds) && data.succeededIds.length) {
-        done.push({ id, succeededIds: data.succeededIds });
-        if (data.error) partial = true;
-      } else {
-        removedIds.delete(id);
-        failure ??= actionError(result);
-      }
+    if (!response.results) {
+      for (const rowId of rowIds) removedIds.delete(rowId);
+      showToast(response.error, { tone: 'error' });
+      if (closedRowId !== null) await updateMailboxUrl({ message: closedRowId });
+      return;
     }
-    if (partial) {
+    const done = response.results.filter((result) => result.succeededIds.length > 0);
+    for (const result of response.results)
+      if (result.succeededIds.length === 0) removedIds.delete(result.id);
+    const partial = done.filter((result) => result.error);
+    if (partial.length) {
       // Some messages of a thread did not change, so the list shows the thread again.
       await getMailList(mailListArgs()).refresh();
-      for (const { id } of done) removedIds.delete(id);
+      for (const { id } of partial) removedIds.delete(id);
     }
+    const failure = response.results.find((result) => result.error)?.error;
     if (failure) showToast(failure, { tone: 'error' });
     if (!done.length) {
       if (closedRowId !== null) await updateMailboxUrl({ message: closedRowId });
@@ -904,19 +937,17 @@
     });
   }
 
-  async function undoBulkAction(
-    action: 'archive' | 'delete',
-    done: { id: number; succeededIds: number[] }[]
-  ) {
-    const results = await Promise.all(
-      done.map(({ id, succeededIds }) =>
-        postMessageAction(undoActions[action], id, { succeededIds })
-      )
+  async function undoBulkAction(action: 'archive' | 'delete', done: BulkThreadResult[]) {
+    const response = await postBulkAction(
+      undoActions[action],
+      done.map(({ id, succeededIds }) => ({ id, succeededIds }))
     );
     await getMailList(mailListArgs()).refresh();
     for (const { id } of done) removedIds.delete(id);
-    const failed = results.find((result) => result.type !== 'success');
-    if (failed) showToast(actionError(failed), { tone: 'error' });
+    const failure = response.results
+      ? response.results.find((result) => result.error)?.error
+      : response.error;
+    if (failure) showToast(failure, { tone: 'error' });
   }
 
   // The list row that shows its swipe buttons. Only one row is open at a time.
@@ -1073,10 +1104,12 @@
 
   // Keep the selected row or the list cursor visible when J and K move them.
   $effect(() => {
-    const id = selectedId ?? cursorId;
+    // While rows are picked, J and K move the list cursor even when a message is open.
+    const picking = pickedRows.size > 0;
+    const id = picking ? (cursorId ?? selectedId) : (selectedId ?? cursorId);
     const list = messageList;
     // An open message replaces the list cursor.
-    if (selectedId !== null) untrack(() => (cursorId = null));
+    if (selectedId !== null && !picking) untrack(() => (cursorId = null));
     if (id === null || !list) return;
     untrack(() => {
       const index = visibleEmails.findIndex((email) => email.id === id);
@@ -1849,6 +1882,10 @@
         <div>
           <dt><kbd>K</kbd> <kbd>↑</kbd></dt>
           <dd>Previous message</dd>
+        </div>
+        <div>
+          <dt><kbd>X</kbd></dt>
+          <dd>Select or clear the message for Archive or Delete</dd>
         </div>
         <div>
           <dt><kbd>E</kbd></dt>

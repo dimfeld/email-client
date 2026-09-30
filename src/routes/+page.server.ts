@@ -1,5 +1,5 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
-import { applyGmailThreadAction } from '$lib/server/gmail-actions';
+import { applyGmailBulkThreadAction, applyGmailThreadAction } from '$lib/server/gmail-actions';
 import { cancelSnooze, snoozeThread, snoozeWorker } from '$lib/server/snooze';
 import {
   getDatabase,
@@ -12,7 +12,7 @@ import {
 } from '$lib/server/db';
 import { senderAddress, senderDomain } from '$lib/remote-images';
 import { normalizeImportanceRule } from '$lib/importance-rules';
-import type { GmailMessageAction } from '$lib/server/gmail-actions';
+import type { BulkThreadItem, GmailMessageAction } from '$lib/server/gmail-actions';
 import type { Actions } from './$types';
 
 // The messages that an Undo reverses. Null when the field is missing or invalid.
@@ -76,6 +76,32 @@ async function changeMessage({ request }: RequestEvent, action: GmailMessageActi
   }
 }
 
+const bulkActions = ['archive', 'delete', 'unarchive', 'undelete'] as const;
+
+// The threads of a bulk action. Null when the field is missing or invalid. An Undo
+// requires the messages that the original action changed.
+function bulkItems(fields: FormData, undo: boolean): BulkThreadItem[] | null {
+  const isId = (item: unknown) => Number.isInteger(item) && (item as number) > 0;
+  try {
+    const parsed: unknown = JSON.parse(String(fields.get('items') ?? 'null'));
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    const valid = parsed.every(
+      (item) =>
+        typeof item === 'object' &&
+        item !== null &&
+        isId(item.id) &&
+        (undo
+          ? Array.isArray(item.succeededIds) && item.succeededIds.every(isId)
+          : item.succeededIds === undefined)
+    );
+    return valid
+      ? parsed.map((item: BulkThreadItem) => ({ id: item.id, succeededIds: item.succeededIds }))
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export const actions: Actions = {
   ignoreInvite: async ({ request }) => {
     const fields = await request.formData();
@@ -95,6 +121,19 @@ export const actions: Actions = {
   delete: (event) => changeMessage(event, 'delete'),
   unarchive: (event) => changeMessage(event, 'unarchive'),
   undelete: (event) => changeMessage(event, 'undelete'),
+  // Archives, deletes, or undoes one of those for several threads in one request.
+  bulkChange: async ({ request }) => {
+    const fields = await request.formData();
+    const action = bulkActions.find((item) => item === fields.get('action'));
+    if (!action) return fail(400, { error: 'The action is invalid.' });
+    const items = bulkItems(fields, action === 'unarchive' || action === 'undelete');
+    if (!items) return fail(400, { error: 'The selected threads are invalid.' });
+    try {
+      return { results: await applyGmailBulkThreadAction(getDatabase(), items, action) };
+    } catch (error) {
+      return fail(502, { error: error instanceof Error ? error.message : String(error) });
+    }
+  },
   markRead: (event) => changeMessage(event, 'markRead'),
   star: (event) => changeMessage(event, 'star'),
   unstar: (event) => changeMessage(event, 'unstar'),

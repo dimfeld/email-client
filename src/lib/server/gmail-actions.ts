@@ -1,5 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { changeEmailLabels, getThreadActionTargets, markDeleted, markUndeleted } from './db';
+import {
+  changeEmailLabels,
+  getThreadActionTargets,
+  listAccounts,
+  markDeleted,
+  markUndeleted,
+} from './db';
 import { googleApiRequest, type GoogleAccount } from './google-api';
 
 /** `unarchive` and `undelete` reverse `archive` and `delete`, for Undo. */
@@ -78,4 +84,34 @@ export async function applyGmailThreadAction(
     }
   }
   return { succeededIds: completed, total: targets.length, error: null };
+}
+
+/** A thread for a bulk action. `succeededIds` limits an Undo to the messages that changed. */
+export type BulkThreadItem = { id: number; succeededIds?: number[] };
+export type BulkThreadResult = { id: number; succeededIds: number[]; error: string | null };
+
+// Applies `action` to each thread in its own account. A failed thread does not stop the others.
+export async function applyGmailBulkThreadAction(
+  database: DatabaseSync,
+  items: BulkThreadItem[],
+  action: GmailMessageAction,
+  request: typeof googleApiRequest = googleApiRequest
+): Promise<BulkThreadResult[]> {
+  const accounts = listAccounts(database);
+  return Promise.all(
+    items.map(async ({ id, succeededIds }) => {
+      const targets = getThreadActionTargets(database, id, action, succeededIds);
+      const account = accounts.find((item) => item.email === targets[0]?.accountEmail);
+      if (!account) return { id, succeededIds: [], error: 'The thread is no longer available.' };
+      const result = await applyGmailThreadAction(
+        database,
+        account,
+        id,
+        action,
+        succeededIds,
+        request
+      );
+      return { id, succeededIds: result.succeededIds, error: result.error };
+    })
+  );
 }
