@@ -458,17 +458,22 @@
             container.getBoundingClientRect().top,
           container.scrollHeight - container.clientHeight
         );
-      const observer = new ResizeObserver(() => {
+      // The scroll event for a position set here can arrive after the frames grow again.
+      // Compare with the position set here, not with the new target, to find reader scrolls.
+      let followedTop = 0;
+      const follow = () => {
         container.scrollTop = target();
-      });
+        followedTop = container.scrollTop;
+      };
+      const observer = new ResizeObserver(follow);
       const stop = () => {
         observer.disconnect();
         container.removeEventListener('scroll', onScroll);
       };
       const onScroll = () => {
-        if (Math.abs(container.scrollTop - target()) > 1) stop();
+        if (Math.abs(container.scrollTop - followedTop) > 1) stop();
       };
-      container.scrollTop = target();
+      follow();
       for (const child of container.children) observer.observe(child);
       container.addEventListener('scroll', onScroll);
       return stop;
