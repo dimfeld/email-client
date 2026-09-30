@@ -7,6 +7,7 @@ postApplyCommands:
     allowFailure: true
     hideOutputOnSuccess: true
 developmentWorkflow: squash-rebase
+planAutocompleteStatus: done
 quality: hobby
 generate:
   queueWhenDone: true
