@@ -608,8 +608,12 @@
     if (event.repeat && moveOffset === 0) return;
     const composeMode =
       key === 'r' ? 'reply' : key === 'a' ? 'replyAll' : key === 'f' ? 'forward' : null;
+    // The Mac "delete" key sends Backspace.
     const isDelete =
-      event.key === 'Delete' || event.key === '#' || (event.shiftKey && event.code === 'Digit3');
+      event.key === 'Delete' ||
+      event.key === 'Backspace' ||
+      event.key === '#' ||
+      (event.shiftKey && event.code === 'Digit3');
     const listTarget = listTargetEmail();
     if (key === 'c') {
       event.preventDefault();
@@ -1990,7 +1994,7 @@
           <dd>Star or unstar the selected message</dd>
         </div>
         <div>
-          <dt><kbd>Delete</kbd> <kbd>#</kbd></dt>
+          <dt><kbd>Delete</kbd> <kbd>Backspace</kbd> <kbd>#</kbd></dt>
           <dd>Move selected message to Trash</dd>
         </div>
         <div>
