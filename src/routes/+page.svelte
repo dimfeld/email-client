@@ -28,6 +28,7 @@
     emailColorMode,
     hasQuotedHtml,
     hasRemoteImages,
+    quotedHtmlSelector,
   } from '$lib/email-html';
   import { splitQuotedReply } from '$lib/quoted-reply';
   import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
@@ -496,19 +497,17 @@
     let observer: ResizeObserver | undefined;
     function load() {
       observer?.disconnect();
+      const document = frame.contentDocument;
+      const body = document?.body;
+      if (frame.dataset.hidesQuotes !== undefined && body) {
+        const emailId = Number(frame.dataset.emailId);
+        // A forwarded message can be all quoted text. Do not hide the whole message.
+        if (!body.innerText.trim() && !body.querySelector('img')) quoteOnlyIds.add(emailId);
+        else addQuoteToggle(frame, emailId);
+      }
       fitMessageFrame(frame, true);
       frame.dataset.loaded = '';
-      const document = frame.contentDocument;
       if (!document) return;
-      // A forwarded message can be all quoted text. Do not hide the whole message.
-      const body = document.body;
-      if (
-        frame.dataset.hidesQuotes !== undefined &&
-        body &&
-        !body.innerText.trim() &&
-        !body.querySelector('img')
-      )
-        quoteOnlyIds.add(Number(frame.dataset.emailId));
       observer = new ResizeObserver(() => fitMessageFrame(frame, false));
       observer.observe(document.body ?? document.documentElement);
       document.addEventListener('keydown', handleFrameKeydown);
@@ -520,6 +519,38 @@
       frame.removeEventListener('load', load);
       observer?.disconnect();
     };
+  }
+
+  // The toggle goes before the quoted text in the frame. It shows and hides the quoted text with a
+  // class, so the frame does not load again.
+  function addQuoteToggle(frame: HTMLIFrameElement, emailId: number) {
+    const document = frame.contentDocument;
+    const quote = document?.querySelector(quotedHtmlSelector);
+    if (!document || !quote) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'quote-toggle';
+    button.textContent = '•••';
+    const update = () => {
+      const shown = shownQuoteIds.has(emailId);
+      const label = shown ? 'Hide quoted text' : 'Show quoted text';
+      document.documentElement.classList.toggle('show-quotes', shown);
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.setAttribute('aria-expanded', String(shown));
+    };
+    button.addEventListener('click', () => {
+      toggleQuotes(emailId);
+      update();
+      fitMessageFrame(frame, true);
+    });
+    update();
+    quote.before(button);
+  }
+
+  function toggleQuotes(emailId: number) {
+    if (shownQuoteIds.has(emailId)) shownQuoteIds.delete(emailId);
+    else shownQuoteIds.add(emailId);
   }
 
   // Key events in the message frame do not reach the window, so the frame also handles the
@@ -614,8 +645,9 @@
       event.preventDefault();
       deleteForm.requestSubmit();
     } else if (key === 'o' || event.key === 'Enter') {
-      // Enter on a focused message row follows that row's link.
-      if (event.key === 'Enter' && (event.target as Element | null)?.closest?.('.message')) return;
+      // Enter on a focused message row follows that row's link, and Enter on a button presses it.
+      if (event.key === 'Enter' && (event.target as Element | null)?.closest?.('.message, button'))
+        return;
       const emailId = selectedEmail?.id ?? listCursorId() ?? visibleEmails[0]?.id;
       if (emailId) {
         event.preventDefault();
@@ -1798,7 +1830,6 @@
                   )}
                   {@const hasQuotes =
                     !quoteOnlyIds.has(selectedEmail.id) && hasQuotedHtml(selectedEmail.bodyHtml)}
-                  {@const quotesShown = shownQuoteIds.has(selectedEmail.id)}
                   <div class={['message-paper', colorMode]}>
                     <iframe
                       class="html-message"
@@ -1806,25 +1837,36 @@
                       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                       referrerpolicy="no-referrer"
                       data-email-id={selectedEmail.id}
-                      data-hides-quotes={hasQuotes && !quotesShown ? '' : undefined}
+                      data-hides-quotes={hasQuotes ? '' : undefined}
                       srcdoc={buildEmailDocument(
                         selectedEmail.bodyHtml,
                         remoteImagesAllowed(selectedEmail),
                         colorMode,
-                        hasQuotes && !quotesShown
+                        hasQuotes
                       )}
                       {@attach messageFrame}
                     ></iframe>
                   </div>
-                  {#if hasQuotes}{@render quoteToggle(selectedEmail.id, quotesShown)}{/if}
                 {:else}
                   {@const text =
                     selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}
                   {@const { latest, quotedContext } = splitQuotedReply(text)}
                   {@const hasQuotes = !!latest && !!quotedContext}
                   {@const quotesShown = shownQuoteIds.has(selectedEmail.id)}
-                  <div class="message-body">{hasQuotes && !quotesShown ? latest : text}</div>
-                  {#if hasQuotes}{@render quoteToggle(selectedEmail.id, quotesShown)}{/if}
+                  {#if hasQuotes}
+                    <div class="message-body">{latest}</div>
+                    <button
+                      type="button"
+                      class="quote-toggle"
+                      aria-label={quotesShown ? 'Hide quoted text' : 'Show quoted text'}
+                      aria-expanded={quotesShown}
+                      title={quotesShown ? 'Hide quoted text' : 'Show quoted text'}
+                      onclick={() => toggleQuotes(selectedEmail.id)}>•••</button
+                    >
+                    {#if quotesShown}<div class="quoted-text">{quotedContext}</div>{/if}
+                  {:else}
+                    <div class="message-body">{text}</div>
+                  {/if}
                 {/if}
                 {#if selectedEmail.bodyTruncated}<p class="notice">
                     Only part of this message was downloaded.
@@ -1956,20 +1998,6 @@
     </div>
   </dialog>
 </main>
-
-{#snippet quoteToggle(emailId: number, shown: boolean)}
-  <button
-    type="button"
-    class="quote-toggle"
-    aria-label={shown ? 'Hide quoted text' : 'Show quoted text'}
-    aria-expanded={shown}
-    title={shown ? 'Hide quoted text' : 'Show quoted text'}
-    onclick={() => {
-      if (shown) shownQuoteIds.delete(emailId);
-      else shownQuoteIds.add(emailId);
-    }}><Icon name="more" /></button
-  >
-{/snippet}
 
 <style>
   button {
@@ -2565,14 +2593,23 @@
     color: var(--color-text);
   }
   .quote-toggle {
-    display: inline-flex;
-    margin-top: 8px;
-    padding: 0 8px;
+    display: block;
+    margin: 8px 0;
+    padding: 0 6px;
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    line-height: 14px;
+    letter-spacing: 1px;
     cursor: pointer;
+  }
+  .quoted-text {
+    white-space: pre-wrap;
+    line-height: 1.75;
+    font-size: 0.92rem;
+    color: var(--color-text);
   }
   .quote-toggle:hover {
     border-color: var(--color-border-hover);

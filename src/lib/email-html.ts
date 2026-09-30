@@ -25,7 +25,7 @@ img,video,canvas,[background],[style*="url("]{filter:invert(1) hue-rotate(180deg
  * quoted text comes after the header or after the header's wrapper.
  */
 const outlookDesktopHeader = 'div[style*="border-top:solid"][style*="padding:3.0pt 0in 0in 0in"]';
-const quotedHtmlSelector = [
+export const quotedHtmlSelector = [
   '.gmail_quote',
   'blockquote[type=cite]',
   '.moz-cite-prefix',
@@ -43,6 +43,17 @@ const quotedHtmlSelector = [
 ].join(',');
 const quotedHtmlPattern =
   /\bclass\s*=\s*["']?[^"'>]*\b(?:gmail_quote|moz-cite-prefix|yahoo_quoted|protonmail_quote)\b|<blockquote\b[^>]*\btype\s*=\s*["']?cite\b|\bid\s*=\s*["']?(?:divRplyFwdMsg|appendonsend|mail-editor-reference-message-container)\b|border-top:solid[^"']*padding:3\.0pt 0in 0in 0in/i;
+
+/*
+ * Quoted text stays hidden until the reader adds the show-quotes class. The reading pane
+ * puts the #quote-toggle button before the quoted text. The colors suit light and dark
+ * emails and the inverted view.
+ */
+const hiddenQuoteStyles = `
+html:not(.show-quotes) :is(${quotedHtmlSelector}):not(#quote-toggle){display:none!important}
+#quote-toggle{all:initial;display:block;width:fit-content;margin:8px 0;padding:0 6px;border:1px solid #8888;border-radius:4px;color:#888;font:12px/14px ui-sans-serif,system-ui,sans-serif;letter-spacing:1px;cursor:pointer}
+#quote-toggle:hover,#quote-toggle:focus-visible{border-color:#888}
+`;
 
 export function hasQuotedHtml(html: string): boolean {
   return quotedHtmlPattern.test(html);
@@ -100,7 +111,7 @@ export function buildEmailDocument(
   const queryScheme = colorMode === 'light' ? 'light' : 'dark';
   const canvasScheme = colorMode === 'dark' ? 'dark' : 'light';
   const colorStyles = `html{color-scheme:${canvasScheme}}${colorMode === 'inverted' ? invertedMediaStyles : ''}`;
-  const quoteStyles = hideQuotes ? `${quotedHtmlSelector}{display:none!important}` : '';
+  const quoteStyles = hideQuotes ? hiddenQuoteStyles : '';
   const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; font-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${compatibilityStyles}${colorStyles}${quoteStyles}</style>`;
   const schemeHtml = forceColorScheme(html, queryScheme);
 
