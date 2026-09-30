@@ -45,14 +45,15 @@ const quotedHtmlPattern =
   /\bclass\s*=\s*["']?[^"'>]*\b(?:gmail_quote|moz-cite-prefix|yahoo_quoted|protonmail_quote)\b|<blockquote\b[^>]*\btype\s*=\s*["']?cite\b|\bid\s*=\s*["']?(?:divRplyFwdMsg|appendonsend|mail-editor-reference-message-container)\b|border-top:solid[^"']*padding:3\.0pt 0in 0in 0in/i;
 
 /*
- * Quoted text stays hidden until the reader adds the show-quotes class. The reading pane
- * puts the #quote-toggle button before the quoted text. The colors suit light and dark
- * emails and the inverted view.
+ * Quoted text stays hidden until the reader checks the #quote-toggle checkbox, which the
+ * reading pane puts before the quoted text. This works without scripts in the frame.
+ * The colors suit light and dark emails and the inverted view.
  */
 const hiddenQuoteStyles = `
-html:not(.show-quotes) :is(${quotedHtmlSelector}):not(#quote-toggle){display:none!important}
-#quote-toggle{all:initial;display:block;width:fit-content;margin:8px 0;padding:0 6px;border:1px solid #8888;border-radius:4px;color:#888;font:12px/14px ui-sans-serif,system-ui,sans-serif;letter-spacing:1px;cursor:pointer}
-#quote-toggle:hover,#quote-toggle:focus-visible{border-color:#888}
+html:not(:has(#quote-toggle-input:checked)) :is(${quotedHtmlSelector}):not(#quote-toggle){display:none!important}
+#quote-toggle{all:initial;display:block;position:relative;width:fit-content;margin:8px 0;padding:0 6px;border:1px solid #8888;border-radius:4px;color:#888;font:12px/14px ui-sans-serif,system-ui,sans-serif;letter-spacing:1px;cursor:pointer}
+#quote-toggle-input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+#quote-toggle:hover,#quote-toggle:has(#quote-toggle-input:focus-visible){border-color:#888}
 `;
 
 export function hasQuotedHtml(html: string): boolean {

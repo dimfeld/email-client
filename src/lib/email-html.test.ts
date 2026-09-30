@@ -107,7 +107,7 @@ describe('email HTML documents', () => {
   it('hides quoted replies only when asked', () => {
     const html = '<p>Hi</p><div class="gmail_quote">x</div>';
     expect(buildEmailDocument(html, false, 'dark', true)).toContain(
-      'html:not(.show-quotes) :is(.gmail_quote,'
+      'html:not(:has(#quote-toggle-input:checked)) :is(.gmail_quote,'
     );
     expect(buildEmailDocument(html, false, 'dark')).not.toContain('.gmail_quote,');
   });

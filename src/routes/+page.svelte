@@ -499,16 +499,22 @@
       observer?.disconnect();
       const document = frame.contentDocument;
       const body = document?.body;
+      const emailId = Number(frame.dataset.emailId);
+      let quoteToggle: HTMLInputElement | undefined;
       if (frame.dataset.hidesQuotes !== undefined && body) {
-        const emailId = Number(frame.dataset.emailId);
         // A forwarded message can be all quoted text. Do not hide the whole message.
         if (!body.innerText.trim() && !body.querySelector('img')) quoteOnlyIds.add(emailId);
-        else addQuoteToggle(frame, emailId);
+        else quoteToggle = addQuoteToggle(document, shownQuoteIds.has(emailId));
       }
       fitMessageFrame(frame, true);
       frame.dataset.loaded = '';
       if (!document) return;
-      observer = new ResizeObserver(() => fitMessageFrame(frame, false));
+      observer = new ResizeObserver(() => {
+        // The quote toggle changes the body size. A reset lets the frame shrink when quotes hide.
+        const toggled = !!quoteToggle && quoteToggle.checked !== shownQuoteIds.has(emailId);
+        if (toggled) toggleQuotes(emailId);
+        fitMessageFrame(frame, toggled);
+      });
       observer.observe(document.body ?? document.documentElement);
       document.addEventListener('keydown', handleFrameKeydown);
       document.addEventListener('click', handleMessageLinkClick);
@@ -521,31 +527,23 @@
     };
   }
 
-  // The toggle goes before the quoted text in the frame. It shows and hides the quoted text with a
-  // class, so the frame does not load again.
-  function addQuoteToggle(frame: HTMLIFrameElement, emailId: number) {
-    const document = frame.contentDocument;
-    const quote = document?.querySelector(quotedHtmlSelector);
-    if (!document || !quote) return;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.id = 'quote-toggle';
-    button.textContent = '•••';
-    const update = () => {
-      const shown = shownQuoteIds.has(emailId);
-      const label = shown ? 'Hide quoted text' : 'Show quoted text';
-      document.documentElement.classList.toggle('show-quotes', shown);
-      button.title = label;
-      button.setAttribute('aria-label', label);
-      button.setAttribute('aria-expanded', String(shown));
-    };
-    button.addEventListener('click', () => {
-      toggleQuotes(emailId);
-      update();
-      fitMessageFrame(frame, true);
-    });
-    update();
-    quote.before(button);
+  // The toggle goes before the quoted text in the frame. Safari does not run event listeners
+  // in the sandboxed frame, so the toggle is a checkbox and the frame styles show the quoted
+  // text when it is checked.
+  function addQuoteToggle(document: Document, shown: boolean) {
+    const quote = document.querySelector(quotedHtmlSelector);
+    if (!quote) return;
+    const label = document.createElement('label');
+    label.id = 'quote-toggle';
+    label.title = 'Show or hide quoted text';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.id = 'quote-toggle-input';
+    input.checked = shown;
+    input.setAttribute('aria-label', 'Show quoted text');
+    label.append(input, '•••');
+    quote.before(label);
+    return input;
   }
 
   function toggleQuotes(emailId: number) {
