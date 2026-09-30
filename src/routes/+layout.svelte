@@ -59,8 +59,16 @@
         });
       })
       .catch((error) => console.error('The push subscription was not sent.', error));
+    // A popover closes on a click outside it, but a click in a message frame stays in the frame.
+    // The click moves focus into the frame, so close the open popovers then.
+    const closePopoversForFrame = () => {
+      if (!(document.activeElement instanceof HTMLIFrameElement)) return;
+      for (const popover of document.querySelectorAll<HTMLElement>('[popover]:popover-open'))
+        popover.hidePopover();
+    };
     document.addEventListener('visibilitychange', clearBadge);
     window.addEventListener('focus', clearBadge);
+    window.addEventListener('blur', closePopoversForFrame);
     events.addEventListener('message', onMessage);
     window.addEventListener('online', onOnline);
     window.addEventListener('email:state', onDrafts);
@@ -71,6 +79,7 @@
       window.removeEventListener('email:state', onDrafts);
       document.removeEventListener('visibilitychange', clearBadge);
       window.removeEventListener('focus', clearBadge);
+      window.removeEventListener('blur', closePopoversForFrame);
     };
   });
 
