@@ -19,12 +19,30 @@ img,video,canvas,[background],[style*="url("]{filter:invert(1) hue-rotate(180deg
 
 /*
  * Quoted replies from common mail clients: Gmail, Apple Mail and Thunderbird, Yahoo, Proton,
- * and Outlook (everything after its reply header).
+ * Outlook web (its reply header, the <hr> before it, and everything after it),
+ * the new Outlook apps (the reply header container and the quoted body), and Outlook desktop.
+ * Outlook desktop has no id or class. Its reply header is a div with a top border, and the
+ * quoted text comes after the header or after the header's wrapper.
  */
-const quotedHtmlSelector =
-  '.gmail_quote,blockquote[type=cite],.moz-cite-prefix,.yahoo_quoted,.protonmail_quote,#divRplyFwdMsg,#divRplyFwdMsg~*,#appendonsend~*';
+const outlookDesktopHeader = 'div[style*="border-top:solid"][style*="padding:3.0pt 0in 0in 0in"]';
+const quotedHtmlSelector = [
+  '.gmail_quote',
+  'blockquote[type=cite]',
+  '.moz-cite-prefix',
+  '.yahoo_quoted',
+  '.protonmail_quote',
+  '#divRplyFwdMsg',
+  '#divRplyFwdMsg~*',
+  ':has(>hr):has(+#divRplyFwdMsg)',
+  '#appendonsend~*',
+  '#mail-editor-reference-message-container',
+  '#mail-editor-reference-message-body',
+  outlookDesktopHeader,
+  `${outlookDesktopHeader}~*`,
+  `:has(>${outlookDesktopHeader}:first-child)~*`,
+].join(',');
 const quotedHtmlPattern =
-  /\bclass\s*=\s*["']?[^"'>]*\b(?:gmail_quote|moz-cite-prefix|yahoo_quoted|protonmail_quote)\b|<blockquote\b[^>]*\btype\s*=\s*["']?cite\b|\bid\s*=\s*["']?(?:divRplyFwdMsg|appendonsend)\b/i;
+  /\bclass\s*=\s*["']?[^"'>]*\b(?:gmail_quote|moz-cite-prefix|yahoo_quoted|protonmail_quote)\b|<blockquote\b[^>]*\btype\s*=\s*["']?cite\b|\bid\s*=\s*["']?(?:divRplyFwdMsg|appendonsend|mail-editor-reference-message-container)\b|border-top:solid[^"']*padding:3\.0pt 0in 0in 0in/i;
 
 export function hasQuotedHtml(html: string): boolean {
   return quotedHtmlPattern.test(html);

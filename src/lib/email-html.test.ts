@@ -93,6 +93,14 @@ describe('email HTML documents', () => {
     );
     expect(hasQuotedHtml('<p>Hi</p><blockquote type="cite">x</blockquote>')).toBe(true);
     expect(hasQuotedHtml('<p>Hi</p><div id="divRplyFwdMsg">x</div>')).toBe(true);
+    expect(
+      hasQuotedHtml('<p>Hi</p><div id="mail-editor-reference-message-container">x</div>')
+    ).toBe(true);
+    expect(
+      hasQuotedHtml(
+        '<p>Hi</p><div style="border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0in 0in 0in"><p><b>From:</b> Bob</p></div>'
+      )
+    ).toBe(true);
     expect(hasQuotedHtml('<p>Hi</p><blockquote>A quotation</blockquote>')).toBe(false);
   });
 
