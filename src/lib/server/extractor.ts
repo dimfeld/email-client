@@ -3,7 +3,7 @@ import { generateObject } from 'ai';
 import { z } from 'zod';
 import type { EmailExtraction, IncomingEmail } from './types';
 import { getAccountDisplayName, getDatabase } from './db';
-import { formatBodyForDecisions } from './quoted-reply';
+import { formatBodyForDecisions } from '$lib/quoted-reply';
 
 export type ExtractionTargets = {
   actionItems: boolean;

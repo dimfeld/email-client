@@ -17,6 +17,19 @@ img,video,canvas,[background],[style*="url("]{filter:invert(1) hue-rotate(180deg
 :is([background],[style*="url("]) :is(img,video,canvas,[background],[style*="url("]){filter:none}
 `;
 
+/*
+ * Quoted replies from common mail clients: Gmail, Apple Mail and Thunderbird, Yahoo, Proton,
+ * and Outlook (everything after its reply header).
+ */
+const quotedHtmlSelector =
+  '.gmail_quote,blockquote[type=cite],.moz-cite-prefix,.yahoo_quoted,.protonmail_quote,#divRplyFwdMsg,#divRplyFwdMsg~*,#appendonsend~*';
+const quotedHtmlPattern =
+  /\bclass\s*=\s*["']?[^"'>]*\b(?:gmail_quote|moz-cite-prefix|yahoo_quoted|protonmail_quote)\b|<blockquote\b[^>]*\btype\s*=\s*["']?cite\b|\bid\s*=\s*["']?(?:divRplyFwdMsg|appendonsend)\b/i;
+
+export function hasQuotedHtml(html: string): boolean {
+  return quotedHtmlPattern.test(html);
+}
+
 const darkSchemeQuery = /\(\s*prefers-color-scheme\s*:\s*dark\s*\)/gi;
 const lightSchemeQuery = /\(\s*prefers-color-scheme\s*:\s*light\s*\)/gi;
 const alwaysTrueQuery = '(min-width: 0px)';
@@ -58,7 +71,8 @@ export function hasRemoteImages(html: string): boolean {
 export function buildEmailDocument(
   html: string,
   allowRemoteImages: boolean,
-  colorMode: EmailColorMode
+  colorMode: EmailColorMode,
+  hideQuotes = false
 ): string {
   const imageSources = allowRemoteImages ? 'data: https: http:' : 'data:';
   /*
@@ -68,7 +82,8 @@ export function buildEmailDocument(
   const queryScheme = colorMode === 'light' ? 'light' : 'dark';
   const canvasScheme = colorMode === 'dark' ? 'dark' : 'light';
   const colorStyles = `html{color-scheme:${canvasScheme}}${colorMode === 'inverted' ? invertedMediaStyles : ''}`;
-  const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; font-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${compatibilityStyles}${colorStyles}</style>`;
+  const quoteStyles = hideQuotes ? `${quotedHtmlSelector}{display:none!important}` : '';
+  const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSources}; font-src 'none'; media-src data:; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'"><meta name="referrer" content="no-referrer"><base target="_blank"><style>${compatibilityStyles}${colorStyles}${quoteStyles}</style>`;
   const schemeHtml = forceColorScheme(html, queryScheme);
 
   if (/<head\b[^>]*>/i.test(schemeHtml))

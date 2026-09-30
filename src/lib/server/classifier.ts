@@ -8,7 +8,7 @@ import {
   listImportanceRules,
 } from './db';
 import { matchImportanceRule, type ImportanceRule } from '$lib/importance-rules';
-import { formatBodyForDecisions } from './quoted-reply';
+import { formatBodyForDecisions } from '$lib/quoted-reply';
 
 export type EmailClassifier = (
   email: IncomingEmail,

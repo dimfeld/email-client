@@ -23,7 +23,13 @@
   import { tick, untrack } from 'svelte';
   import { MediaQuery, SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { dateKeyFromDate, isDateKey } from '$lib/calendar';
-  import { buildEmailDocument, emailColorMode, hasRemoteImages } from '$lib/email-html';
+  import {
+    buildEmailDocument,
+    emailColorMode,
+    hasQuotedHtml,
+    hasRemoteImages,
+  } from '$lib/email-html';
+  import { splitQuotedReply } from '$lib/quoted-reply';
   import { allowsRemoteImages, senderAddress, senderDomain } from '$lib/remote-images';
   import {
     getMailAccounts,
@@ -146,6 +152,10 @@
   let searchInput = $state<HTMLInputElement | null>(null);
   let remoteImagesFor = $state<number | null>(null);
   const originalColorIds = new SvelteSet<number>();
+  // Messages that show their quoted text. Quoted text is hidden by default.
+  const shownQuoteIds = new SvelteSet<number>();
+  // HTML messages that are all quoted text, such as forwards. These do not hide quotes.
+  const quoteOnlyIds = new SvelteSet<number>();
   // Message details stay hidden until the user opens them for a message.
   const messageDetailsIds = new SvelteSet<number>();
   let filters = $derived([
@@ -485,6 +495,15 @@
       frame.dataset.loaded = '';
       const document = frame.contentDocument;
       if (!document) return;
+      // A forwarded message can be all quoted text. Do not hide the whole message.
+      const body = document.body;
+      if (
+        frame.dataset.hidesQuotes !== undefined &&
+        body &&
+        !body.innerText.trim() &&
+        !body.querySelector('img')
+      )
+        quoteOnlyIds.add(Number(frame.dataset.emailId));
       observer = new ResizeObserver(() => fitMessageFrame(frame, false));
       observer.observe(document.body ?? document.documentElement);
       document.addEventListener('keydown', handleFrameKeydown);
@@ -1772,26 +1791,35 @@
                     selectedEmail.bodyHtml,
                     originalColorIds.has(selectedEmail.id)
                   )}
+                  {@const hasQuotes =
+                    !quoteOnlyIds.has(selectedEmail.id) && hasQuotedHtml(selectedEmail.bodyHtml)}
+                  {@const quotesShown = shownQuoteIds.has(selectedEmail.id)}
                   <div class={['message-paper', colorMode]}>
                     <iframe
                       class="html-message"
                       title="Email message content"
                       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                       referrerpolicy="no-referrer"
+                      data-email-id={selectedEmail.id}
+                      data-hides-quotes={hasQuotes && !quotesShown ? '' : undefined}
                       srcdoc={buildEmailDocument(
                         selectedEmail.bodyHtml,
                         remoteImagesAllowed(selectedEmail),
-                        colorMode
+                        colorMode,
+                        hasQuotes && !quotesShown
                       )}
                       {@attach messageFrame}
                     ></iframe>
                   </div>
+                  {#if hasQuotes}{@render quoteToggle(selectedEmail.id, quotesShown)}{/if}
                 {:else}
-                  <div class="message-body">
-                    {selectedEmail.bodyText ||
-                      selectedEmail.snippet ||
-                      'No message text available.'}
-                  </div>
+                  {@const text =
+                    selectedEmail.bodyText || selectedEmail.snippet || 'No message text available.'}
+                  {@const { latest, quotedContext } = splitQuotedReply(text)}
+                  {@const hasQuotes = !!latest && !!quotedContext}
+                  {@const quotesShown = shownQuoteIds.has(selectedEmail.id)}
+                  <div class="message-body">{hasQuotes && !quotesShown ? latest : text}</div>
+                  {#if hasQuotes}{@render quoteToggle(selectedEmail.id, quotesShown)}{/if}
                 {/if}
                 {#if selectedEmail.bodyTruncated}<p class="notice">
                     Only part of this message was downloaded.
@@ -1923,6 +1951,20 @@
     </div>
   </dialog>
 </main>
+
+{#snippet quoteToggle(emailId: number, shown: boolean)}
+  <button
+    type="button"
+    class="quote-toggle"
+    aria-label={shown ? 'Hide quoted text' : 'Show quoted text'}
+    aria-expanded={shown}
+    title={shown ? 'Hide quoted text' : 'Show quoted text'}
+    onclick={() => {
+      if (shown) shownQuoteIds.delete(emailId);
+      else shownQuoteIds.add(emailId);
+    }}><Icon name="more" /></button
+  >
+{/snippet}
 
 <style>
   button {
@@ -2515,6 +2557,20 @@
     white-space: pre-wrap;
     line-height: 1.75;
     font-size: 0.92rem;
+    color: var(--color-text);
+  }
+  .quote-toggle {
+    display: inline-flex;
+    margin-top: 8px;
+    padding: 0 8px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+  .quote-toggle:hover {
+    border-color: var(--color-border-hover);
     color: var(--color-text);
   }
   .message-paper {

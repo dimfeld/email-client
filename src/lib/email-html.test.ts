@@ -3,6 +3,7 @@ import {
   buildEmailDocument,
   emailColorMode,
   hasDarkModeStyles,
+  hasQuotedHtml,
   hasRemoteImages,
 } from './email-html';
 
@@ -84,5 +85,20 @@ describe('email HTML documents', () => {
     expect(hasDarkModeStyles('<source media="(prefers-color-scheme: dark)" srcset="a.png">')).toBe(
       false
     );
+  });
+
+  it('finds quoted replies from common mail clients', () => {
+    expect(hasQuotedHtml('<p>Hi</p><div class="gmail_quote gmail_quote_container">x</div>')).toBe(
+      true
+    );
+    expect(hasQuotedHtml('<p>Hi</p><blockquote type="cite">x</blockquote>')).toBe(true);
+    expect(hasQuotedHtml('<p>Hi</p><div id="divRplyFwdMsg">x</div>')).toBe(true);
+    expect(hasQuotedHtml('<p>Hi</p><blockquote>A quotation</blockquote>')).toBe(false);
+  });
+
+  it('hides quoted replies only when asked', () => {
+    const html = '<p>Hi</p><div class="gmail_quote">x</div>';
+    expect(buildEmailDocument(html, false, 'dark', true)).toContain('.gmail_quote,');
+    expect(buildEmailDocument(html, false, 'dark')).not.toContain('.gmail_quote,');
   });
 });
