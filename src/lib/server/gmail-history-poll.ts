@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
-import { queueGmailAccountWork } from './gmail-account-queue';
+import { gmailHistoryQueue } from './gmail-history-queue';
 import { GMAIL_BACKFILL_INTERVAL_MS } from './gmail-backfill';
 import { processGmailNotification } from './gmail-subscriber';
 import { getGmailMessage, googleApiRequest, isGoogleRateLimitError } from './google-api';
@@ -16,22 +16,30 @@ type GmailHistoryPollDependencies = {
   intervalMs?: number;
 };
 
-export async function pollGmailHistory(dependencies: GmailHistoryPollDependencies): Promise<void> {
+export async function pollGmailHistory(
+  dependencies: GmailHistoryPollDependencies,
+  runningAccounts = new Set<string>()
+): Promise<void> {
   const database = dependencies.database;
   const request = dependencies.request ?? googleApiRequest;
   const accounts = listAccounts(database).filter(
-    (account) => account.enabled && account.refreshToken
+    (account) => account.enabled && account.refreshToken && !runningAccounts.has(account.email)
   );
   await Promise.all(
-    accounts.map((account) =>
-      queueGmailAccountWork(account.email, async () => {
-        try {
+    accounts.map((account) => {
+      runningAccounts.add(account.email);
+      return gmailHistoryQueue
+        .enqueue(account.email, null, async (targetHistoryId) => {
           const current = listAccounts(database).find((item) => item.email === account.email);
-          if (!current?.enabled || !current.refreshToken) return;
-          const profile = await request<{ historyId?: string }>(
-            current,
-            'https://gmail.googleapis.com/gmail/v1/users/me/profile'
-          );
+          if (!current?.enabled || !current.refreshToken) {
+            throw new Error(`Gmail account ${account.email} is not available for history sync.`);
+          }
+          const profile = targetHistoryId
+            ? { historyId: targetHistoryId }
+            : await request<{ historyId?: string }>(
+                current,
+                'https://gmail.googleapis.com/gmail/v1/users/me/profile'
+              );
           if (typeof profile.historyId !== 'string' || !/^\d+$/.test(profile.historyId)) {
             throw new Error('The Gmail profile did not include a valid historyId.');
           }
@@ -41,7 +49,7 @@ export async function pollGmailHistory(dependencies: GmailHistoryPollDependencie
               account: current.email,
               historyId: profile.historyId,
             });
-            return;
+            return profile.historyId;
           }
           const result = await processGmailNotification(
             current,
@@ -59,15 +67,17 @@ export async function pollGmailHistory(dependencies: GmailHistoryPollDependencie
             historyId: current.historyId,
             ...result,
           });
-        } catch (error) {
+          return current.historyId!;
+        })
+        .catch((error) => {
           if (isGoogleRateLimitError(error)) {
             console.warn(`Gmail history poll deferred for ${account.email}.`, error);
           } else {
             console.error(`Gmail history poll failed for ${account.email}.`, error);
           }
-        }
-      })
-    )
+        })
+        .finally(() => runningAccounts.delete(account.email));
+    })
   );
 }
 
@@ -79,15 +89,12 @@ export function startGmailHistoryPoll({
   getMessage,
   intervalMs = GMAIL_BACKFILL_INTERVAL_MS,
 }: Partial<GmailHistoryPollDependencies> = {}): { close(): void } {
-  let running = false;
+  const runningAccounts = new Set<string>();
   const run = () => {
-    if (running) return;
-    running = true;
-    void pollGmailHistory({ database, classify, extract, request, getMessage })
-      .catch((error) => console.error('Gmail history poll run failed.', error))
-      .finally(() => {
-        running = false;
-      });
+    void pollGmailHistory(
+      { database, classify, extract, request, getMessage },
+      runningAccounts
+    ).catch((error) => console.error('Gmail history poll run failed.', error));
   };
   run();
   const timer = setInterval(run, intervalMs);

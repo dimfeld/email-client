@@ -1,6 +1,6 @@
 import { PubSub, type Message, type Subscription } from '@google-cloud/pubsub';
 import type { DatabaseSync } from 'node:sqlite';
-import { queueGmailAccountWork } from './gmail-account-queue';
+import { gmailHistoryQueue } from './gmail-history-queue';
 import { createJevClassifier, type EmailClassifier } from './classifier';
 import { getDatabase, listAccounts, setAccountHistoryId } from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
@@ -260,39 +260,49 @@ export function startGmailSubscribers(): GmailSubscribers | null {
         publishedAt: message.publishTime?.toISOString(),
         receivedAt: new Date(receivedAt).toISOString(),
       });
-      void queueGmailAccountWork(account.email, async () => {
-        const startedAt = Date.now();
-        try {
-          account.historyId =
-            listAccounts(database).find((item) => item.email === account.email)?.historyId ?? null;
-          const result = await processGmailNotification(account, notification, {
-            database,
-            classify: createJevClassifier(),
-            extract,
-          });
-          gmailMessageArrivalStats.recordAndLog(account.email, 'pubsub', result.stored);
-          console.info('Gmail Pub/Sub sync completed.', {
-            account: account.email,
-            notificationHistoryId: notification.historyId,
-            historyId: account.historyId,
-            publishedAt: message.publishTime?.toISOString(),
-            receivedAt: new Date(receivedAt).toISOString(),
-            queueDelayMs: startedAt - receivedAt,
-            processingMs: Date.now() - startedAt,
-            ...result,
-          });
-          message.ack();
-        } catch (error) {
-          console.error(`Gmail notification failed for ${account.email}.`, {
-            publishedAt: message.publishTime?.toISOString(),
-            receivedAt: new Date(receivedAt).toISOString(),
-            queueDelayMs: startedAt - receivedAt,
-            processingMs: Date.now() - startedAt,
-            error,
-          });
-          message.nack();
-        }
-      });
+      void gmailHistoryQueue
+        .enqueue(account.email, notification.historyId, async (historyId) => {
+          const startedAt = Date.now();
+          try {
+            account.historyId =
+              listAccounts(database).find((item) => item.email === account.email)?.historyId ??
+              null;
+            const result = await processGmailNotification(
+              account,
+              { emailAddress: account.email, historyId: historyId ?? notification.historyId },
+              {
+                database,
+                classify: createJevClassifier(),
+                extract,
+              }
+            );
+            gmailMessageArrivalStats.recordAndLog(account.email, 'pubsub', result.stored);
+            console.info('Gmail Pub/Sub sync completed.', {
+              account: account.email,
+              notificationHistoryId: notification.historyId,
+              historyId: account.historyId,
+              publishedAt: message.publishTime?.toISOString(),
+              receivedAt: new Date(receivedAt).toISOString(),
+              queueDelayMs: startedAt - receivedAt,
+              processingMs: Date.now() - startedAt,
+              ...result,
+            });
+            return account.historyId!;
+          } catch (error) {
+            console.error(`Gmail notification failed for ${account.email}.`, {
+              publishedAt: message.publishTime?.toISOString(),
+              receivedAt: new Date(receivedAt).toISOString(),
+              queueDelayMs: startedAt - receivedAt,
+              processingMs: Date.now() - startedAt,
+              error,
+            });
+            throw error;
+          }
+        })
+        .then(
+          () => message.ack(),
+          () => message.nack()
+        );
     });
     subscription.on('error', (error) => {
       console.error(`Pub/Sub subscriber failed for ${subscriptionName}.`, error);
