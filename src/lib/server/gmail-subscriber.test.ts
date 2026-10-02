@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { GoogleApiError, type googleApiRequest } from './google-api';
+import { getIncomingEmail, markDeleted, setAccountHistoryId } from './db';
 import type { EmailClassifier } from './classifier';
 import { createDatabase, listAccounts, listEmails, upsertAccount, upsertEmails } from './db';
 import {
@@ -75,6 +80,225 @@ describe('Gmail Pub/Sub routing', () => {
 });
 
 describe('Gmail notification processing', () => {
+  it('applies a bulk archive from another client without downloading mail', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com', refreshToken: 'one' });
+    upsertAccount(database, { email: 'two@example.com', refreshToken: 'two' });
+    const ids = Array.from({ length: 200 }, (_, index) => `archive-${index}`);
+    upsertEmails(
+      database,
+      'one@example.com',
+      ids.map((id) => ({
+        id,
+        subject: id,
+        bodyText: 'Keep this body.',
+        labels: ['INBOX', 'UNREAD'],
+      }))
+    );
+    upsertEmails(database, 'two@example.com', [{ id: ids[0], labels: ['INBOX'] }]);
+    setAccountHistoryId(database, 'one@example.com', '100');
+    const changes = [...ids, 'unknown-old-message'].map((id) => ({
+      messages: [{ id }],
+      labelsRemoved: [{ message: { id }, labelIds: ['INBOX'] }],
+    }));
+    const account = { email: 'one@example.com', refreshToken: 'one', historyId: '100' };
+    const pages: Array<string | undefined> = [];
+    const result = await processGmailNotification(
+      account,
+      {
+        emailAddress: account.email,
+        historyId: '105',
+      },
+      {
+        database,
+        classify: async () => {
+          throw new Error('Archived mail must not need classification.');
+        },
+        request: async <T>(
+          _account: unknown,
+          _url: string,
+          options: Parameters<typeof googleApiRequest>[2]
+        ) => {
+          pages.push(options?.params?.pageToken as string | undefined);
+          return (
+            options?.params?.pageToken
+              ? { historyId: '105', history: changes.slice(100) }
+              : { historyId: '105', history: changes.slice(0, 100), nextPageToken: 'next' }
+          ) as T;
+        },
+        getMessage: async () => {
+          throw new Error('Archive events must not download mail.');
+        },
+      }
+    );
+    expect(pages).toEqual([undefined, 'next']);
+    expect(result).toMatchObject({ archived: ids.length, classified: 0 });
+    expect(listEmails(database, account.email)).toEqual([]);
+    expect(getIncomingEmail(database, account.email, ids[0])).toMatchObject({
+      labels: ['UNREAD'],
+      bodyText: 'Keep this body.',
+    });
+    expect(getIncomingEmail(database, account.email, 'unknown-old-message')).toBeNull();
+    expect(getIncomingEmail(database, 'two@example.com', ids[0])?.labels).toEqual(['INBOX']);
+    expect(account.historyId).toBe('105');
+  });
+
+  it('applies ordered label changes and restores stored mail without downloads', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com', refreshToken: 'one' });
+    upsertEmails(database, 'one@example.com', [
+      { id: 'restored', bodyText: 'Stored body', labels: ['TRASH', 'UNREAD'] },
+      { id: 'deleted', labels: ['INBOX'] },
+    ]);
+    markDeleted(database, 'one@example.com', ['restored']);
+    const account = { email: 'one@example.com', refreshToken: 'one', historyId: '100' };
+    const result = await processGmailNotification(
+      account,
+      {
+        emailAddress: account.email,
+        historyId: '110',
+      },
+      {
+        database,
+        classify,
+        request: async <T>() =>
+          ({
+            historyId: '110',
+            history: [
+              { labelsRemoved: [{ message: { id: 'restored' }, labelIds: ['TRASH', 'UNREAD'] }] },
+              { labelsAdded: [{ message: { id: 'restored' }, labelIds: ['INBOX', 'STARRED'] }] },
+              { labelsRemoved: [{ message: { id: 'restored' }, labelIds: ['STARRED'] }] },
+              { labelsAdded: [{ message: { id: 'restored' }, labelIds: ['STARRED'] }] },
+              { messagesDeleted: [{ message: { id: 'deleted' } }] },
+              { messagesAdded: [{ message: { id: 'never-stored' } }] },
+              { messagesDeleted: [{ message: { id: 'never-stored' } }] },
+            ],
+          }) as T,
+        getMessage: async () => {
+          throw new Error('These changes do not need message contents.');
+        },
+      }
+    );
+    expect(result).toMatchObject({ deleted: 2, classified: 1 });
+    expect(listEmails(database).map((email) => email.gmailId)).toEqual(['restored']);
+    expect(getIncomingEmail(database, account.email, 'restored')).toMatchObject({
+      labels: ['INBOX', 'STARRED'],
+      bodyText: 'Stored body',
+    });
+    expect(
+      database.prepare('SELECT deleted_at FROM emails WHERE gmail_id = ?').get('restored')
+    ).toMatchObject({ deleted_at: null });
+  });
+
+  it('downloads missing inbox mail but ignores unknown archive, Trash, and draft events', async () => {
+    database = createDatabase(':memory:');
+    upsertAccount(database, { email: 'one@example.com', refreshToken: 'one' });
+    const account = { email: 'one@example.com', refreshToken: 'one', historyId: '100' };
+    const downloaded: string[] = [];
+    await processGmailNotification(
+      account,
+      { emailAddress: account.email, historyId: '105' },
+      {
+        database,
+        classify,
+        request: async <T>() =>
+          ({
+            historyId: '105',
+            history: [
+              { labelsAdded: [{ message: { id: 'missing-inbox' }, labelIds: ['INBOX'] }] },
+              { labelsRemoved: [{ message: { id: 'unknown-archive' }, labelIds: ['INBOX'] }] },
+              {
+                messagesAdded: [{ message: { id: 'new-trash' } }],
+                labelsAdded: [{ message: { id: 'new-trash' }, labelIds: ['TRASH'] }],
+              },
+              {
+                messagesAdded: [{ message: { id: 'new-draft' } }],
+                labelsAdded: [{ message: { id: 'new-draft' }, labelIds: ['DRAFT'] }],
+              },
+            ],
+          }) as T,
+        getMessage: async (_account, id) => {
+          downloaded.push(id);
+          return { id, labels: ['INBOX'] };
+        },
+      }
+    );
+    expect(downloaded).toEqual(['missing-inbox']);
+    expect(listEmails(database).map((email) => email.gmailId)).toEqual(['missing-inbox']);
+  });
+
+  it('resumes downloads after a rate limit and database reopen without moving the cursor early', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'gmail-history-'));
+    const path = join(scratch, 'test.sqlite');
+    const downloads: string[] = [];
+    let historyRequests = 0;
+    let rateLimited = false;
+    const request = async <T>() => {
+      historyRequests += 1;
+      return {
+        historyId: '105',
+        history: [
+          {
+            messagesAdded: [
+              { message: { id: 'first' } },
+              { message: { id: 'missing' } },
+              { message: { id: 'second' } },
+            ],
+          },
+        ],
+      } as T;
+    };
+    const getMessage = async (_account: unknown, id: string) => {
+      downloads.push(id);
+      if (id === 'missing') throw new GoogleApiError('Not found', 404);
+      if (id === 'second' && !rateLimited) {
+        rateLimited = true;
+        throw new GoogleApiError('Rate limited', 429);
+      }
+      return { id, labels: ['INBOX'] };
+    };
+    try {
+      database = createDatabase(path);
+      upsertAccount(database, { email: 'one@example.com', refreshToken: 'one' });
+      setAccountHistoryId(database, 'one@example.com', '100');
+      const account = { email: 'one@example.com', refreshToken: 'one', historyId: '100' };
+      const notification = { emailAddress: account.email, historyId: '105' };
+      await expect(
+        processGmailNotification(account, notification, {
+          database,
+          classify,
+          request,
+          getMessage,
+        })
+      ).rejects.toThrow('Rate limited');
+      expect(listAccounts(database)[0].historyId).toBe('100');
+      expect(listEmails(database)).toEqual([]);
+      database.close();
+      database = createDatabase(path);
+      const resumed = listAccounts(database)[0];
+      await processGmailNotification(resumed, notification, {
+        database,
+        classify,
+        request,
+        getMessage,
+      });
+      expect(historyRequests).toBe(1);
+      expect(downloads).toEqual(['first', 'missing', 'second', 'second']);
+      expect(
+        listEmails(database)
+          .map((email) => email.gmailId)
+          .sort()
+      ).toEqual(['first', 'second']);
+      expect(listAccounts(database)[0].historyId).toBe('105');
+      expect(database.prepare('SELECT * FROM gmail_history_progress').all()).toEqual([]);
+      expect(database.prepare('SELECT * FROM gmail_history_downloads').all()).toEqual([]);
+    } finally {
+      database?.close();
+      database = undefined;
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   it('fetches inbox messages with Google APIs and advances only the matching account cursor', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, {
@@ -187,10 +411,9 @@ describe('Gmail notification processing', () => {
               { labelsAdded: [{ message: { id: 'trashed' }, labelIds: ['TRASH'] }] },
             ],
           }) as T,
-        getMessage: async (_account, id) => ({
-          id,
-          labels: id === 'archived' ? [] : ['TRASH'],
-        }),
+        getMessage: async () => {
+          throw new Error('Label changes must not download stored messages.');
+        },
       }
     );
 

@@ -1,8 +1,22 @@
 import { PubSub, type Message, type Subscription } from '@google-cloud/pubsub';
 import type { DatabaseSync } from 'node:sqlite';
 import { gmailHistoryQueue } from './gmail-history-queue';
+import {
+  clearGmailHistoryProgress,
+  loadGmailHistoryDownload,
+  loadGmailHistoryProgress,
+  saveGmailHistoryDownload,
+  saveGmailHistoryProgress,
+  type GmailHistoryChange,
+} from './gmail-history-progress';
 import { createJevClassifier, type EmailClassifier } from './classifier';
-import { getDatabase, listAccounts, setAccountHistoryId } from './db';
+import {
+  changeEmailLabels,
+  getDatabase,
+  getIncomingEmail,
+  listAccounts,
+  setAccountHistoryId,
+} from './db';
 import { createOpenAIEmailExtractor, type EmailExtractor } from './extractor';
 import { getGmailMessage, googleApiRequest, GoogleApiError } from './google-api';
 import { ingestGmailPayload } from './ingest';
@@ -24,7 +38,7 @@ export type GmailNotification = {
 
 type HistoryResult = {
   historyId: string;
-  messages: string[];
+  changes: GmailHistoryChange[];
 };
 
 type SubscriberDependencies = {
@@ -81,23 +95,42 @@ function parseHistoryResult(value: unknown): HistoryResult {
   const history = Array.isArray(result.history)
     ? (result.history as Array<Record<string, unknown>>)
     : [];
-  const messageIds = history.flatMap((entry) =>
-    ['messages', 'messagesAdded', 'messagesDeleted', 'labelsAdded', 'labelsRemoved']
-      .flatMap((key) =>
-        Array.isArray(entry[key]) ? (entry[key] as Array<Record<string, unknown>>) : []
-      )
-      .flatMap((item) => {
-        const message =
-          item.message && typeof item.message === 'object'
-            ? (item.message as Record<string, unknown>)
-            : item;
-        return typeof message.id === 'string' ? [message.id] : [];
-      })
-  );
-  return {
-    historyId: result.historyId,
-    messages: [...new Set(messageIds)],
+  const changes = new Map<string, GmailHistoryChange>();
+  const getChange = (id: string) => {
+    let change = changes.get(id);
+    if (!change) {
+      change = { id, added: false, deleted: false, fetch: false, labels: {} };
+      changes.set(id, change);
+    }
+    return change;
   };
+  for (const entry of history) {
+    const specificIds = new Set<string>();
+    for (const key of ['messagesAdded', 'messagesDeleted', 'labelsAdded', 'labelsRemoved']) {
+      const items = Array.isArray(entry[key]) ? (entry[key] as Record<string, unknown>[]) : [];
+      for (const item of items) {
+        const message = item.message as { id?: unknown } | undefined;
+        if (typeof message?.id !== 'string') continue;
+        specificIds.add(message.id);
+        const change = getChange(message.id);
+        if (key === 'messagesAdded') change.added = true;
+        else if (key === 'messagesDeleted') change.deleted = true;
+        else if (Array.isArray(item.labelIds)) {
+          for (const label of item.labelIds) {
+            if (typeof label === 'string') change.labels[label] = key === 'labelsAdded';
+          }
+        } else change.fetch = true;
+      }
+    }
+    // The generic list duplicates specific events. Fetch only events with no details.
+    const messages = Array.isArray(entry.messages) ? (entry.messages as { id?: unknown }[]) : [];
+    for (const message of messages) {
+      if (typeof message.id === 'string' && !specificIds.has(message.id)) {
+        getChange(message.id).fetch = true;
+      }
+    }
+  }
+  return { historyId: result.historyId, changes: [...changes.values()] };
 }
 
 async function loadInitialHistoryId(
@@ -149,36 +182,77 @@ export async function processGmailNotification(
     return { stored: 0, classified: 0, extracted: 0, deleted: 0, archived: 0 };
   }
 
-  const combined: Record<string, unknown>[] = [];
-  let pageToken: string | undefined;
-  let latestHistoryId = notification.historyId;
-  do {
-    const page = await request<{
-      history?: Record<string, unknown>[];
-      historyId?: string;
-      nextPageToken?: string;
-    }>(account, 'https://gmail.googleapis.com/gmail/v1/users/me/history', {
-      params: { startHistoryId: currentHistoryId, pageToken },
-    });
-    combined.push(...(page.history ?? []));
-    if (page.historyId) latestHistoryId = page.historyId;
-    pageToken = page.nextPageToken;
-  } while (pageToken);
-  const history = parseHistoryResult({ history: combined, historyId: latestHistoryId });
+  const database = dependencies.database;
+  let history = loadGmailHistoryProgress(database, account.email, currentHistoryId);
+  if (!history) {
+    const combined: Record<string, unknown>[] = [];
+    let pageToken: string | undefined;
+    let latestHistoryId = notification.historyId;
+    do {
+      const page = await request<{
+        history?: Record<string, unknown>[];
+        historyId?: string;
+        nextPageToken?: string;
+      }>(account, 'https://gmail.googleapis.com/gmail/v1/users/me/history', {
+        params: { startHistoryId: currentHistoryId, pageToken },
+      });
+      combined.push(...(page.history ?? []));
+      if (page.historyId) latestHistoryId = page.historyId;
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    history = {
+      startHistoryId: currentHistoryId,
+      ...parseHistoryResult({ history: combined, historyId: latestHistoryId }),
+    };
+    saveGmailHistoryProgress(database, account.email, history);
+  }
 
   const messages: IncomingEmail[] = [];
   const deletedMessageIds: string[] = [];
   const archivedMessageIds: string[] = [];
-  for (const messageId of new Set(history.messages)) {
-    const message = await fetchMessage(account, messageId, getMessage);
+  const labelChanges: Array<{ id: string; labels: Record<string, boolean> }> = [];
+  for (const change of history.changes) {
+    if (change.deleted) {
+      deletedMessageIds.push(change.id);
+      continue;
+    }
+    let message = getIncomingEmail(database, account.email, change.id);
+    const hidden =
+      change.labels.TRASH === true || change.labels.SPAM === true || change.labels.DRAFT === true;
+    const needsDownload =
+      !hidden && (change.fetch || (!message && (change.added || change.labels.INBOX === true)));
+    if (needsDownload) {
+      const downloaded = loadGmailHistoryDownload(database, account.email, change.id);
+      if (downloaded === undefined) {
+        message = await fetchMessage(account, change.id, getMessage);
+        saveGmailHistoryDownload(database, account.email, change.id, message);
+      } else message = downloaded;
+    } else if (message) {
+      const labels = new Set(message.labels);
+      for (const [label, added] of Object.entries(change.labels)) {
+        if (added) labels.add(label);
+        else labels.delete(label);
+      }
+      message = { ...message, labels: [...labels] };
+      labelChanges.push({ id: change.id, labels: change.labels });
+    } else {
+      // An unknown archived message does not need to be imported to apply its label changes.
+      continue;
+    }
     if (!message || message.labels?.some((label) => label === 'TRASH' || label === 'SPAM')) {
-      deletedMessageIds.push(messageId);
+      deletedMessageIds.push(change.id);
     } else if (message.labels?.includes('DRAFT')) {
       continue;
     } else {
       messages.push(message);
-      if (!message.labels?.includes('INBOX')) archivedMessageIds.push(messageId);
+      if (!message.labels?.includes('INBOX')) archivedMessageIds.push(change.id);
     }
+  }
+  for (const change of labelChanges) {
+    changeEmailLabels(database, account.email, [change.id], {
+      addLabelIds: Object.keys(change.labels).filter((label) => change.labels[label]),
+      removeLabelIds: Object.keys(change.labels).filter((label) => !change.labels[label]),
+    });
   }
 
   const result = await ingestGmailPayload(
@@ -195,6 +269,7 @@ export async function processGmailNotification(
   );
   setAccountHistoryId(dependencies.database, account.email, history.historyId);
   account.historyId = history.historyId;
+  clearGmailHistoryProgress(database, account.email);
   return { ...result, archived: archivedMessageIds.length };
 }
 

@@ -16,6 +16,7 @@ import type {
 
 import { composerSchema } from './composer-schema';
 import { historicalBackfillSchema } from './historical-backfill-schema';
+import { gmailHistorySchema } from './gmail-history-progress';
 import { snoozeSchema } from './snooze-schema';
 import { migratePimSchema, pimSchema } from './pim-schema';
 import { installEmailSearch, registerSearchFunctions } from './email-search';
@@ -290,6 +291,7 @@ export function createDatabase(path = defaultPath): DatabaseSync {
   registerSearchFunctions(database);
   database.exec(schema);
   database.exec(historicalBackfillSchema);
+  database.exec(gmailHistorySchema);
   database.exec(composerSchema);
   database.exec(snoozeSchema);
   database.exec(pimSchema);

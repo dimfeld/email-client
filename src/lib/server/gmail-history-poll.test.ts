@@ -152,10 +152,9 @@ describe('Gmail history polling', () => {
                 }
           ) as T;
         },
-        getMessage: async (_account, id) => ({
-          id,
-          labels: id === 'archived' ? [] : ['TRASH'],
-        }),
+        getMessage: async () => {
+          throw new Error('Label changes must not download stored messages.');
+        },
       });
       expect(info).toHaveBeenCalledWith(
         'Gmail history poll completed.',
