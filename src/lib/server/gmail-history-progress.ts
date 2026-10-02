@@ -29,6 +29,14 @@ export type GmailHistoryProgress = {
   changes: GmailHistoryChange[];
 };
 
+export function normalizeGmailHistoryChanges(changes: GmailHistoryChange[]): GmailHistoryChange[] {
+  return changes.map((change) =>
+    change.fetch && (change.added || change.deleted || Object.keys(change.labels).length > 0)
+      ? { ...change, fetch: false }
+      : change
+  );
+}
+
 export function loadGmailHistoryProgress(
   database: DatabaseSync,
   account: string,
@@ -44,10 +52,17 @@ export function loadGmailHistoryProgress(
     clearGmailHistoryProgress(database, account);
     return null;
   }
+  const saved = JSON.parse(row.changes_json) as GmailHistoryChange[];
+  const changes = normalizeGmailHistoryChanges(saved);
+  if (changes.some((change, index) => change !== saved[index])) {
+    database
+      .prepare('UPDATE gmail_history_progress SET changes_json = ? WHERE account_email = ?')
+      .run(JSON.stringify(changes), account);
+  }
   return {
     startHistoryId: row.start_history_id,
     historyId: row.history_id,
-    changes: JSON.parse(row.changes_json) as GmailHistoryChange[],
+    changes,
   };
 }
 

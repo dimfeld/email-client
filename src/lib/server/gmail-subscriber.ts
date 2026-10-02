@@ -5,6 +5,7 @@ import {
   clearGmailHistoryProgress,
   loadGmailHistoryDownload,
   loadGmailHistoryProgress,
+  normalizeGmailHistoryChanges,
   saveGmailHistoryDownload,
   saveGmailHistoryProgress,
   type GmailHistoryChange,
@@ -122,7 +123,7 @@ function parseHistoryResult(value: unknown): HistoryResult {
         } else change.fetch = true;
       }
     }
-    // The generic list duplicates specific events. Fetch only events with no details.
+    // Keep generic events as a fallback until all history pages have been read.
     const messages = Array.isArray(entry.messages) ? (entry.messages as { id?: unknown }[]) : [];
     for (const message of messages) {
       if (typeof message.id === 'string' && !specificIds.has(message.id)) {
@@ -130,7 +131,10 @@ function parseHistoryResult(value: unknown): HistoryResult {
       }
     }
   }
-  return { historyId: result.historyId, changes: [...changes.values()] };
+  return {
+    historyId: result.historyId,
+    changes: normalizeGmailHistoryChanges([...changes.values()]),
+  };
 }
 
 async function loadInitialHistoryId(

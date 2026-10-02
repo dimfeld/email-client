@@ -80,7 +80,7 @@ describe('Gmail Pub/Sub routing', () => {
 });
 
 describe('Gmail notification processing', () => {
-  it('applies a bulk archive from another client without downloading mail', async () => {
+  it('applies archive details across pages despite generic events before and after them', async () => {
     database = createDatabase(':memory:');
     upsertAccount(database, { email: 'one@example.com', refreshToken: 'one' });
     upsertAccount(database, { email: 'two@example.com', refreshToken: 'two' });
@@ -122,8 +122,18 @@ describe('Gmail notification processing', () => {
           pages.push(options?.params?.pageToken as string | undefined);
           return (
             options?.params?.pageToken
-              ? { historyId: '105', history: changes.slice(100) }
-              : { historyId: '105', history: changes.slice(0, 100), nextPageToken: 'next' }
+              ? {
+                  historyId: '105',
+                  history: [
+                    ...changes,
+                    { messages: [...ids, 'unknown-old-message'].map((id) => ({ id })) },
+                  ],
+                }
+              : {
+                  historyId: '105',
+                  history: [{ messages: [...ids, 'unknown-old-message'].map((id) => ({ id })) }],
+                  nextPageToken: 'next',
+                }
           ) as T;
         },
         getMessage: async () => {
