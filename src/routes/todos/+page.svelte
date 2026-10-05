@@ -470,10 +470,8 @@
     background: var(--color-accent-bg);
   }
   .title {
-    overflow: hidden;
     font-size: 0.92rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   li.done .title {
     color: var(--color-text-muted);

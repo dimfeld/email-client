@@ -82,13 +82,17 @@
       aria-label="Completed"
       onchange={(event) => change({ completed: event.currentTarget.checked }, true)}
     />
-    <input
+    <!-- A textarea so that a long title wraps. The title stays on one line of text. -->
+    <textarea
       class="title"
+      rows="1"
       value={title}
-      oninput={(event) => change({ title: event.currentTarget.value })}
+      oninput={(event) => change({ title: event.currentTarget.value.replace(/\s*\n\s*/g, ' ') })}
+      onkeydown={(event) => {
+        if (event.key === 'Enter') event.preventDefault();
+      }}
       placeholder="Title"
-      aria-label="To-do title"
-    />
+      aria-label="To-do title"></textarea>
   </div>
   {#if !title.trim()}<p class="hint" role="alert">Enter a title to save.</p>{/if}
   <div class="fields">
@@ -173,8 +177,11 @@
     border-bottom: 1px solid var(--color-border);
     background: transparent;
     color: var(--color-text);
+    font: inherit;
     font-size: 1.3rem;
     font-weight: 650;
+    field-sizing: content;
+    resize: none;
   }
   .title:focus {
     outline: none;
