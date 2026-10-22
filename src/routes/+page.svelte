@@ -868,9 +868,12 @@
       if (removedIds.has(rowId)) return false;
       if (action === 'archive' && mailView === 'sent') return true;
       // Open the next message, as most mail clients do, so E can process mail row by row.
+      // On mobile, an open message returns to the list instead.
       const index = visibleEmails.findIndex((email) => email.id === rowId);
       const next =
-        index < 0 ? null : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
+        index < 0 || (wasOpen && narrowScreen.current)
+          ? null
+          : (visibleEmails[index + 1] ?? visibleEmails[index - 1] ?? null);
       const rowFocused =
         document.activeElement?.closest<HTMLElement>('.message')?.dataset.emailId === String(rowId);
       const wasCursor = !wasOpen && (rowFocused || cursorId === rowId);
